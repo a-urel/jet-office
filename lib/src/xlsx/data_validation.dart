@@ -82,8 +82,10 @@ enum XlsxValidationErrorStyle {
 /// The constructor takes every field, so any validation the XML can hold can
 /// be built. The factories are conveniences over it, one per kind, that
 /// build the formula text from typed operands. Register the value with the
-/// sheet writer's `dataValidation`, which checks it and throws
-/// [ArgumentError] naming the field. Neither validates, apart from
+/// sheet writer's `dataValidation` or `XlsxSheet.addDataValidation`, which
+/// check it and throw [ArgumentError] naming the field;
+/// `XlsxSheet.dataValidations` reads an opened sheet's as this type.
+/// Neither the constructor nor a factory validates, apart from
 /// [XlsxDataValidation.list], which cannot keep an item with a comma, and
 /// [XlsxDataValidation.date], which needs a date Excel can store.
 ///

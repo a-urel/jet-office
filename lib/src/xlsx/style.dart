@@ -25,6 +25,9 @@ import 'number_format.dart';
 /// when the style is first used and throws [ArgumentError] naming the
 /// field: `numFmt`, or the part and its field, such as `font.name` or
 /// `fill.foreground` (prefixed `columns[i].style.` for a column's style).
+/// The workbook model checks them the same way when a style is set
+/// (`XlsxSheet.setStyle`, `XlsxSheet.setCell` with an `XlsxCell`,
+/// `XlsxSheet.setRowFormat`, `XlsxSheet.setColumn`).
 ///
 /// ```dart
 /// const XlsxStyle money = XlsxStyle(

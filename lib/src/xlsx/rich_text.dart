@@ -18,7 +18,7 @@ import 'model/style_elements.dart';
 /// font shows that font merged over the cell's font (see [XlsxFont.merge]):
 /// a field the run's font sets wins, one it leaves `null` is the cell's.
 /// The `const` constructor cannot check the font; the writer does, when the
-/// cell is written.
+/// cell is written, and so does `XlsxSheet.setCell`.
 final class XlsxTextRun {
   /// Creates a run of [text], in [font] when given.
   const XlsxTextRun(this.text, {this.font});
@@ -53,12 +53,12 @@ final class XlsxTextRun {
 /// ```
 ///
 /// A cell shows the runs one after another; [text] is what they read
-/// together. The writer refuses a rich text without runs, and it treats the
-/// text of the runs as data, like a plain string: characters XML forbids
-/// are removed and text past 32,767 UTF-16 code units is cut, with
-/// warnings. A run with no text, as given or after that, is left out
-/// without a warning, and a rich text left with no runs is written as the
-/// empty string.
+/// together. The writer and `XlsxSheet.setCell` refuse a rich text without
+/// runs, and treat the text of the runs as data, like a plain string:
+/// characters XML forbids are removed and text past 32,767 UTF-16 code
+/// units is cut, with warnings. A run with no text, as given or after that,
+/// is left out without a warning, and a rich text left with no runs is
+/// written as the empty string.
 final class XlsxRichText {
   /// Creates a rich text of [runs], holding an unmodifiable copy of the
   /// list.

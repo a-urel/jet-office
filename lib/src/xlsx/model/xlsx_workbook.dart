@@ -215,8 +215,8 @@ final class XlsxWorkbook {
   /// its place. Undone, the part, its relationship and its content type go
   /// again. Loads the shared strings and styles, so it throws an
   /// [XlsxReadException] when they cannot be read; a [RangeError] named
-  /// `position` for a position past the last tab. Nothing changes when it
-  /// throws.
+  /// `position` for a position below 0 or past the last tab. Nothing changes
+  /// when it throws.
   XlsxSheet addSheet(String name, {int? position}) {
     late XlsxSheet added;
     return recordEdit(
@@ -267,8 +267,8 @@ final class XlsxWorkbook {
   /// 3D reference may now span other sheets. The same position changes
   /// nothing.
   ///
-  /// Throws a [RangeError] named `position` for a position past the last
-  /// tab, an [ArgumentError] for a sheet of another workbook, and an
+  /// Throws a [RangeError] named `position` for a position below 0 or past
+  /// the last tab, an [ArgumentError] for a sheet of another workbook, and an
   /// [XlsxReadException] when a sheet cannot be read; nothing changes then.
   void moveSheet(XlsxSheet sheet, int position) => recordEdit(
     _book.log,

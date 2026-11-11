@@ -10,8 +10,9 @@ import 'limits.dart';
 ///
 /// The `const` constructor cannot check its arguments. A range that lies
 /// outside the sheet, or whose first corner is after its last, is reported
-/// when it is registered with the writer (a merge or an auto filter), which
-/// throws [ArgumentError]. [XlsxRange.parse] checks at once.
+/// when it is registered with the writer or set through the workbook model
+/// (a merge or an auto filter, say), which throws [ArgumentError].
+/// [XlsxRange.parse] checks at once.
 final class XlsxRange {
   /// The range from ([firstRow], [firstColumn]) to ([lastRow], [lastColumn]),
   /// both inclusive and 0-based. A last row or column left out is the first,

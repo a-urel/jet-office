@@ -11,10 +11,11 @@ import 'style.dart';
 /// How one worksheet column looks: its width, its style, whether it is
 /// hidden, and its outline (grouping) level.
 ///
-/// Passed to `XlsxSheetWriter.columns`. Values are compared by their
-/// contents. The `const` constructor cannot check its fields; the writer
-/// checks them when the columns are set and throws [ArgumentError] naming
-/// the field.
+/// Passed to `XlsxSheetWriter.columns`, and read and set with
+/// `XlsxSheet.column` and `XlsxSheet.setColumn`. Values are compared by
+/// their contents. The `const` constructor cannot check its fields; the
+/// writer and `setColumn` check them when the columns are set and throw
+/// [ArgumentError] naming the field.
 final class XlsxColumn {
   /// Creates a column description.
   ///

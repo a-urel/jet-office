@@ -33,8 +33,9 @@ abstract interface class ReferenceHolder {
   void shiftReferences(ReferenceMapper mapper, ReferenceShift? edit);
 }
 
-/// A holder whose rewrite is not written yet: it only records each call.
-/// Tasks 6 to 9 of W5 replace these one by one.
+/// A holder that rewrites nothing and only records each call: the one made
+/// for a holder name no rewrite covers, and for the chart and opaque-part
+/// holders of a registry without a package reader.
 final class PendingReferenceHolder implements ReferenceHolder {
   /// A pending holder named [holderName].
   PendingReferenceHolder(this.holderName);

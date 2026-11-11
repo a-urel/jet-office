@@ -69,10 +69,12 @@ final class XlsxReadLimits {
   ///
   /// `XlsxWorkbook` applies it to each sheet's merges when the sheet loads,
   /// and in the same way to the other lists of small entries it keeps, each
-  /// list on its own: a sheet's hyperlinks, data validations, conditional
-  /// formats and Excel 2010 conditional formats (the elements, and the rules
-  /// across them, for each of the two), the workbook's defined names and the
-  /// styles part's differential styles.
+  /// list on its own: a sheet's hyperlinks, data validations, table parts,
+  /// conditional formats and Excel 2010 conditional formats (the elements,
+  /// and the rules across them, for each of the two), the comments of a
+  /// comments part (its authors counted with them), the shapes of a VML
+  /// drawing, the objects of a drawing part, the workbook's defined names and
+  /// the styles part's differential styles.
   final int maxMerges;
 
   /// Throws an [ArgumentError] naming the first field below 1.

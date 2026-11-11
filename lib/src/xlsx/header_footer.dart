@@ -30,7 +30,8 @@ import 'limits.dart';
 /// such a text; an explicit `false` leaves the texts unused.
 ///
 /// The `const` constructor cannot check its fields; the writer does when the
-/// value is registered and throws [ArgumentError] naming the field: a text
+/// value is registered, and `XlsxSheet.headerFooter` when it is set, and
+/// both throw [ArgumentError] naming the field: a text
 /// is at most [XlsxLimits.maxHeaderFooterLength] UTF-16 code units, holds no
 /// character XML forbids and does not end in a lone `&` (an odd run of `&`
 /// at the very end, which Excel cannot read).

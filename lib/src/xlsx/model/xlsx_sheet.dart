@@ -431,7 +431,8 @@ final class XlsxSheet
   ///
   /// Hiding the active sheet makes the first visible sheet active, as Excel
   /// does. Throws a [StateError] when this is the last visible sheet and
-  /// [value] is not visible; nothing changes then.
+  /// [value] is not visible, and an [XlsxReadException] when hiding the
+  /// active sheet loads a sheet that cannot be read; nothing changes then.
   set visibility(XlsxSheetVisibility value) => _recordSheetEdit(
     this,
     XlsxChangeKind.featureChanged,
@@ -537,11 +538,11 @@ final class XlsxSheet
   /// Sets the cell at [row] and [column] to [value].
   ///
   /// [value] is a `String`, `int`, `double`, `bool`, `DateTime`,
-  /// [XlsxDate], [XlsxDecimal], [XlsxFormula], [XlsxHyperlink] or `null`.
-  /// It is checked,
-  /// repaired and reported as the writer does (`CellEncoder`), when it is
-  /// set: text with characters XML forbids is cleaned with a warning, and a
-  /// `NaN` throws now, so saving cannot fail on data. The cell keeps its
+  /// [XlsxDate], [XlsxDecimal], [XlsxFormula], [XlsxRichText],
+  /// [XlsxHyperlink], an [XlsxCell] of one of them, or `null`. It is
+  /// checked, repaired and reported as the writer does, when it is set:
+  /// text with characters XML forbids is cleaned with a warning, and a `NaN`
+  /// throws now, so saving cannot fail on data. The cell keeps its
   /// style, except that a date in a General cell takes the writer's date
   /// format (appended to the styles), and its other attributes, which
   /// described the old value, are dropped. A cell the file lacks takes the
@@ -871,9 +872,8 @@ final class XlsxSheet
   /// value), else the row's style when the row has `customFormat="1"`, else
   /// the style of the `<col>` holding the column; style index 0, and an
   /// index with no cell format in the styles part (which Excel shows as the
-  /// default), give `null` in both. Read with
-  /// [StylesPart.styleOf], so a part of the cell format the value types
-  /// cannot hold is left out. A style entry read for the first time that
+  /// default), give `null` in both. A part of the cell format that the style
+  /// types cannot hold is left out. A style entry read for the first time that
   /// cannot be read exactly is reported then (`styleEntryInvalid`).
   /// Loads the sheet. Throws a [RangeError] outside Excel's grid and an
   /// [XlsxReadException] when the sheet cannot be read.
@@ -921,9 +921,9 @@ final class XlsxSheet
   /// the row's style is not layered under it.
   ///
   /// The cell keeps its value; a cell that does not exist becomes an empty
-  /// styled cell. A [style] equal to the cell's current style (by
-  /// [StylesPart.styleOf]; an index with no cell format, or an invalid
-  /// `s`, is never kept) keeps its index, so a cell format the value
+  /// styled cell. A [style] equal to the cell's current style (as [styleAt]
+  /// reads it; an index with no cell format, or an invalid `s`, is never
+  /// kept) keeps its index, so a cell format the value
   /// types cannot hold in full is not replaced; any other is appended to
   /// the styles when no cell format of the file or appended before matches
   /// it, so no existing index moves. `null` gives index 0 (also dropping
@@ -1415,8 +1415,9 @@ final class XlsxSheet
   ///
   /// Every sheet is loaded, and everything that refers to a cell moves
   /// with it: formulas on every sheet, defined names, merges, conditional
-  /// formats, validations, links, the filter, tables, notes, pictures,
-  /// views and chart series. The inserted rows take the format of the row
+  /// formats, validations, links, the filter, tables, notes, sparklines,
+  /// views, the anchors of pictures, shapes and charts, the cell a shape's
+  /// text shows and chart series. The inserted rows take the format of the row
   /// above. A part the model cannot rewrite is kept as read and reported
   /// (`referenceNotShifted`). The save drops `calcChain` and asks Excel to
   /// recalculate when the workbook has formulas. All of it is one change.
@@ -1424,8 +1425,8 @@ final class XlsxSheet
   /// Throws an [ArgumentError] named `row` for a row below 0 or past the last
   /// (`XlsxLimits.maxRows` - 1), named `count` for a count below 1 or one that
   /// reaches past the last row; a [StateError] for an edit Excel refuses (a
-  /// cell, note or picture pushed off the sheet, an array formula or a table
-  /// cut in a way Excel does not allow) and for a sheet that is not a
+  /// cell, note or drawing object pushed off the sheet, an array formula or
+  /// a table cut in a way Excel does not allow) and for a sheet that is not a
   /// worksheet; an [XlsxReadException] when a sheet cannot be read. Whatever it
   /// throws, nothing has changed, the workbook's warnings included.
   void insertRows(int row, [int count = 1]) =>

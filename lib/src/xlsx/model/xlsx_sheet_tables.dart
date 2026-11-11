@@ -13,9 +13,9 @@
 /// list is edited by the changes, so `merge`, `autoFilter` and `setCell` see
 /// a table at once and an undo takes it away again.
 ///
-/// W5 renames a table and rewrites every structured reference to it,
-/// resizes a table with a totals row or a sort state, and removes a table
-/// whose users become plain ranges, as Excel's "Convert to Range".
+/// Renaming a table rewrites every structured reference to it, a table with
+/// a totals row or a sort state can be resized, and removing a table turns
+/// its users into plain ranges, as Excel's "Convert to Range".
 part of 'xlsx_sheet.dart';
 
 /// The change of the sheet's list of tables: [entry] went in at [index], or
@@ -78,15 +78,17 @@ mixin _SheetTablesApi {
   /// relationships again, which may differ from this list's after a table
   /// was removed and another added.
   ///
-  /// A table part the model cannot type (a root that is not a SpreadsheetML
-  /// `table`, a `ref` that is not a range, or columns that do not match it)
-  /// is left out, kept as written, and its name stays taken. A
+  /// A table part the model cannot read or type (XML that is not well
+  /// formed, a root that is not a SpreadsheetML `table`, a `ref` that is not
+  /// a range, or columns that do not match it) is left out, kept as written,
+  /// and its name stays taken. A
   /// `totalsRowFunction` no schema value names reads
   /// [XlsxTotalsFunction.none] and is reported once as `featureEntryInvalid`
   /// with the detail `table`. The part's calculated columns, `dataDxfId`,
   /// `xr:uid`, filter criteria and sort state are not in [XlsxTable]; they
-  /// stay in the file as read. A sheet without a part has none. Unmodifiable;
-  /// a table part is read on first use.
+  /// stay in the file as read. A sheet without a part has none, and so has a
+  /// sheet whose relationships cannot be read. Unmodifiable; a table part is
+  /// read on first use. Does not load the sheet, and throws nothing.
   List<XlsxTable> get tables => _partName == null
       ? const <XlsxTable>[]
       : List<XlsxTable>.unmodifiable(<XlsxTable>[
@@ -107,7 +109,8 @@ mixin _SheetTablesApi {
   /// written.
   ///
   /// Throws an [ArgumentError] as the writer does, named by its field, for a
-  /// table `checkTable` refuses; named `name` for a name a table has on any
+  /// table that is not valid in itself, as the writer's `table` refuses it;
+  /// named `name` for a name a table has on any
   /// sheet (loaded or not, listed or not) or a defined name has in any scope,
   /// ignoring case; named `range` for an overlap with a table, the auto filter
   /// or a merge of the sheet (the message names both); named `values[column]`
@@ -223,8 +226,9 @@ mixin _SheetTablesApi {
   /// The `name` and the flags of `<tableStyleInfo>` that differ are set in
   /// place and everything else of the part stays; a table without the element
   /// gains it after `<tableColumns>`, and `null` removes it. A style equal to
-  /// the table's is no edit. Neither this nor [resizeTable] and [removeTable]
-  /// touches `calcChain`.
+  /// the table's is no edit. It does not touch `calcChain` or ask Excel to
+  /// recalculate; [resizeTable], [renameTable] and [removeTable] say when
+  /// they do.
   ///
   /// Throws an [ArgumentError] named `name` when the sheet has no table
   /// [name], ignoring case, and named `style` for a name that is not a
@@ -357,13 +361,15 @@ mixin _SheetTablesApi {
   /// reference to it (`Sales[Amount]` becomes `Revenue[Amount]`) in a cell
   /// formula of any sheet, a defined name, a column formula of any table,
   /// a rule, a validation or a chart follows. Every sheet loads. A [newName]
-  /// equal to the name is no edit; one differing only in case renames.
+  /// equal to the name is no edit; one differing only in case renames. A cell
+  /// formula rewritten is a changed cell: the save drops `calcChain` and asks
+  /// Excel to recalculate.
   ///
   /// Throws an [ArgumentError] named `name` when the sheet has no table
-  /// [name], ignoring case; named `newName` for a name `checkTable` refuses
-  /// or one a table or a defined name has, ignoring case; a [StateError]
-  /// when a pivot cache names the table (its `worksheetSource name`), and
-  /// for a sheet that is not a worksheet or has no part; and an
+  /// [name], ignoring case; named `newName` for a name the writer refuses for
+  /// a table, or one a table or a defined name has, ignoring case; a
+  /// [StateError] when a pivot cache names the table (its `worksheetSource
+  /// name`), and for a sheet that is not a worksheet or has no part; and an
   /// [XlsxReadException] when a sheet cannot be read. Whatever it throws,
   /// nothing has changed and no warning is kept.
   void renameTable(String name, String newName) =>
@@ -459,7 +465,8 @@ mixin _SheetTablesApi {
   /// data, as Excel writes it, and an item the table lacks (`Sales[#Totals]`
   /// without a totals row) is `#REF!`. A reference
   /// behind a workbook prefix (`[1]!Sales[A]`) names another workbook's table
-  /// and stays. Every sheet loads.
+  /// and stays. Every sheet loads. A cell formula rewritten is a changed
+  /// cell: the save drops `calcChain` and asks Excel to recalculate.
   ///
   /// Throws an [ArgumentError] named `name` when the sheet has no table
   /// [name], ignoring case; a [StateError] when a reference cannot become a

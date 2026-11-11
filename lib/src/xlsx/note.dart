@@ -37,7 +37,8 @@ import 'warnings.dart';
 /// are a programmer's choice: a text without runs, an invalid run font and
 /// an author longer than 255 UTF-16 code units or holding a character XML
 /// forbids are refused. The `const` constructor cannot check anything; the
-/// sheet writer does when the note is added (see `XlsxSheetWriter.note`).
+/// sheet writer does when the note is added (see `XlsxSheetWriter.note`),
+/// and so does `XlsxSheet.setNote`.
 ///
 /// ```dart
 /// sheet.note(1, 2, XlsxNote.plain('Checked by finance.', author: 'Ayşe'));

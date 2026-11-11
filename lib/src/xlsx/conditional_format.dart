@@ -33,8 +33,10 @@ import 'style.dart';
 
 /// Rules that format the cells of [ranges] when their conditions hold.
 ///
-/// Register it with the sheet writer's `conditionalFormat`, which checks it
-/// and throws [ArgumentError] naming the field, such as `rules[2].rank`.
+/// Register it with the sheet writer's `conditionalFormat` or
+/// `XlsxSheet.addConditionalFormat`, which check it and throw
+/// [ArgumentError] naming the field, such as `rules[2].rank`;
+/// `XlsxSheet.conditionalFormats` reads an opened sheet's as this type.
 /// The rules are evaluated in order: each gets the sheet's next priority,
 /// so an earlier rule wins over a later one, and a rule with
 /// [XlsxConditionalRule.stopIfTrue] stops the rules after it. The ranges

@@ -15,10 +15,11 @@ import 'sheet_name.dart';
 /// it.
 ///
 /// Whether it is workbook-wide or belongs to one sheet depends on where it
-/// is registered: `defineName` of the writer defines it for the workbook,
-/// `defineName` of a sheet for that sheet only. The `const` constructor
-/// checks nothing; the writer does when the name is registered and throws
-/// [ArgumentError] naming the field.
+/// is registered: `defineName` of the writer or of `XlsxWorkbook` defines it
+/// for the workbook, `defineName` of a sheet writer or of `XlsxSheet` for
+/// that sheet only. The `const` constructor checks nothing; each of them
+/// checks it when the name is registered and throws [ArgumentError] naming
+/// the field.
 final class XlsxDefinedName {
   /// A name [name] for [formula].
   ///

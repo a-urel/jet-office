@@ -88,7 +88,8 @@ int? subtotalCode(XlsxTotalsFunction function) => switch (function) {
 /// shows.
 ///
 /// The `const` constructor checks nothing; the sheet writer does when the
-/// table is added (see `XlsxSheetWriter.table`).
+/// table is added (see `XlsxSheetWriter.table`), and so does
+/// `XlsxSheet.addTable`.
 final class XlsxTableColumn {
   /// A column named [name] whose totals row shows [totalsFunction], or
   /// [totalsLabel] with [XlsxTotalsFunction.none], or [totalsFormula] with
@@ -141,8 +142,10 @@ final class XlsxTableColumn {
 ///
 /// [name] is `TableStyleLight1` to `TableStyleLight21`,
 /// `TableStyleMedium1` to `TableStyleMedium28` or `TableStyleDark1` to
-/// `TableStyleDark11`, spelled exactly so; the writer refuses any other
-/// when the table is added. Custom table styles are not written.
+/// `TableStyleDark11`, spelled exactly so; the writer and
+/// `XlsxSheet.addTable` refuse any other when the table is added. Custom
+/// table styles are not written; `XlsxSheet.setTableStyle` refuses one
+/// too, except the custom style a table of an opened file already has.
 final class XlsxTableStyle {
   /// The built-in style [name] with the given parts shown.
   const XlsxTableStyle(
@@ -248,9 +251,11 @@ final class XlsxTableStyle {
 ///
 /// The writer fills in the header row with the column names and the totals
 /// row with the columns' labels and formulas wherever the caller leaves a
-/// cell `null` (see `XlsxSheetWriter.table`). The constructor checks
-/// nothing; the sheet writer does when the table is added and throws
-/// [ArgumentError] naming the field.
+/// cell `null` (see `XlsxSheetWriter.table`), and `XlsxSheet.addTable` fills
+/// in the empty ones. The constructor checks nothing; the sheet writer and
+/// `XlsxSheet.addTable` do when the table is added and throw
+/// [ArgumentError] naming the field. `XlsxSheet.tables` reads the tables of
+/// an opened sheet as this type.
 ///
 /// ```dart
 /// sheet.table(XlsxTable(

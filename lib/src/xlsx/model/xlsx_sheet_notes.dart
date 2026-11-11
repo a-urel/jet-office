@@ -227,7 +227,7 @@ mixin _SheetNotes {
 
   /// The note of the cell at [row] and [column], or `null` for a cell
   /// without one, with the reading of [notes]. Throws a [RangeError] outside
-  /// Excel's grid.
+  /// Excel's grid, and as [notes] does.
   XlsxNote? noteAt(int row, int column) {
     RangeError.checkValueInInterval(row, 0, XlsxLimits.maxRows - 1, 'row');
     RangeError.checkValueInInterval(

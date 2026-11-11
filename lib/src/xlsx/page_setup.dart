@@ -37,7 +37,8 @@ enum XlsxPageOrder {
 ///
 /// The constants name the common sizes; any other id from the list is
 /// `XlsxPaperSize(id)`. The `const` constructor cannot check [id]; the
-/// writer does when the page setup is registered. Compared by [id].
+/// writer does when the page setup is registered, and `XlsxSheet.pageSetup`
+/// when it is set. Compared by [id].
 final class XlsxPaperSize {
   /// The paper size with [id] in ECMA-376's list.
   const XlsxPaperSize(this.id);
@@ -86,7 +87,8 @@ final class XlsxPaperSize {
 ///
 /// The defaults are Excel's "Normal" margins. Each must be finite and at
 /// least 0; the `const` constructor cannot check them, the writer does when
-/// the page setup is registered. [header] and [footer] are measured from the
+/// the page setup is registered, and `XlsxSheet.pageSetup` when it is set.
+/// [header] and [footer] are measured from the
 /// page edge.
 final class XlsxPageMargins {
   /// Margins in inches; the defaults are Excel's "Normal".
@@ -147,7 +149,8 @@ final class XlsxPageMargins {
 /// [fitToHeight] pages tall, where 0 leaves that axis as many pages as it
 /// needs. When either fit field is set, an axis left `null` counts as 0. The
 /// `const` constructor cannot check its fields; the writer does when the
-/// setup is registered and throws [ArgumentError] naming the field.
+/// setup is registered, and `XlsxSheet.pageSetup` when it is set, and both
+/// throw [ArgumentError] naming the field.
 final class XlsxPageSetup {
   /// A page setup; every field defaults to Excel's.
   const XlsxPageSetup({

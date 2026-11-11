@@ -23,11 +23,11 @@ import 'warning_messages.dart';
 /// What kind of data problem an [XlsxWarning] reports.
 enum XlsxWarningCode {
   /// Characters XML does not allow (control characters, lone surrogates) were
-  /// removed from cell text.
+  /// removed from the text of a cell or a note.
   invalidCharactersRemoved,
 
-  /// Cell text was cut to Excel's limit of 32,767 characters (UTF-16 code
-  /// units).
+  /// The text of a cell or a note was cut to Excel's limit of 32,767
+  /// characters (UTF-16 code units).
   textTruncated,
 
   /// A sheet name Excel does not allow was replaced by a valid one.
@@ -49,8 +49,8 @@ enum XlsxWarningCode {
   dateInNonDateFormat,
 
   /// Editing: a table's header cell was set, so its column was renamed to
-  /// the new text, as Excel requires. Formulas that refer to the column by
-  /// its old name are not updated.
+  /// the new text, as Excel requires, and every structured reference to the
+  /// column took the new name.
   tableColumnRenamed,
 
   /// Editing: the text set on a table's header cell was changed, because a
@@ -59,14 +59,18 @@ enum XlsxWarningCode {
   /// does.
   tableHeaderAdjusted,
 
-  /// Editing: a structural edit (rows or columns inserted or deleted, a
-  /// sheet renamed or moved) met a cell formula it cannot read fully, so its
-  /// references were not rewritten; the formula is kept as read. The cells
-  /// are the formulas' cells.
+  /// Editing: an edit that rewrites references (rows or columns inserted or
+  /// deleted, a sheet renamed or moved, a table or a table column renamed, a
+  /// table removed) met a formula it cannot read fully, so its references
+  /// were not rewritten; the formula is kept as read. A cell formula is
+  /// reported at its cell; any other (a defined name, a rule, a validation,
+  /// the cell a shape's text shows) has its text as the detail and names no
+  /// cell.
   formulaUnlexable,
 
-  /// Editing: a structural edit (rows or columns inserted or deleted, a
-  /// sheet renamed or moved) met a part the model does not type that holds
+  /// Editing: an edit that rewrites references (rows or columns inserted or
+  /// deleted, a sheet renamed or moved, a table or a table column renamed, a
+  /// table removed) met a part the model does not type that holds
   /// a reference the edit could not update (a pivot cache whose range was
   /// deleted, a slicer cache whose table changed, an unknown part with a
   /// `ref`); the part is kept as written. The detail names the part and the
@@ -203,8 +207,9 @@ enum XlsxWarningCode {
   /// cell.
   styleEntryInvalid,
 
-  /// Editing an opened workbook: a row, column, sheet view, pane or merged
-  /// range of a sheet has an attribute the model cannot read (a row height
+  /// Editing an opened workbook: a row, a column, the sheet view or its pane,
+  /// the tab colour, the outline settings or the default sizes of a sheet
+  /// has an attribute the model cannot read (a row height
   /// of `abc`, an outline level of 9). The typed value is the default, and
   /// the attribute is saved as written until it is set. Reported once per
   /// element and attribute, when it is first read. [XlsxWarning.detail]
@@ -213,16 +218,18 @@ enum XlsxWarningCode {
   /// a detail counts the rest. It names no cell.
   layoutInvalid,
 
-  /// Reading: an entry of a sheet or workbook feature could not be read; it
-  /// is kept as written and left out of the typed list. The detail names the
+  /// Editing an opened workbook: an entry of a sheet or workbook feature (a
+  /// link, a validation, a rule, a note, a picture, a table, a defined name,
+  /// a document property and the like) could not be read; it is kept as
+  /// written and left out of the typed list. The detail names the
   /// element, and the problem, in English; after ten, one warning without a
   /// detail counts the rest. A workbook's entry has an empty
   /// [XlsxWarning.sheet]. It names no cell.
   featureEntryInvalid,
 }
 
-/// Something the writer changed or could not store exactly, or the reader
-/// could not read exactly.
+/// Something the writer or the workbook model changed or could not store
+/// exactly, or the reader or the model could not read exactly.
 ///
 /// Cell-level warnings ([XlsxWarningCode.invalidCharactersRemoved],
 /// [XlsxWarningCode.textTruncated], [XlsxWarningCode.intPrecisionLost],
@@ -234,8 +241,8 @@ enum XlsxWarningCode {
 /// ([XlsxWarningCode.sheetNameChanged], [XlsxWarningCode.sheetNameDuplicated])
 /// are one per renamed sheet.
 ///
-/// Library users never construct warnings; the writer and the reader return
-/// them.
+/// Library users never construct warnings; the writers, the reader and the
+/// workbook model (`XlsxWorkbook.warnings`) return them.
 final class XlsxWarning {
   XlsxWarning._(this.sheet, this.originalName, this._entry);
 

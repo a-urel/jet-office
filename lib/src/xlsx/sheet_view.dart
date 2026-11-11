@@ -19,8 +19,9 @@ import 'limits.dart';
 /// Passed in [XlsxSheetView.pane]. Values are compared by their contents,
 /// split offsets as the whole twips the writer stores (see
 /// [XlsxPane.split]): two offsets that write the same split are equal.
-/// The `const` constructors cannot check their fields; the writer checks
-/// them when the view is set and throws [ArgumentError] naming the field.
+/// The `const` constructors cannot check their fields; the writer and
+/// `XlsxSheet.view` check them when the view is set and throw
+/// [ArgumentError] naming the field.
 final class XlsxPane {
   /// A pane frozen below the first [rows] rows and to the right of the
   /// first [columns] columns, which then stay in view while the rest
@@ -96,9 +97,10 @@ bool _sameTwips(double a, double b) {
 
 /// The view of one worksheet: how it is displayed when it is opened.
 ///
-/// Passed to `XlsxSheetWriter.view`. Values are compared by their contents.
-/// The `const` constructor cannot check its fields; the writer checks them
-/// when the view is set and throws [ArgumentError] naming the field.
+/// Passed to `XlsxSheetWriter.view`, and read and set with `XlsxSheet.view`.
+/// Values are compared by their contents. The `const` constructor cannot
+/// check its fields; the writer and the model check them when the view is
+/// set and throw [ArgumentError] naming the field.
 final class XlsxSheetView {
   /// Creates a view. The defaults are Excel's own.
   ///

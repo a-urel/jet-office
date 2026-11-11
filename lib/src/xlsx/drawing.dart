@@ -42,7 +42,8 @@ export '../drawingml/picture.dart' show emuPerPixel, pixelsToEmu;
 /// Pixels are at 96 dpi, as Excel inserts a picture at 100 % zoom: one
 /// pixel is 9,525 EMU, the unit the file stores. The `const` constructor
 /// cannot check anything; the sheet writer does when the picture is added
-/// (see `XlsxSheetWriter.picture`).
+/// (see `XlsxSheetWriter.picture`), and so do `XlsxSheet.addPicture` and
+/// `XlsxSheet.movePicture`.
 final class XlsxAnchorPoint {
   /// The cell ([row], [column]), both zero-based, and the offset of the
   /// corner from the cell's top-left corner: [offsetX] pixels right and
@@ -147,7 +148,7 @@ final class XlsxTwoCellAnchor extends XlsxAnchor {
   ///
   /// Like the constructor, it checks nothing: a range on the sheet's last
   /// row or column gives a [to] outside the sheet, which the sheet writer
-  /// refuses.
+  /// and the workbook model refuse.
   factory XlsxTwoCellAnchor.range(
     XlsxRange range, {
     XlsxPictureResize resize = XlsxPictureResize.moveAndSize,
@@ -202,7 +203,8 @@ enum XlsxPictureResize {
 /// [description] is its alternative text. Both are a programmer's choice: a
 /// character XML forbids is refused. The `const` constructor cannot check
 /// anything; the sheet writer does when the picture is added (see
-/// `XlsxSheetWriter.picture`).
+/// `XlsxSheetWriter.picture`), and so does `XlsxSheet.addPicture`.
+/// `XlsxSheet.pictures` reads the pictures of an opened sheet as this type.
 ///
 /// ```dart
 /// sheet.picture(XlsxPicture(

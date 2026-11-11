@@ -39,8 +39,9 @@ enum XlsxColorKind {
 /// color.
 ///
 /// The `const` constructors cannot check their arguments. An out-of-range
-/// value is reported when the color is registered with the writer, which
-/// throws [ArgumentError] naming the field. [XlsxColor.hex] checks at once.
+/// value is reported when the color is registered with the writer or set
+/// through the workbook model, which throws [ArgumentError] naming the
+/// field. [XlsxColor.hex] checks at once.
 ///
 /// Equality is by meaning: `XlsxColor.rgb(0x1F4E79)`,
 /// `XlsxColor.argb(0xFF1F4E79)` and `XlsxColor.hex('#1f4e79')` are equal.

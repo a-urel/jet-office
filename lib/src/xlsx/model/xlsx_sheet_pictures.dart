@@ -652,8 +652,8 @@ mixin _SheetPictures {
 /// cannot read stays and is reported once (`formulaUnlexable`). A sheet
 /// without a drawing loads none; for another sheet's edit the drawing's
 /// relationships are peeked, not registered, and a drawing that cannot be
-/// read is left as written and warned about (`referenceNotShifted`). A drawing the model cannot type is left as
-/// written.
+/// read is left as written and warned about (`referenceNotShifted`). A
+/// drawing the model cannot type is left as written.
 final class _DrawingHolder implements ReferenceHolder {
   _DrawingHolder(this._sheet);
 

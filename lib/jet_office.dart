@@ -77,14 +77,24 @@
 /// [XlsxSheet]s load on first use; [XlsxSheet.cellAt] and [XlsxSheet.rows]
 /// return the reader's [XlsxReadCell]s and [XlsxReadRow]s, and
 /// [XlsxSheet.setCell] takes the writer's values (strings, numbers, `bool`,
-/// `DateTime`, [XlsxDate], [XlsxDecimal], [XlsxFormula], an [XlsxCell] of
-/// them and `null`), checked and repaired as the writer does.
+/// `DateTime`, [XlsxDate], [XlsxDecimal], [XlsxFormula], [XlsxRichText],
+/// [XlsxHyperlink], an [XlsxCell] of them and `null`), checked and repaired
+/// as the writer does.
 /// [XlsxSheet.styleAt] and [XlsxSheet.setStyle] read and set a cell's
 /// [XlsxStyle], [XlsxSheet.rowFormat] and [XlsxSheet.setRowFormat] a row's
 /// [XlsxRowFormat], [XlsxSheet.column] and [XlsxSheet.setColumn] an
 /// [XlsxColumn]; [XlsxSheet.merges], [XlsxSheet.merge] and
 /// [XlsxSheet.unmerge] the merged ranges; [XlsxSheet.view],
-/// [XlsxSheet.tabColor] and [XlsxSheet.visibility] how a sheet shows.
+/// [XlsxSheet.tabColor] and [XlsxSheet.visibility] how a sheet shows. A
+/// sheet reads and sets its links ([XlsxSheet.hyperlinks],
+/// [XlsxSheet.removeHyperlink]), its own defined names
+/// ([XlsxSheet.definedNames]), its validations and conditional formats
+/// ([XlsxSheet.dataValidations], [XlsxSheet.conditionalFormats]), its
+/// print settings ([XlsxSheet.printArea], [XlsxSheet.printTitles],
+/// [XlsxSheet.pageSetup], [XlsxSheet.headerFooter]), its filter
+/// ([XlsxSheet.autoFilter]) and its [XlsxSheet.protection]; the workbook
+/// its names ([XlsxWorkbook.definedNames]), its
+/// [XlsxWorkbook.protection] and its [XlsxWorkbook.properties].
 /// [XlsxWorkbook.activeSheet] is the sheet Excel opens on, and
 /// [XlsxWorkbook.resolveColor] gives the colour an [XlsxColor] shows, from
 /// the theme or [XlsxWorkbook.indexedColors]. A style is appended to the
