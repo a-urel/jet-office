@@ -81,6 +81,25 @@ void main() {
     },
   );
 
+  test("Excel's lock files in final/ are not listed as written", () {
+    final Directory dir = Directory.systemTemp.createTempSync('w6_lock');
+    addTearDown(() => dir.deleteSync(recursive: true));
+    // Excel leaves `~$<name>.xlsx` beside a workbook it has open.
+    File('${dir.path}/w6/final/~\$m4_tables.xlsx')
+      ..createSync(recursive: true)
+      ..writeAsStringSync('lock');
+    final List<String> paths = writeW6Check(
+      '${dir.path}/w6',
+      smallRows: 5,
+      largeRows: 10,
+    );
+    expect(paths.where((String p) => p.contains(r'~$')), isEmpty);
+    expect(
+      paths.where((String p) => p.endsWith('/final/m4_tables.xlsx')),
+      hasLength(1),
+    );
+  });
+
   test('every written workbook opens with the model', () {
     for (final String p in written) {
       expect(

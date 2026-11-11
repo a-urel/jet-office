@@ -278,11 +278,9 @@ List<String> _writeFinal(String out) {
     }
     final Directory owner = Directory('${work.path}/owner')..createSync();
     final Set<String> seen = <String>{};
-    for (final File file
-        in Directory('test/fixtures/owner')
-            .listSync(recursive: true)
-            .whereType<File>()
-            .where((File f) => f.path.endsWith('.xlsx'))) {
+    for (final File file in Directory(
+      'test/fixtures/owner',
+    ).listSync(recursive: true).whereType<File>().where(_isWorkbook)) {
       final String name = file.uri.pathSegments.last;
       if (!seen.add(name)) {
         throw StateError(
@@ -316,6 +314,12 @@ List<String> _writeFinal(String out) {
     for (final File f in Directory(
       out,
     ).listSync(recursive: true).whereType<File>())
-      if (f.path.endsWith('.xlsx')) f.path,
+      if (_isWorkbook(f)) f.path,
   ]..sort();
 }
+
+/// Whether [file] is an `.xlsx` workbook, not the `~$<name>.xlsx` lock file
+/// Excel leaves beside a workbook it has open.
+bool _isWorkbook(File file) =>
+    file.path.endsWith('.xlsx') &&
+    !file.uri.pathSegments.last.startsWith(r'~$');

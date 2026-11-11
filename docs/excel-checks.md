@@ -1449,7 +1449,15 @@ Excel's own behaviour: the owner saves `shapes_shifted.xlsx` (steps of
 them with what the model does. W6's shifts of a shape's `textlink` and of
 anchors inside `mc:AlternateContent` follow the standard's rules until then.
 
-Result: not yet run by the owner (see "Results").
+Result: ok, 2026-11-11, at `a25fe98`, after one fix (see "Results"). The
+first run, at `6e3967d`, had Excel repair `final/m4_tables.xlsx` and
+`final/m5_list_table.xlsx` (`/xl/tables/table1.xml`): rows the edit inserted
+right above a table's totals row left its `SUBTOTAL` on the old body range,
+which Excel reads as `SUBTOTAL(109,T[Column])` over the whole body.
+`a25fe98` keeps such a totals cell on the body after every row or column edit
+(`test/xlsx/model/table_totals_shift_test.dart`). Still open, not part of this
+result: the reference saves `shapes_shifted.xlsx` and
+`equations_shifted.xlsx`, and the native-speaker check below.
 
 ### W6: native-speaker check
 
@@ -1805,3 +1813,6 @@ Arial 14` is Arial 14, the same size as `Bold`.
 | 2026-11-10 | Microsoft 365, Excel for Mac (version not restated) | W5: `w5_rename` | ok | "Hatasız açıldı, her şey beklendiği gibi." |
 | 2026-11-10 | Microsoft 365, Excel for Mac (version not restated) | W5: `w5_chart_reference` | ok | "Hatasız açıldı, her şey beklendiği gibi." |
 | 2026-11-10 | Microsoft 365, Excel for Mac (version not restated) | W5: `w5_objects` | ok | "Hatasız açıldı, her şey beklendiği gibi." Screenshot: sheet `Nesneler`, the table header at row 1 with its body moved down, the note at A6, the threaded comment at B6 (`Ahmet`, `Looks right`) opening as a thread, the picture and the chart moved down. |
+| 2026-11-11 | Microsoft 365, Excel for Mac (version not restated) | W6 at `6e3967d`: `build/w6/final` | repair | Excel repaired `m4_tables` and `m5_list_table` ("Onarılan Kayıtlar: /xl/tables/table1.xml parçasından Tablo"): the totals `SUBTOTAL` stayed on the old range after rows were inserted above the totals row (`C2:C4` over a body `C2:C6`). Fixed in `a25fe98`. |
+| 2026-11-11 | Microsoft 365, Excel for Mac 16.114.4 | W6 at `a25fe98`: `final/m4_tables` | ok | "m4_tables.xlsx sorunsuz açıldı" |
+| 2026-11-11 | Microsoft 365, Excel for Mac 16.114.4 | W6 at `a25fe98`: `m5_list_table`, every file of `final/` and `final/owner/`, `w6_generated_100k`, `w6_generated_1m`, `w6_shapes` (`Bir` and `İki`, their formulas), `w6_wrapped` (the box over the same cells) | ok | "tamam hepsi beklendiği gibi" |
