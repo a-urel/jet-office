@@ -31,6 +31,10 @@ changes, comments, notes, content controls and a table of contents, is
 covered in the end; template fill first; macros stay out; supersedes part of
 `0010`) before any design change.
 
+Phase 3, the workbook model, is complete at W6 (proof and release readiness):
+its names are fixed, so a rename of a public name of `XlsxWorkbook` is breaking
+(`docs/xlsx-model.md`, "What W6 does").
+
 `packages/jet_charts_core` is the pure-Dart chart core (decision 0014); it has
 its own `AGENTS.md`; milestone J3 is done (the Flutter renderer, ids, hit
 testing, tooltip and summary), and J4 is done (the kinds pie, donut,

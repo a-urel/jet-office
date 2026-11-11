@@ -9,7 +9,8 @@ mobile, and on a Dart server. It has no editors, no rendering and no PDF.
 
 Pre-release (`0.1.0-dev.1`). The package is not published to pub.dev
 (`publish_to: none`) until the owner decides. Phase 1 writes XLSX files and
-phase 2 reads them, and phase 3 opens, edits and saves them. Phase 4, DOCX,
+phase 2 reads them, and phase 3 opens, edits and saves them (milestones W1
+to W6; the model's names are fixed). Phase 4, DOCX,
 is built (milestones D1 to D6) and each milestone is checked in Word; see
 "DOCX" below.
 
@@ -100,6 +101,86 @@ the writers use: a formula without a cached result, for example, reads as
 `null` with a `formulaWithoutValue` warning.
 [`docs/xlsx-reader.md`](docs/xlsx-reader.md) has the rules the reader
 enforces.
+
+## Workbook model
+
+`XlsxWorkbook` opens an existing XLSX file, or starts an empty one, reads and
+changes it and saves it again. Where `XlsxReader` only reads and the writers
+only write, the model edits: what you did not touch is saved as it was read.
+It types the cells, styles, rows, columns, merges, views, names, print
+settings, filters, protection, links, validations, conditional formats,
+rich text, notes, pictures, tables and document properties; the names of the
+model are fixed as of milestone W6 (a rename later is a breaking change).
+Generating a workbook with it:
+
+```dart
+final XlsxWorkbook book = XlsxWorkbook();
+final XlsxSheet prices = book.addSheet('Prices');
+prices
+  ..setCell(0, 0, 'Item')
+  ..setCell(0, 1, 'Price')
+  ..setCell(1, 0, 'Tea')
+  ..setCell(1, 1, XlsxDecimal('3.50'))
+  ..setCell(2, 0, 'Total')
+  ..setCell(2, 1, const XlsxFormula('SUM(B2:B2)', cached: 3.5))
+  ..setStyle(0, 0, const XlsxStyle(font: XlsxFont(bold: true)));
+final XlsxResult generated = book.save();
+// generated.bytes is the .xlsx file; generated.warnings lists repairs.
+return generated;
+```
+
+Opening a file, changing a cell and saving it back:
+
+```dart
+final XlsxWorkbook book = XlsxWorkbook.open(bytes);
+book.sheet('Prices').setCell(1, 1, XlsxDecimal('4.00'));
+final XlsxResult saved = book.save();
+// Everything the model did not change is saved as it was read.
+return saved;
+```
+
+A sheet loads when it is first used, so a file whose other sheets you never
+touch keeps their parts byte for byte. Rows and columns are 0-based, as in
+the reader. A structural edit (`insertRows`, `deleteRows`, `insertColumns`,
+`deleteColumns`, `renameSheet`, `moveSheet`) rewrites every reference to what
+moved, in formulas, names, rules, tables, notes, chart series and the rest,
+as Excel does. `transaction` groups edits into one all-or-nothing change set
+that `undo` and `redo` take back and reapply; the library keeps no undo
+stack, so you keep the sets:
+
+```dart
+final XlsxWorkbook book = XlsxWorkbook.open(bytes);
+final XlsxSheet prices = book.sheet('Prices');
+final XlsxChangeSet set = book.transaction(() {
+  prices.insertRows(1); // before row 2; the formulas move with the cells
+  book.renameSheet(prices, 'Q1 Prices');
+});
+book.undo(set); // the sheet is called 'Prices' again, the rows are back
+return book;
+```
+
+What the model does not type is kept: charts, pivot tables, shapes, form
+controls, threaded comments and unknown parts are saved
+byte for byte, or as XML at their position, and a structural edit shifts the
+references they hold or says it could not (`referenceNotShifted`). A chart stays
+opaque until the chart milestone C2 lets the model host it, and removing a
+sheet (`removeSheet`) is not offered yet.
+
+Which one to use:
+
+- `XlsxWorkbook` to edit an existing file, or to generate one that needs the
+  model's features (undo, structural edits, objects). It holds the loaded
+  sheets in memory, about 30.7 bytes per cell for the cell store, and
+  generating 100,000 rows of 12 columns takes 3.7 s on the Dart VM and 6.8 s
+  in Chrome against 1.7 s and 3.9 s for the writers; 1,000,000 rows take 38.6 s
+  and 72.1 s ([`docs/benchmark.md`](docs/benchmark.md), "Model generation
+  figures").
+- `XlsxStreamWriter` for a file larger than memory: it sends each part to a
+  sink and keeps no sheet.
+- `XlsxReader` for the leanest import of an upload: it parses a sheet lazily,
+  row by row, and holds nothing.
+
+[`docs/xlsx-model.md`](docs/xlsx-model.md) has the rules, each with its test.
 
 ## Showing values
 

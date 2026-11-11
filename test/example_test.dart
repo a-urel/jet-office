@@ -73,4 +73,19 @@ void main() {
     expect(table.rows.first.isHeader, isTrue);
     expect(doc.properties.title, 'Accounts');
   });
+
+  test('the example edits its workbook and generates one with the model', () {
+    final XlsxResult edited = editExample(buildExampleWorkbook());
+    expect(checkXlsx(edited.bytes), isEmpty);
+    final XlsxWorkbook book = XlsxWorkbook.open(edited.bytes);
+    expect(book.sheet('Accounts').cellAt(2, 2)!.value, XlsxDecimal('2000'));
+    expect(book.sheet('Accounts').cellAt(3, 0)!.value, 'A-2');
+    final XlsxResult generated = generateExample();
+    expect(generated.warnings, isEmpty);
+    expect(checkXlsx(generated.bytes), isEmpty);
+    expect(
+      XlsxWorkbook.open(generated.bytes).sheet('Prices').cellAt(0, 0)!.value,
+      'Tea',
+    );
+  });
 }

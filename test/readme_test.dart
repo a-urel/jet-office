@@ -168,7 +168,59 @@ DocxResult docxListExport() {
   return list;
 }
 
+XlsxResult modelGenerate() {
+  final XlsxWorkbook book = XlsxWorkbook();
+  final XlsxSheet prices = book.addSheet('Prices');
+  prices
+    ..setCell(0, 0, 'Item')
+    ..setCell(0, 1, 'Price')
+    ..setCell(1, 0, 'Tea')
+    ..setCell(1, 1, XlsxDecimal('3.50'))
+    ..setCell(2, 0, 'Total')
+    ..setCell(2, 1, const XlsxFormula('SUM(B2:B2)', cached: 3.5))
+    ..setStyle(0, 0, const XlsxStyle(font: XlsxFont(bold: true)));
+  final XlsxResult generated = book.save();
+  // generated.bytes is the .xlsx file; generated.warnings lists repairs.
+  return generated;
+}
+
+XlsxResult modelEdit(Uint8List bytes) {
+  final XlsxWorkbook book = XlsxWorkbook.open(bytes);
+  book.sheet('Prices').setCell(1, 1, XlsxDecimal('4.00'));
+  final XlsxResult saved = book.save();
+  // Everything the model did not change is saved as it was read.
+  return saved;
+}
+
+XlsxWorkbook modelStructure(Uint8List bytes) {
+  final XlsxWorkbook book = XlsxWorkbook.open(bytes);
+  final XlsxSheet prices = book.sheet('Prices');
+  final XlsxChangeSet set = book.transaction(() {
+    prices.insertRows(1); // before row 2; the formulas move with the cells
+    book.renameSheet(prices, 'Q1 Prices');
+  });
+  book.undo(set); // the sheet is called 'Prices' again, the rows are back
+  return book;
+}
+
 void main() {
+  test('README model blocks generate, edit and restructure a workbook', () {
+    final XlsxResult generated = modelGenerate();
+    expect(generated.warnings, isEmpty);
+    expect(checkXlsx(generated.bytes), isEmpty);
+    final XlsxResult saved = modelEdit(generated.bytes);
+    expect(saved.warnings, isEmpty);
+    expect(checkXlsx(saved.bytes), isEmpty);
+    expect(
+      XlsxWorkbook.open(saved.bytes).sheet('Prices').cellAt(1, 1)!.value,
+      XlsxDecimal('4.00'),
+    );
+    final XlsxWorkbook book = modelStructure(saved.bytes);
+    final XlsxSheet prices = book.sheet('Prices');
+    expect(prices.cellAt(1, 0)!.value, 'Tea');
+    expect(prices.cellAt(2, 1)!.formula, 'SUM(B2:B2)');
+  });
+
   test(
     'README DOCX list export block saves a list with its page furniture',
     () {

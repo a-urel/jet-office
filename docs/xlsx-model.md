@@ -13,7 +13,9 @@ protection, hyperlinks, data validations, conditional formats and document
 properties); milestone W4, objects (rich text, notes, pictures and
 tables); and milestone W5, structural editing (rows and columns inserted and
 deleted, sheets renamed, moved and added, tables renamed and removed, and
-change sets with undo and redo).
+change sets with undo and redo); and milestone W6, proof and release
+readiness: the two W5 gaps closed, writer parity over every fixture, an API
+review, the benchmarks, and the names fixed.
 
 ```dart
 final XlsxWorkbook book = XlsxWorkbook.open(bytes);
@@ -316,6 +318,34 @@ book.undo(set);
 - **Two warning codes.** `referenceNotShifted` (a part names the edited sheet
   but is not typed, so its references stay as written) and
   `formulaUnlexable` (a formula the lexer cannot read stays as written).
+
+## What W6 does
+
+W6 adds no feature; it proves the model and fixes its names.
+
+- **Two W5 gaps closed.** A shape's `textlink` is a held reference: it shifts
+  with row and column edits, sheet renames and other sheets' edits, and an
+  unreadable one stays as written and warns `formulaUnlexable`. Anchors inside
+  `mc:AlternateContent` move as bare ones do; an alternate content that is
+  mixed or has no anchor stays whole and warns `referenceNotShifted`.
+- **Parity over every fixture.** `test/xlsx/model/parity_test.dart` lists every
+  fixture of `allFixtures()` and rebuilds each with the model, semantically
+  equal to the writer's ("Parity with the writer"), except `c1_kinds` and
+  `c1_options`, whose charts the model hosts only with C2.
+- **The names are fixed.** The API review renamed `removePicture` to
+  `removePictureAt`, `movePicture` to `movePictureAt`,
+  `XlsxFormulaTokenKind.open` and `close` to `parenOpen` and `parenClose`, and
+  made `XlsxChange`'s constructor private, with no aliases (nothing was
+  released). From W6 on a rename of a public name of the model is a breaking
+  change.
+- **Benchmarks.** Generating 100,000 rows of 12 columns with the model takes
+  3.7 s on the VM and 6.8 s in Chrome against 1.7 s and 3.9 s for the
+  writers; 1,000,000 rows take 38.6 s and 72.1 s; the loaded store retains
+  about 30.7 bytes per cell ([`benchmark.md`](benchmark.md), "Model
+  generation figures").
+- **Known gaps that remain.** Nothing is compacted (unused shared strings,
+  cell formats and styles stay); there is no `removeSheet`; charts stay opaque
+  until C2.
 
 ## Rules the model enforces
 

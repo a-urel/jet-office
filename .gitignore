@@ -40,6 +40,8 @@ doc/api/
 
 # Written by example/jet_office_example.dart.
 example.xlsx
+example-edited.xlsx
+example-model.xlsx
 
 # Word lock files, which Word leaves beside an open document.
 ~$*

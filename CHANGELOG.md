@@ -4,6 +4,62 @@
 
 ### Added
 
+#### Phase 3, the workbook model, W1 (foundation)
+
+- `XlsxWorkbook` opens an XLSX file from bytes (`XlsxWorkbook.open`, within
+  `XlsxReadLimits`) or starts an empty one (`XlsxWorkbook()`), reads cells
+  (`XlsxSheet.cellAt`, `rows`), sets them (`setCell`: `String`, `num`, `bool`,
+  `DateTime`, `XlsxDate`, `XlsxDecimal`, `XlsxFormula`, `null`) and saves
+  (`save`, `saveTo`). A sheet loads on first use into a compact cell store;
+  what the model does not type is kept as written, so an opened file saved
+  without a change is semantically equal to the input (decision 0009).
+
+#### Phase 3, the workbook model, W2 (styles and layout)
+
+- Cell styles (`styleAt`, `setStyle`, `XlsxCell`), rows (`XlsxRowFormat`),
+  columns, merges, views and panes, tab colours, the active sheet and colour
+  resolution, with the writer's types. Styles are append-only.
+
+#### Phase 3, the workbook model, W3 (sheet and workbook features)
+
+- Defined names, print settings, auto filters, sheet and workbook protection,
+  hyperlinks, data validations, conditional formats (Excel 2010's too) and
+  document properties, typed with the writer's types and checks.
+
+#### Phase 3, the workbook model, W4 (objects)
+
+- Rich text cells, notes, pictures and tables (`richTextAt`, `setNote`,
+  `addPicture`, `addTable`, `setTableStyle`, `resizeTable`, `removeTable`);
+  charts, shapes, form controls and threaded comments beside them are kept as
+  written.
+
+#### Phase 3, the workbook model, W5 (structural editing)
+
+- `insertRows`, `deleteRows`, `insertColumns`, `deleteColumns`, `renameTable`,
+  `renameSheet`, `moveSheet` and `addSheet(position:)`, rewriting every
+  reference to what moved as Excel does; `transaction`, `undo` and `redo` with
+  `XlsxChangeSet` and `XlsxChange` (no undo stack in the library); the public
+  formula lexer `lexFormula`. Two warning codes: `referenceNotShifted` and
+  `formulaUnlexable`.
+
+#### Phase 3, the workbook model, W6 (proof and release; the names are fixed)
+
+- A shape's `textlink` is a held reference and shifts with structural edits;
+  anchors inside `mc:AlternateContent` move like bare ones (a mixed or
+  anchorless alternate content stays whole and warns `referenceNotShifted`).
+- Writer parity holds over every fixture of `allFixtures()` except `c1_kinds`
+  and `c1_options`, whose charts come with C2.
+- Benchmarks of generating workbooks with the model: 100,000 rows of 12
+  columns in 3.7 s on the VM and 6.8 s in Chrome (the writers 1.7 s and
+  3.9 s), 1,000,000 rows in 38.6 s and 72.1 s, about 30.7 bytes per cell
+  retained (`docs/benchmark.md`, "Model generation figures").
+- The README has a "Workbook model" section and the example opens, edits and
+  generates a workbook with the model.
+- The model's names are fixed as of W6: a rename later is a breaking change.
+  Known gaps that remain: nothing is compacted, there is no `removeSheet`,
+  charts stay opaque until C2. The rules, each with its test, are in
+  `docs/xlsx-model.md`.
+
 #### Phase 4, DOCX, D1 (foundation)
 
 - `DocxDocument` opens a DOCX file from bytes (`DocxDocument.open`, within
@@ -211,6 +267,11 @@
 
 ### Changed
 
+- Workbook model (W6): `XlsxSheet.removePicture` is now `removePictureAt`,
+  `XlsxSheet.movePicture` is now `movePictureAt`,
+  `XlsxFormulaTokenKind.open` and `close` are now `parenOpen` and
+  `parenClose`, and `XlsxChange`'s constructor is private, with no aliases
+  (none had been released). The workbook model's names are fixed as of W6.
 - Renamed the format-neutral public types, with no aliases: `XlsxLocale` is
   now `OfficeLocale`, `XlsxImage` is now `OfficeImage`, `XlsxImageFormat`
   is now `OfficeImageFormat` and `XlsxProperties` is now `OfficeProperties`

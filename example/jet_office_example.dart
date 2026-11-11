@@ -1,7 +1,8 @@
 // Writes `example.xlsx`, an accounts list and a summary sheet, then reads
 // it back with `XlsxReader` and prints the first rows of the list. Then it
 // writes `example.docx`, the same accounts as a Word list with a page header
-// and footer.
+// and footer. Last it opens the workbook with `XlsxWorkbook`, edits it and
+// generates a small one, then saves both.
 //
 // Run it from the repository root:
 //
@@ -157,6 +158,27 @@ ExampleReadBack readExample(Uint8List bytes, {int count = 4}) {
   );
 }
 
+/// Opens [bytes] with the workbook model, changes the first balance and
+/// inserts a row in a transaction that is then undone, and saves.
+XlsxResult editExample(Uint8List bytes) {
+  final XlsxWorkbook book = XlsxWorkbook.open(bytes);
+  final XlsxSheet accounts = book.sheet('Accounts');
+  accounts.setCell(2, 2, XlsxDecimal('2000'));
+  final XlsxChangeSet set = book.transaction(() => accounts.insertRows(3));
+  book.undo(set);
+  return book.save();
+}
+
+/// Generates a small workbook with the model.
+XlsxResult generateExample() {
+  final XlsxWorkbook book = XlsxWorkbook();
+  book.addSheet('Prices')
+    ..setCell(0, 0, 'Tea')
+    ..setCell(0, 1, XlsxDecimal('3.50'))
+    ..setStyle(0, 0, const XlsxStyle(font: XlsxFont(bold: true)));
+  return book.save();
+}
+
 void main() {
   final XlsxResult result = buildExample();
   File('example.xlsx').writeAsBytesSync(result.bytes);
@@ -183,4 +205,13 @@ void main() {
   for (final DocxWarning warning in document.warnings) {
     stdout.writeln(warning.message(OfficeLocale.tr));
   }
+
+  // The model opens the file, edits it and saves it; what it did not change
+  // stays as it was.
+  final XlsxResult edited = editExample(result.bytes);
+  File('example-edited.xlsx').writeAsBytesSync(edited.bytes);
+  stdout.writeln('example-edited.xlsx: ${edited.bytes.length} bytes');
+  final XlsxResult generated = generateExample();
+  File('example-model.xlsx').writeAsBytesSync(generated.bytes);
+  stdout.writeln('example-model.xlsx: ${generated.bytes.length} bytes');
 }

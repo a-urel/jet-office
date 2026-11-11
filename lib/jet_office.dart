@@ -127,7 +127,8 @@
 /// all-or-nothing group of [XlsxChange] records that [XlsxWorkbook.undo] and
 /// [XlsxWorkbook.redo] take back and reapply; the library keeps no undo
 /// stack, the caller holds the sets. Row and column indexes are 0-based, as
-/// everywhere in the API. [lexFormula] splits a formula
+/// everywhere in the API. The model's names are fixed as of milestone W6: a
+/// rename later is a breaking change. [lexFormula] splits a formula
 /// into [XlsxFormulaToken]s of an [XlsxFormulaTokenKind], whose texts joined
 /// give the formula back.
 ///
