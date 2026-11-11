@@ -20,10 +20,12 @@ library;
 
 import 'dart:typed_data';
 
+import 'package:archive/archive.dart' show ZipDecoder;
 import 'package:jet_office/jet_office.dart';
 import 'package:jet_office/src/xlsx/model/xlsx_sheet.dart' show cellStoreOf;
 import 'package:test/test.dart';
 
+import '../test/support/event_loop.dart';
 import 'src/memory_probe.dart';
 import 'src/workload.dart';
 
@@ -44,8 +46,23 @@ int _expectedCells(int rows) {
   return cells;
 }
 
-/// Fills [sheet] with the workload's header and [rows] data rows.
-void _fill(XlsxSheet sheet, int rows) {
+/// Stops [watch], gives the event loop a turn when one is due, and restarts
+/// [watch]: the turn is not timed. In Chrome every suite shares one thread,
+/// so a long loop must leave it now and then (AGENTS.md, "Fuzzing").
+Future<void> _pause(Stopwatch watch, EventLoopBreather breather) async {
+  watch.stop();
+  await breather.breathe();
+  watch.start();
+}
+
+/// Fills [sheet] with the workload's header and [rows] data rows, timed by
+/// [watch], which the caller started.
+Future<void> _fill(
+  XlsxSheet sheet,
+  int rows,
+  Stopwatch watch,
+  EventLoopBreather breather,
+) async {
   for (int c = 0; c < workloadColumns.length; c++) {
     sheet.setColumn(c, workloadColumns[c]);
   }
@@ -59,6 +76,7 @@ void _fill(XlsxSheet sheet, int rows) {
       final Object? value = values[c];
       if (value != null) sheet.setCell(r, c, value);
     }
+    if (r % 1000 == 0) await _pause(watch, breather);
   }
 }
 
@@ -71,11 +89,15 @@ typedef _Generated = ({
   int saveMicros,
 });
 
-_Generated _generate(int rows) {
+/// Generates [rows] data rows and saves. The save is one synchronous call, so
+/// it cannot give the thread back; at 1,000,000 rows it holds Chrome's for
+/// 38 seconds.
+Future<_Generated> _generate(int rows) async {
+  final EventLoopBreather breather = EventLoopBreather();
   final Stopwatch watch = Stopwatch()..start();
   final XlsxWorkbook book = XlsxWorkbook();
   final XlsxSheet sheet = book.addSheet('Data');
-  _fill(sheet, rows);
+  await _fill(sheet, rows, watch, breather);
   final int fill = watch.elapsedMicroseconds;
   watch.reset();
   final Uint8List bytes = book.save().bytes;
@@ -97,7 +119,9 @@ String _ms(int micros) => (micros / 1000).toStringAsFixed(1);
 
 /// Reads [bytes] back and checks the last of [rows] data rows holds the
 /// workload's values, and that no row follows it.
-void _expectLastRow(Uint8List bytes, int rows) {
+Future<void> _expectLastRow(Uint8List bytes, int rows) async {
+  final EventLoopBreather breather = EventLoopBreather();
+  int seen = 0;
   XlsxReadRow? last;
   // The 1,000,000-row sheet is 468,436,661 bytes of XML, past the default
   // limit of 256 MiB for one entry, so the limits are raised for the read.
@@ -107,6 +131,7 @@ void _expectLastRow(Uint8List bytes, int rows) {
   );
   for (final XlsxReadRow row in XlsxReader(bytes, limits: limits).rowsAt(0)) {
     last = row;
+    if (++seen % 10000 == 0) await breather.breathe();
   }
   expect(last, isNotNull);
   expect(last!.index, rows);
@@ -140,14 +165,14 @@ void main() {
     print('$platform | $text');
   }
 
-  test('generate 100,000 x 12 with the model', () {
+  test('generate 100,000 x 12 with the model', () async {
     final int cells = _expectedCells(_rows);
     final List<int> fills = <int>[];
     final List<int> saves = <int>[];
     final List<int> totals = <int>[];
     late _Generated last;
     for (int run = 1; run <= _timedRuns; run++) {
-      last = _generate(_rows);
+      last = await _generate(_rows);
       fills.add(last.fillMicros);
       saves.add(last.saveMicros);
       totals.add(last.fillMicros + last.saveMicros);
@@ -170,11 +195,11 @@ void main() {
       'retained store | $retained bytes | '
       '${(retained / cells).toStringAsFixed(1)} bytes/cell | $cells cells',
     );
-    _expectLastRow(last.bytes, _rows);
+    await _expectLastRow(last.bytes, _rows);
     line('check | the saved file holds row $_rows');
   });
 
-  test('memory of the generated workbook', () {
+  test('memory of the generated workbook', () async {
     // As the model benchmark does: the reading before the workbook exists,
     // after the fill and after the save, the workbook still referenced; a
     // warm-up and three runs. It includes garbage the collector has not freed
@@ -186,7 +211,7 @@ void main() {
       final Stopwatch watch = Stopwatch()..start();
       final XlsxWorkbook book = XlsxWorkbook();
       final XlsxSheet sheet = book.addSheet('Data');
-      _fill(sheet, _rows);
+      await _fill(sheet, _rows, watch, EventLoopBreather());
       final int fill = watch.elapsedMicroseconds;
       final int? filled = memory.sample();
       final Uint8List bytes = book.save().bytes;
@@ -252,7 +277,8 @@ void main() {
     );
   });
 
-  test('links and rules on a fresh sheet', () {
+  test('links and rules on a fresh sheet', () async {
+    final EventLoopBreather breather = EventLoopBreather();
     for (final int count in <int>[1000, 5000, 20000]) {
       final List<int> links = <int>[];
       final List<int> rules = <int>[];
@@ -269,6 +295,7 @@ void main() {
             0,
             XlsxHyperlink.url('https://example.com/item/$i', text: 'item $i'),
           );
+          if (i % 100 == 99) await _pause(watch, breather);
         }
         links.add(watch.elapsedMicroseconds);
         expect(sheet.cellAt(count - 1, 0)?.value, 'item ${count - 1}');
@@ -284,6 +311,7 @@ void main() {
               ],
             ),
           );
+          if (i % 100 == 99) await _pause(watch, breather);
         }
         rules.add(watch.elapsedMicroseconds);
         expect(sheet.conditionalFormats, hasLength(count));
@@ -297,10 +325,10 @@ void main() {
         '${_ms(_median(rules))} ms${runs == 1 ? ' (1 run)' : ''}',
       );
     }
-  });
+  }, timeout: const Timeout(Duration(minutes: 60)));
 
-  test('structural edits on the generated sheet', () {
-    final _Generated generated = _generate(_rows);
+  test('structural edits on the generated sheet', () async {
+    final _Generated generated = await _generate(_rows);
     final XlsxWorkbook book = generated.book;
     final XlsxSheet sheet = generated.sheet;
     final List<int> insert = <int>[];
@@ -332,15 +360,15 @@ void main() {
     line('phase | deleteColumns(0) | ${_ms(_median(delete))} ms');
     line('phase | undo of deleteColumns | ${_ms(_median(undoDelete))} ms');
     // The edits and their undos leave the sheet as it was.
-    _expectLastRow(book.save().bytes, _rows);
+    await _expectLastRow(book.save().bytes, _rows);
     line('check | after the undos the saved file holds row $_rows');
   });
 
-  test('generate 1,000,000 x 12 with the model', () {
+  test('generate 1,000,000 x 12 with the model', () async {
     // One run: in Chrome a failure for memory is the figure.
     try {
       final int cells = _expectedCells(_bigRows);
-      final _Generated g = _generate(_bigRows);
+      final _Generated g = await _generate(_bigRows);
       final int retained = cellStoreOf(g.sheet)!.retainedBytesEstimate;
       expect(cellStoreOf(g.sheet)!.cellCount, cells);
       line(
@@ -348,7 +376,11 @@ void main() {
         'total ${_ms(g.fillMicros + g.saveMicros)} ms | ${g.bytes.length} '
         'bytes | retained store $retained bytes | $cells cells',
       );
-      _expectLastRow(g.bytes, _bigRows);
+      // The ZIP directory only: the entry's declared size.
+      line(
+        '1m | sheet XML | ${ZipDecoder().decodeBytes(g.bytes).findFile('xl/worksheets/sheet1.xml')!.size} bytes',
+      );
+      await _expectLastRow(g.bytes, _bigRows);
       line('1m | check | the saved file holds row $_bigRows');
     } on TestFailure {
       rethrow;

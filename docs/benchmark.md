@@ -764,7 +764,7 @@ the generated sheet, and generates 1,000,000 rows once.
   a 60-minute timeout. In Chrome, a failure for memory would be caught and
   printed as `chrome | 1m | failed: <error>`; none came. The saved file is
   read back with raised limits (`maxEntryBytes` 1 GiB, `maxTotalBytes` 2 GiB):
-  its sheet is 468,436,661 bytes of XML, past the default 256 MiB for an
+  its sheet is 468,436,661 bytes of XML (printed as `1m | sheet XML`), past the default 256 MiB for an
   entry, so `XlsxReader` and `XlsxWorkbook.open` refuse it with the default
   limits (`limitExceeded`).
 
@@ -847,6 +847,7 @@ vm | phase | deleteColumns(0) | 4299.7 ms
 vm | phase | undo of deleteColumns | 145.9 ms
 vm | check | after the undos the saved file holds row 100000
 vm | 1m | fill 20674.7 ms | save 17919.5 ms | total 38594.2 ms | 70875501 bytes | retained store 349076820 bytes | 11666679 cells
+vm | 1m | sheet XML | 468436661 bytes
 vm | 1m | check | the saved file holds row 1000000
 chrome | generate | run 1 | fill 3073.5 ms | save 4030.4 ms | 7018313 bytes
 chrome | generate | run 2 | fill 3099.2 ms | save 3659.9 ms | 7018313 bytes
@@ -875,8 +876,21 @@ chrome | phase | deleteColumns(0) | 5127.1 ms
 chrome | phase | undo of deleteColumns | 199.7 ms
 chrome | check | after the undos the saved file holds row 100000
 chrome | 1m | fill 34353.2 ms | save 37737.7 ms | total 72090.9 ms | 71058248 bytes | retained store 349076820 bytes | 11666679 cells
+chrome | 1m | sheet XML | 468436661 bytes
 chrome | 1m | check | the saved file holds row 1000000
 ```
+
+The long loops give the event loop a turn about once a second with the
+stopwatch stopped (`_pause`), so the figures are not changed by it: a rerun of
+the 100,000 case in Chrome gave fill 3150 ms and save 3692 ms against 3096 and
+3660. The save is one synchronous call and cannot breathe; at 1,000,000 rows it
+holds Chrome's thread for about 40 s.
+
+Run alone, as above, the 1,000,000 case finishes in Chrome. In
+`dart test -p chrome benchmark`, where every suite shares one page and its heap
+(the DOCX benchmarks leave about 1.8 GB of it in use), the case did not finish
+in 60 minutes and the test timed out; every suite loaded and every other test
+passed. Run the 1,000,000 case alone in Chrome.
 
 ### Reading the figures
 
@@ -884,8 +898,10 @@ chrome | 1m | check | the saved file holds row 1000000
   VM and 1.7 times in Chrome.** Fill and save take 3.7 s on the VM against 1.67 s for
   either writer, and 6.8 s in Chrome against 3.9 s: the model keeps every cell
   in a store and then serializes it, where the writers encode each row as it
-  comes. The model's file is 37,377 bytes (0.5 %) larger than the writers'; this
-  benchmark does not say why.
+  comes. The model's file is larger than the writers': 37,377 bytes (0.5 %) on the
+  VM and 36,388 in Chrome. The cause is the `spans="1:12"` the model writes on
+  every row (`<row r="3" spans="1:12">`) and the writers write on none: 13
+  characters on each of 100,000 rows is 1.3 MB of XML before compression.
 - **The two writers still cost the same as each other** (1.67 s, 3.9 s), as
   "First figures" found.
 - **The store of a generated sheet is 30.7 bytes a cell**, 35.8 MB for the
@@ -899,7 +915,8 @@ chrome | 1m | check | the saved file holds row 1000000
   times the 100,000 case's phases), and in 34.4 s and 37.7 s in Chrome (11.1
   and 10.3 times), a file of 71 MB. The VM held 11.7 million cells (a store of
   349 MB estimated) and Chrome did too, with no failure for memory. The
-  sheet's XML is 468 MB, which the reader's default limits refuse: a caller
+  sheet's XML is 468,436,661 bytes (a line of the 1,000,000 case prints it),
+  which the reader's default limits refuse: a caller
   who reads such a file back must raise `maxEntryBytes`.
 - **Links and rules are quadratic, as the known-costs table says.** Each add
   copies the group's list. Five times the links cost 17.6 times the time and
@@ -908,8 +925,7 @@ chrome | 1m | check | the saved file holds row 1000000
   7.4 minutes and 12.9 minutes. A sheet with a few hundred of either is not
   affected (1,000 links: 66 ms; 1,000 rules: 1.1 s), but a generator that
   wants thousands of conditional formats should merge their ranges into few
-  formats, as Excel does, rather than add one a cell. A link costs about a
-  twenty-second of a rule at 20,000. The links are capped at 65,531 a sheet.
+  formats, as Excel does, rather than add one a cell. At 20,000 adds a rule takes 22 times as long as a link. The links are capped at 65,530 a sheet.
 - **A structural edit costs a pass over the sheet, and its undo almost
   nothing.** Inserting a row above the last 100,000 takes 4.3 s on the VM and
   5.1 s in Chrome (a deleted column the same), against 30 ms and 146 ms for
