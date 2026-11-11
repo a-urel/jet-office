@@ -142,23 +142,25 @@ rewrites only the markers, so the SVG extension stays.
   properties (`text.dart`). Nothing there reads `spPr`, a preset geometry, a
   fill, a line or a general text body.
 
-### A defect: a shape's `textlink` does not move (W5)
+### Fixed: a shape's `textlink` is a held reference (W6)
 
-`textlink` is a formula kept inside an opaque entry, and no reference holder
-covers it. A row inserted above the linked cell moves the shape and the cell,
-and leaves `textlink="$A$1"` naming the old cell. Excel, by the standard,
-writes `$A$2`. The same cause should leave it naming the old sheet after a
-rename (`Veri!$B$2`); that case is not tested.
+`textlink` is a formula kept inside an opaque entry. Until W6 no reference
+holder covered it: a row inserted above the linked cell moved the shape and
+the cell and left `textlink="$A$1"` naming the old cell. Now the sheet's
+`drawings` holder rewrites every non-empty `textlink` of its drawing, at any
+depth, as a formula of that sheet (`DrawingEntry.withTextLinks`), on every
+edit: of its own sheet, of another sheet the link names, a rename and a move.
 
-- `object_shift_test.dart`, "a shape's textlink moves with the cell it names",
-  pins it, skipped with its reason. It fails when unskipped.
-- `docs/xlsx-model.md`, "Structural edits (W5)", lists it as a known gap.
-- The fix is a W5 matter: a holder for drawing `textlink` (and, when a shape
-  reader exists, for its typed form). Excel's behaviour waits for the owner's
-  `shapes_shifted.xlsx` (section 6).
-- The architecture test "every reference is held" did not catch it, because
-  it looks at model files that store a formula, and this one is inside opaque
-  XML.
+- The standard's behaviour: `$A$1` becomes `$A$2` on a row inserted above
+  it, `'Veri 2'!$B$2` follows `Veri 2`'s edits and rename, a deleted cell
+  becomes `#REF!`. Excel's own behaviour is to be confirmed by the owner's
+  `shapes_shifted.xlsx` (W6 check, section 6).
+- `object_shift_test.dart`, group "shapes and icons", pins it.
+- `docs/xlsx-model.md`, "Structural edits (W5)", lists the rule.
+- When a shape reader exists, its typed form must follow the same edits.
+- The architecture test "every reference is held" did not catch the gap,
+  because it looks at model files that store a formula, and this one is
+  inside opaque XML.
 
 ### Wrapped anchors
 
@@ -299,13 +301,15 @@ Under AGENTS.md's hard rules and decision `0015`:
 - **Hosts.**
   - `lib/src/xlsx/`: listing and adding through `DrawingPart` and the sheet
     (`xlsx_sheet_pictures.dart` grows into a drawings part of the sheet), the
-    `textlink` holder in `reference_holders.dart`.
+    `drawings` holder (`xlsx_sheet_pictures.dart`), which already rewrites
+    `textlink` (W6), following a typed shape too.
   - `lib/src/docx/`: `wp:anchor` reading and writing in `drawing.dart`, the
     `mc:AlternateContent` choice, `w:txbxContent` through the story reader
     and writer, and the VML fallback, which is DOCX's own: `lib/src/docx/`
     may not import the workbook's `vml_part.dart`.
 - **No rule changes.** One cell encoder and decoder: untouched. The OPC layer
-  stays format-free. "Every reference is held" gains the `textlink` holder.
+  stays format-free. "Every reference is held" already covers `textlink`
+  (the `drawings` holder, W6).
 
 ### Overlap with C2 and C3
 
@@ -338,7 +342,7 @@ milestones, Q is reserved for equations, and E is the Excel checks.
 formats**, with the DOCX text box content as blocks and the SVG of an icon
 readable beside its PNG. It is read-only, low-risk, needs no writer and no
 VML, and it answers Monépro's template question (what text sits in a text
-box). The W5 `textlink` fix goes in its own W5 follow-up, not in S1.
+box). The `textlink` fix went in its own follow-up (W6), not in S1.
 
 **Order relative to C2 and C3.**
 
@@ -483,7 +487,7 @@ What each step answers:
 | Excel 6 | `grpSp`, `chOff` and `chExt` |
 | Excel 7 | the icon's `svgBlip`, the PNG fallback's size, a recoloured icon (is the SVG rewritten or a colour added?), what "Convert to Shape" writes |
 | Excel 8 | `editAs` on shapes |
-| Excel 10 | the oracle for the `textlink` gap (section 2) and for shapes moving on insert |
+| Excel 10 | the oracle for the `textlink` rewrite (section 2, fixed to the standard's behaviour in W6) and for shapes moving on insert |
 | Word 2 to 6 | `wps:wsp` in `wp:anchor` and `wp:inline`, the VML fallback, the two copies of a text box's text, `wpg:wgp` |
 | Word 3 | a placeholder in a text box, as a template filler would meet it |
 | Word 7 | whether Word inserts icons inline or floating; the same extension as Excel |
@@ -504,6 +508,7 @@ What each step answers:
    type of `jet_office`'s own?
 6. When writing DOCX shapes: write Word's VML fallback, or leave it out if
    Word for Mac opens the file without it?
-7. May the `textlink` gap be fixed as a W5 follow-up once
-   `shapes_shifted.xlsx` exists?
+7. (Answered: fixed now to the standard's behaviour, W6; Excel's to be
+   confirmed by `shapes_shifted.xlsx`.) May the `textlink` gap be fixed as a
+   W5 follow-up once `shapes_shifted.xlsx` exists?
 8. Is the letter S acceptable?

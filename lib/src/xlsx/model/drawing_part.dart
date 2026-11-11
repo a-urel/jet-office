@@ -25,6 +25,7 @@ import '../../xml/utf8_buffer.dart';
 import '../../xml/xml_pull_reader.dart';
 import '../../xml/xml_writer.dart';
 import '../drawing.dart';
+import '../formula/formula_rewrite.dart';
 import '../formula/reference_shift.dart';
 import '../read/read_limits.dart';
 import 'comments_part.dart' show WarnFn;
@@ -166,6 +167,39 @@ final class DrawingEntry {
     if (move == null) return null;
     final OpaqueXml moved = spliceElement(source, move.markerSplice());
     return _entry(moved, ids, _noWarning);
+  }
+
+  /// This entry with every non-empty `textlink` attribute (the cell a
+  /// shape's text shows, `textlink="$A$1"`) rewritten by [mapper] as a
+  /// formula of the sheet [hostSheet], at any depth: on a bare or a wrapped
+  /// anchor's shape, inside a group. `null` when none changes. Only the
+  /// attributes' values change; every other character stays as written.
+  ///
+  /// A `textlink` the formula lexer cannot read is kept and given to
+  /// [onUnlexable]. Throws XML errors as a reader does on what a file holds.
+  DrawingEntry? withTextLinks(
+    ReferenceMapper mapper,
+    String hostSheet, {
+    required void Function(String text) onUnlexable,
+  }) {
+    final OpaqueXml next = spliceElement(source, (XmlPullReader r, int _) {
+      for (int i = 0; i < r.attributeCount; i++) {
+        if (r.attributeQualifiedName(i) != 'textlink') continue;
+        final String link = r.attributeValue(i);
+        if (link.isEmpty) return null;
+        final String? rewritten = rewriteFormula(
+          link,
+          mapper,
+          hostSheet,
+          onUnlexable: onUnlexable,
+        );
+        if (rewritten == null) return null;
+        return SpliceEdit(attributes: <String, String>{'textlink': rewritten});
+      }
+      return null;
+    });
+    if (identical(next, source)) return null;
+    return _entry(next, ids, _noWarning);
   }
 
   /// [shiftedBy] for an `mc:AlternateContent` entry.

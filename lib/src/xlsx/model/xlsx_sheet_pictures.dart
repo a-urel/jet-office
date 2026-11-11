@@ -386,8 +386,10 @@ mixin _SheetPictures {
     }
   }
 
-  /// The drawing and its media, read once.
-  _PicturesRead _readPictures() {
+  /// The drawing and its media, read once. With [peek], a first read peeks
+  /// at the sheet's and the drawing's relationships instead of registering
+  /// them, so a read for another sheet's edit leaves both parts as read.
+  _PicturesRead _readPictures({bool peek = false}) {
     final _PicturesRead? cached = _picturesRead;
     if (cached != null) return cached;
     final WorksheetPart? part = _load();
@@ -397,8 +399,11 @@ mixin _SheetPictures {
       return _picturesRead = _PicturesRead(null, null, <String, String>{});
     }
     final PackageReader reader = _host.reader;
+    List<PartRelationship> relationshipsOf(String source) => peek
+        ? _peekedRelationships(reader, source)
+        : reader.relationshipsOf(source);
     String? drawingName;
-    for (final PartRelationship rel in reader.relationshipsOf(
+    for (final PartRelationship rel in relationshipsOf(
       sheetName.substring(1),
     )) {
       if (rel.id == drawingId &&
@@ -426,7 +431,7 @@ mixin _SheetPictures {
     );
     if (drawing == null) problems.add('drawing');
     final Map<String, String> media = <String, String>{
-      for (final PartRelationship rel in reader.relationshipsOf(name))
+      for (final PartRelationship rel in relationshipsOf(name))
         if (rel.type == RelType.image && reader.hasPart(rel.target))
           rel.id: rel.target,
     };
@@ -633,6 +638,33 @@ mixin _SheetPictures {
       a.toLowerCase() == b.toLowerCase();
 }
 
+/// The internal relationships of [source] (a part name without a leading
+/// `/`) as [PackageReader.relationshipsOf] gives them, peeked
+/// ([OpcPackage.peekRelationships]) so the relationships part stays as read.
+List<PartRelationship> _peekedRelationships(
+  PackageReader reader,
+  String source,
+) {
+  final OpcPackage package = reader.package;
+  final List<OpcRelationship> peeked = reader.guardXml(
+    source,
+    () => package.peekRelationships(source),
+  );
+  final List<PartRelationship> found = <PartRelationship>[];
+  for (final OpcRelationship r in peeked) {
+    if (r.external) continue;
+    final String target = package.resolve(source, r.target);
+    found.add(
+      PartRelationship(
+        r.id,
+        r.type,
+        target.startsWith('/') ? target.substring(1) : target,
+      ),
+    );
+  }
+  return found;
+}
+
 /// The `drawings` holder of a sheet: on a row or column edit of the sheet
 /// every anchor of its drawing part moves as Excel moves it
 /// ([DrawingEntry.shiftedBy]): pictures, shapes, charts and groups alike, a
@@ -641,7 +673,14 @@ mixin _SheetPictures {
 /// change. An anchor inside `mc:AlternateContent` moves as a bare one; one
 /// whose branches hold anything else stays and the drawing part is warned
 /// about (`referenceNotShifted`). A sheet rename or move changes no anchor.
-/// A drawing the model cannot type is left as written.
+/// On every edit, of this sheet or another, a rename and a move included,
+/// each shape's `textlink` (the cell its text shows) follows the edit as a
+/// formula of this sheet ([DrawingEntry.withTextLinks]); one the lexer
+/// cannot read stays and is reported once (`formulaUnlexable`). A sheet
+/// without a drawing loads none; for another sheet's edit the drawing's
+/// relationships are peeked, not registered, and a drawing that cannot be
+/// read is left as written. A drawing the model cannot type is left as
+/// written.
 final class _DrawingHolder implements ReferenceHolder {
   _DrawingHolder(this._sheet);
 
@@ -652,8 +691,19 @@ final class _DrawingHolder implements ReferenceHolder {
 
   @override
   void shiftReferences(ReferenceMapper mapper, ReferenceShift? edit) {
-    if (edit == null || !_editsSheet(edit, _sheet.name)) return;
-    final _PicturesRead read = _sheet._readPictures();
+    final ReferenceShift? local = edit != null && _editsSheet(edit, _sheet.name)
+        ? edit
+        : null;
+    final _PicturesRead read;
+    try {
+      read = _sheet._readPictures(peek: local == null);
+    } on XlsxReadException {
+      // A drawing that cannot be read blocks an edit of its own sheet only;
+      // for another sheet's edit it stays as written, as before textlinks
+      // were held.
+      if (local != null) rethrow;
+      return;
+    }
     final DrawingPart? drawing = read.part;
     if (drawing == null) return;
     final PackageReader reader = _sheet._host.reader;
@@ -663,20 +713,35 @@ final class _DrawingHolder implements ReferenceHolder {
     // Every move, and so every refusal, before any change.
     final List<DrawingEntry?> moves = <DrawingEntry?>[
       for (final DrawingEntry entry in drawing.entries)
-        reader.guardXml(
-          partName,
-          () => entry.shiftedBy(
-            edit,
-            onNotShifted: (String _) => notShifted = true,
-          ),
-        ),
+        local == null
+            ? null
+            : reader.guardXml(
+                partName,
+                () => entry.shiftedBy(
+                  local,
+                  onNotShifted: (String _) => notShifted = true,
+                ),
+              ),
     ];
+    final Set<String> unlexable = <String>{};
+    final String host = _sheet.name;
+    for (int at = 0; at < moves.length; at++) {
+      final DrawingEntry entry = moves[at] ?? drawing.entries[at];
+      final DrawingEntry? linked = reader.guardXml(
+        partName,
+        () => entry.withTextLinks(mapper, host, onUnlexable: unlexable.add),
+      );
+      if (linked != null) moves[at] = linked;
+    }
     if (notShifted) {
       final String name =
           reader.package.canonicalPartName(partName) ?? partName;
       _sheet._host.references.warnPart(
         name.startsWith('/') ? name.substring(1) : name,
       );
+    }
+    for (final String text in unlexable) {
+      _sheet._warn(XlsxWarningCode.formulaUnlexable, null, detail: text);
     }
     log.transaction(() {
       for (int at = 0; at < moves.length; at++) {

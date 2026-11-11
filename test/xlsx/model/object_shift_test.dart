@@ -33,12 +33,14 @@ Uint8List _package(
   String body, {
   String rels = '',
   Map<String, String> parts = const <String, String>{},
+  String? otherSheet,
 }) {
   final Map<String, Uint8List> all = readXlsxBytes(
     buildWorkbook(<String, String>{
       'S':
           '<worksheet xmlns="$mainNs" xmlns:r="$relNs"><sheetData/>$body'
           '</worksheet>',
+      ?otherSheet: '<worksheet xmlns="$mainNs"><sheetData/></worksheet>',
     }),
   );
   if (rels.isNotEmpty) {
@@ -62,8 +64,9 @@ Uint8List _withTable(String table) => _package(
 );
 
 /// A package whose sheet draws [anchors] (raw anchors), with a PNG as
-/// `rId1` of the drawing.
-Uint8List _withDrawing(String anchors) => _package(
+/// `rId1` of the drawing, and a sheet [otherSheet] without a drawing after
+/// it when given.
+Uint8List _withDrawing(String anchors, {String? otherSheet}) => _package(
   '<drawing r:id="rId1"/>',
   rels:
       '<Relationship Id="rId1" Type="$relNs/drawing" '
@@ -74,6 +77,7 @@ Uint8List _withDrawing(String anchors) => _package(
         '<Relationships xmlns="$pkgRelNs"><Relationship Id="rId1" '
         'Type="$relNs/image" Target="../media/image1.png"/></Relationships>',
   },
+  otherSheet: otherSheet,
 );
 
 ChangeSet _edit(XlsxWorkbook book, ReferenceShift edit) => changeLogOf(
@@ -627,34 +631,143 @@ void main() {
       expect(saved.keys, isNot(contains('xl/media/image2.svg')));
     });
 
-    test(
-      "a shape's textlink moves with the cell it names",
-      () {
-        // Excel stores a shape whose text is linked to a cell (select the
-        // shape, type =A1 in the formula bar) as textlink="$A$1", by
-        // ECMA-376. A row inserted above A1 must make it $A$2.
-        String linked(String link, int row) =>
-            '<xdr:twoCellAnchor>${_marker('from', 1, row)}'
-            '${_marker('to', 3, row + 2)}<xdr:sp macro="" '
-            'textlink="$link"><xdr:nvSpPr><xdr:cNvPr id="2" '
-            'name="Rectangle 1"/><xdr:cNvSpPr/></xdr:nvSpPr><xdr:spPr>'
-            '<a:prstGeom prst="rect"><a:avLst/></a:prstGeom></xdr:spPr>'
-            '</xdr:sp><xdr:clientData/></xdr:twoCellAnchor>';
-        final XlsxWorkbook book = XlsxWorkbook.open(
-          _withDrawing(linked(r'$A$1', 4)),
-        );
-        _edit(book, _insertRows(1, 1));
-        expect(
-          _saved(book)[_drawingPart],
-          '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
-          '<xdr:wsDr $_xdr>${linked(r'$A$2', 5)}</xdr:wsDr>',
-        );
-      },
-      skip:
-          "Known gap (docs/shapes.md): a drawing's textlink is not a held "
-          'reference, so a structural edit leaves it naming the old cell. '
-          "Unskip with the fix, once the owner's shapes_shifted.xlsx shows "
-          'what Excel does.',
-    );
+    // Excel stores a shape whose text is linked to a cell (select the
+    // shape, type =A1 in the formula bar) as textlink="$A$1", by ECMA-376.
+    // Moved by the standard's rules; Excel's own behaviour is to be
+    // confirmed by the owner's shapes_shifted.xlsx (W6 check).
+    String linked(String link, int row) =>
+        '<xdr:twoCellAnchor>${_marker('from', 1, row)}'
+        '${_marker('to', 3, row + 2)}<xdr:sp macro="" '
+        'textlink="$link"><xdr:nvSpPr><xdr:cNvPr id="2" '
+        'name="Rectangle 1"/><xdr:cNvSpPr/></xdr:nvSpPr><xdr:spPr>'
+        '<a:prstGeom prst="rect"><a:avLst/></a:prstGeom></xdr:spPr>'
+        '</xdr:sp><xdr:clientData/></xdr:twoCellAnchor>';
+    String saved(String anchors) =>
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        '<xdr:wsDr $_xdr>$anchors</xdr:wsDr>';
+
+    test("a shape's textlink moves with the cell it names", () {
+      final XlsxWorkbook book = XlsxWorkbook.open(
+        _withDrawing(linked(r'$A$1', 4)),
+      );
+      _edit(book, _insertRows(1, 1));
+      expect(_saved(book)[_drawingPart], saved(linked(r'$A$2', 5)));
+    });
+
+    test("a textlink to another sheet follows that sheet's insert and "
+        'rename', () {
+      final XlsxWorkbook book = XlsxWorkbook.open(
+        _withDrawing(linked(r"'Veri 2'!$B$2", 4), otherSheet: 'Veri 2'),
+      );
+      _edit(book, ReferenceShift.insert('Veri 2', ShiftAxis.rows, 1, 1));
+      // The shape's own sheet did not change, so it stays where it is.
+      expect(_saved(book)[_drawingPart], saved(linked(r"'Veri 2'!$B$3", 4)));
+      book.renameSheet(book.sheet('Veri 2'), 'Veri 3');
+      expect(_saved(book)[_drawingPart], saved(linked(r"'Veri 3'!$B$3", 4)));
+    });
+
+    test('a textlink whose cell is deleted becomes #REF!', () {
+      final XlsxWorkbook book = XlsxWorkbook.open(
+        _withDrawing(linked(r'$A$3', 4)),
+      );
+      _edit(book, _deleteRows(3, 1));
+      expect(_saved(book)[_drawingPart], saved(linked('#REF!', 3)));
+    });
+
+    test('an empty textlink is left as written', () {
+      final String drawing = anchors(0);
+      final XlsxWorkbook book = XlsxWorkbook.open(_withDrawing(drawing));
+      book.renameSheet(book.sheets.single, 'T');
+      expect(_saved(book)[_drawingPart], '<xdr:wsDr $_xdr>$drawing</xdr:wsDr>');
+      _edit(book, ReferenceShift.insert('T', ShiftAxis.columns, 10, 1));
+      expect(_saved(book)[_drawingPart], '<xdr:wsDr $_xdr>$drawing</xdr:wsDr>');
+    });
+
+    test('an unlexable textlink stays and warns formulaUnlexable once', () {
+      const String bad = r'$A$1+&quot;x';
+      final XlsxWorkbook book = XlsxWorkbook.open(
+        _withDrawing('${linked(bad, 4)}${linked(r'$A$1', 8)}'),
+      );
+      final List<XlsxWarning> warnings = referenceRegistryOf(
+        book,
+      ).apply(_insertRows(1, 1), _insertRows(1, 1));
+      expect(
+        _saved(book)[_drawingPart],
+        saved('${linked(bad, 5)}${linked(r'$A$2', 9)}'),
+      );
+      final List<XlsxWarning> unlexable = warnings
+          .where((XlsxWarning w) => w.code == XlsxWarningCode.formulaUnlexable)
+          .toList();
+      expect(unlexable, hasLength(1));
+      expect(unlexable.single.detail, r'$A$1+"x');
+      expect(unlexable.single.count, 1);
+    });
+
+    test('a textlink inside a wrapped anchor moves', () {
+      String sp(String link) =>
+          '<xdr:sp macro="" textlink="$link"><xdr:nvSpPr>'
+          '<xdr:cNvPr id="7" name="TextBox 6"/><xdr:cNvSpPr txBox="1"/>'
+          '</xdr:nvSpPr><xdr:spPr/></xdr:sp><xdr:clientData/>';
+      String wrapped(String link, int row) =>
+          '<mc:AlternateContent xmlns:mc="$_mcNs"><mc:Choice '
+          'xmlns:a14="$_a14Ns" Requires="a14"><xdr:twoCellAnchor>'
+          '${_marker('from', 1, row)}${_marker('to', 3, row + 2)}${sp(link)}'
+          '</xdr:twoCellAnchor></mc:Choice><mc:Fallback><xdr:twoCellAnchor>'
+          '${_marker('from', 1, row)}${_marker('to', 3, row + 2)}${sp(link)}'
+          '</xdr:twoCellAnchor></mc:Fallback></mc:AlternateContent>';
+      final XlsxWorkbook book = XlsxWorkbook.open(
+        _withDrawing(wrapped(r'$A$1', 4)),
+      );
+      _edit(book, _insertRows(1, 2));
+      expect(_saved(book)[_drawingPart], saved(wrapped(r'$A$3', 6)));
+    });
+
+    test('a textlink inside a group moves', () {
+      String grouped(String link) =>
+          '<xdr:absoluteAnchor><xdr:pos x="0" y="0"/>'
+          '<xdr:ext cx="1" cy="1"/><xdr:grpSp><xdr:nvGrpSpPr>'
+          '<xdr:cNvPr id="4" name="Group 3"/><xdr:cNvGrpSpPr/>'
+          '</xdr:nvGrpSpPr><xdr:grpSpPr/><xdr:sp macro="" '
+          'textlink="$link"><xdr:nvSpPr><xdr:cNvPr id="5" '
+          'name="Rectangle 4"/><xdr:cNvSpPr/></xdr:nvSpPr><xdr:spPr/>'
+          '</xdr:sp></xdr:grpSp><xdr:clientData/></xdr:absoluteAnchor>';
+      final XlsxWorkbook book = XlsxWorkbook.open(
+        _withDrawing(grouped(r'$C$5')),
+      );
+      _edit(book, _deleteColumns(1, 1));
+      expect(_saved(book)[_drawingPart], saved(grouped(r'$B$5')));
+    });
+
+    test('a drawing that cannot be read does not block an edit of another '
+        'sheet', () {
+      final Uint8List input = _withDrawing(
+        '<xdr:sp textlink="\$A\$1">',
+        otherSheet: 'Veri 2',
+      );
+      final XlsxWorkbook book = XlsxWorkbook.open(input);
+      _edit(book, ReferenceShift.insert('Veri 2', ShiftAxis.rows, 1, 1));
+      book.renameSheet(book.sheet('Veri 2'), 'Veri 3');
+      expect(_saved(book)[_drawingPart], readXlsx(input)[_drawingPart]);
+      expect(
+        () => _edit(book, _insertRows(1, 1)),
+        throwsA(isA<XlsxReadException>()),
+      );
+    });
+
+    test('undo of a textlink rewrite restores the drawing byte-equal', () {
+      final String drawing = linked(r"'Veri 2'!$B$2", 4);
+      final XlsxWorkbook book = XlsxWorkbook.open(
+        _withDrawing(drawing, otherSheet: 'Veri 2'),
+      );
+      final Uint8List before = book.save().bytes;
+      final ChangeSet set = _edit(
+        book,
+        ReferenceShift.delete('Veri 2', ShiftAxis.columns, 1, 1),
+      );
+      expect(_saved(book)[_drawingPart], saved(linked(r"'Veri 2'!$A$2", 4)));
+      changeLogOf(book).revertSet(set);
+      expect(_saved(book)[_drawingPart], '<xdr:wsDr $_xdr>$drawing</xdr:wsDr>');
+      expect(comparePackages(before, book.save().bytes), isEmpty);
+    });
   });
 }

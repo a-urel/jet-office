@@ -89,6 +89,7 @@ const Map<String, String> referenceHolderSources = <String, String>{
   'xlsx_sheet_print.dart': 'autoFilter',
   'table_part.dart': 'tables',
   'xlsx_sheet_tables.dart': 'tables',
+  // Anchors, and each shape's `textlink` (the cell its text shows).
   'drawing_part.dart': 'drawings',
   'xlsx_sheet_pictures.dart': 'drawings',
   'comments_part.dart': 'notes',
