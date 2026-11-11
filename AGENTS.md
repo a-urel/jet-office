@@ -475,8 +475,11 @@ scales the owner's `long.docx` to about 40,000 paragraphs, opens it, loads the
 body, changes one paragraph, saves and reopens the saved bytes, timing each
 phase. `xlsx_format_benchmark_test.dart` times `NumberFormatter.formatCell`
 on every cell of the read file (the benchmark of synthetic values is in
-`jet_core`). The quality gate does not run them; run them by hand on the VM and
-in Chrome (`dart test benchmark` runs all seven). They record figures and fail
+`jet_core`). `xlsx_model_generate_benchmark_test.dart` generates 100,000 and
+1,000,000 rows of 12 columns with `XlsxWorkbook()` and saves them, beside the
+two writers, with links, rules and structural edits timed on the generated
+sheet. The quality gate does not run them; run them by hand on the VM and
+in Chrome (`dart test benchmark` runs all eight). They record figures and fail
 on none (`docs/benchmark.md`):
 
 ```bash

@@ -20,7 +20,10 @@ and reads every cell
 ("DOCX table figures" below). A seventh,
 `benchmark/docx_model_benchmark_test.dart`, scales the owner's `long.docx` to
 about 40,000 paragraphs, opens it, changes one paragraph and saves ("DOCX
-document figures" below).
+document figures" below). An eighth, `benchmark/xlsx_model_generate_benchmark_test.dart`,
+generates the write workload with `XlsxWorkbook()` at 100,000 and 1,000,000
+rows beside the two writers, and times links, rules and structural edits
+("Model generation figures" below).
 
 The figures below are records, not thresholds (spec section 5): nothing fails
 when a later run is slower, and they are not a promise.
@@ -49,6 +52,8 @@ dart test benchmark/docx_benchmark_test.dart
 dart test -p chrome benchmark/docx_benchmark_test.dart
 dart test benchmark/docx_model_benchmark_test.dart
 dart test -p chrome benchmark/docx_model_benchmark_test.dart
+dart test benchmark/xlsx_model_generate_benchmark_test.dart
+dart test -p chrome benchmark/xlsx_model_generate_benchmark_test.dart
 ```
 
 The quality gate does not run it. `dart_test.yaml` starts Chrome with
@@ -715,6 +720,200 @@ chrome | phase | open, set one cell, save | 5558.9 ms
   estimate counts constants per map entry, not the heap, so it may be off
   by some tens of percent. Styled empty cells or kept attributes still cost
   an entry each; that case is not measured.
+
+## Model generation figures
+
+The generation benchmark (`benchmark/xlsx_model_generate_benchmark_test.dart`)
+makes the write workload's workbook (a header and 100,000 data rows, 12 columns,
+1,166,679 cells) from nothing with `XlsxWorkbook()`, and saves it. It runs the
+same workload through `XlsxWriter` and `XlsxStreamWriter` beside it, times
+links and conditional formats added to a fresh sheet, times structural edits on
+the generated sheet, and generates 1,000,000 rows once.
+
+### Method
+
+- The workload is `benchmark/src/workload.dart` (`workloadRow`,
+  `workloadColumns`, `workloadHeader`), the writers' own rows. The model gets
+  it as `XlsxWorkbook()`, `addSheet('Data')`, `setColumn` for the 12 widths and
+  column styles, `setCell` of every header text and `setStyle` of each with the
+  bold style, then `setCell` of every non-null value of every data row (the
+  `Money` column an `XlsxCell` with its style), then `save()`.
+- Phases of the 100,000 case, each the median of three runs: `fill` (the
+  `XlsxWorkbook()` to the last `setCell`), `save`, and their sum. The saved
+  file is read back with `XlsxReader`; the last row must hold the workload's
+  values (a correctness guard, not timed).
+- Retained store bytes: `CellStore.retainedBytesEstimate` of the generated
+  sheet's store, as "Model figures" gives it.
+- Process memory (an upper bound, as in "Model figures"): four runs, each
+  reading the process memory before the workbook exists, after the fill and
+  after the save, the workbook still referenced; the largest reading above the
+  baseline is given. VM: `ProcessInfo.currentRss`; Chrome:
+  `performance.memory.usedJSHeapSize`.
+- The writers: `XlsxWriter` and `XlsxStreamWriter` (to a sink that counts)
+  write the workload, each the median of three runs, in the same process.
+- Links and rules: on a fresh sheet, `setCell(i, 0, XlsxHyperlink.url(...))` for
+  `i` below 1,000, 5,000 and 20,000, and `addConditionalFormat` of one
+  `XlsxCellValueRule` on the one cell `A(i+1)` for the same counts; total time
+  of the adds, the median of three runs, but **one run** for 20,000 (the rules
+  take minutes).
+- Structural edits: on one generated sheet (100,000 rows), `insertRows(1)`,
+  its `undo`, `deleteColumns(0)` and its `undo`, each inside
+  `transaction` (which gives the change set that `undo` takes), the median of
+  three repetitions; the saved file after them must still hold the last row.
+- 1,000,000 rows: the same generation, **one run**, in a test of its own with
+  a 60-minute timeout. In Chrome, a failure for memory would be caught and
+  printed as `chrome | 1m | failed: <error>`; none came. The saved file is
+  read back with raised limits (`maxEntryBytes` 1 GiB, `maxTotalBytes` 2 GiB):
+  its sheet is 468,436,661 bytes of XML, past the default 256 MiB for an
+  entry, so `XlsxReader` and `XlsxWorkbook.open` refuse it with the default
+  limits (`limitExceeded`).
+
+### Figures
+
+- Date: 2026-11-11.
+- Machine: Mac15,7, Apple M3 Pro, 36 GiB RAM.
+- OS: macOS 27.2.
+- Dart SDK 3.13.7 (stable); the VM runs the JIT, Chrome runs dart2js output.
+- Chrome 157.0.8103.40.
+
+| 100,000 x 12 (median of 3) | VM (ms) | Chrome (ms) |
+|---|---|---|
+| Model: fill (`setCell` of every cell) | 1989.5 | 3096.1 |
+| Model: save | 1744.2 | 3659.9 |
+| Model: fill and save | 3733.7 | 6759.1 |
+| `XlsxWriter`, write and close | 1669.7 | 3911.4 |
+| `XlsxStreamWriter`, write and close | 1666.1 | 3916.9 |
+
+| File and memory | VM | Chrome |
+|---|---|---|
+| Model's file (bytes) | 6,995,545 | 7,018,313 |
+| Writers' file (bytes) | 6,958,168 | 6,981,925 |
+| Retained store (estimate, bytes) | 35,789,130 | 35,789,130 |
+| Per cell (1,166,679 cells) | 30.7 | 30.7 |
+| Process memory above the baseline, largest of 4 (bytes) | 65,306,624 | 67,768,565 |
+| Other runs (bytes) | 48,775,168, 51,757,056, 51,068,928 | 56,512,528 (warm-up), 62,131,916, 40,012,841 |
+
+| Links and rules on a fresh sheet (total ms) | VM | Chrome |
+|---|---|---|
+| 1,000 links | 66.4 | 146.3 |
+| 5,000 links | 1,170.6 | 3,116.3 |
+| 20,000 links (1 run) | 20,424.8 | 51,589.8 |
+| 1,000 rules | 1,101.4 | 1,909.9 |
+| 5,000 rules | 27,397.8 | 47,388.9 |
+| 20,000 rules (1 run) | 445,624.6 | 772,172.0 |
+
+| Structural edits on the generated sheet (median of 3, ms) | VM | Chrome |
+|---|---|---|
+| `insertRows(1)` | 4,301.2 | 5,110.5 |
+| `undo` | 30.5 | 38.0 |
+| `deleteColumns(0)` | 4,299.7 | 5,127.1 |
+| `undo` | 145.9 | 199.7 |
+
+| 1,000,000 x 12 (11,666,679 cells, 1 run) | VM | Chrome |
+|---|---|---|
+| Fill (ms) | 20,674.7 | 34,353.2 |
+| Save (ms) | 17,919.5 | 37,737.7 |
+| Fill and save (ms) | 38,594.2 | 72,090.9 |
+| File (bytes) | 70,875,501 | 71,058,248 |
+| Retained store (estimate, bytes) | 349,076,820 | 349,076,820 |
+
+Every line:
+
+```text
+vm | generate | run 1 | fill 2170.0 ms | save 1768.9 ms | 6995545 bytes
+vm | generate | run 2 | fill 1949.3 ms | save 1732.7 ms | 6995545 bytes
+vm | generate | run 3 | fill 1989.5 ms | save 1744.2 ms | 6995545 bytes
+vm | phase | generate: fill (setCell of every cell) | 1989.5 ms
+vm | phase | generate: save | 1744.2 ms
+vm | phase | generate: fill and save | 3733.7 ms | 6995545 bytes
+vm | retained store | 35789130 bytes | 30.7 bytes/cell | 1166679 cells
+vm | check | the saved file holds row 100000
+vm | model | warm-up | RSS baseline 330563584 | after fill 274038784 | after save 395870208 | above baseline 65306624 bytes
+vm | model | run 1 | RSS baseline 395870208 | after fill 326877184 | after save 444645376 | above baseline 48775168 bytes
+vm | model | run 2 | RSS baseline 444645376 | after fill 378191872 | after save 496402432 | above baseline 51757056 bytes
+vm | model | run 3 | RSS baseline 496402432 | after fill 425295872 | after save 547471360 | above baseline 51068928 bytes
+vm | process | 65306624 bytes above baseline (largest of 4) | 56.0 bytes/cell
+vm | phase | XlsxWriter, write and close | 1669.7 ms | 6958168 bytes
+vm | phase | XlsxStreamWriter, write and close | 1666.1 ms | 6958168 bytes
+vm | phase | 1000 links (setCell) | 66.4 ms
+vm | phase | 1000 rules (addConditionalFormat) | 1101.4 ms
+vm | phase | 5000 links (setCell) | 1170.6 ms
+vm | phase | 5000 rules (addConditionalFormat) | 27397.8 ms
+vm | phase | 20000 links (setCell) | 20424.8 ms (1 run)
+vm | phase | 20000 rules (addConditionalFormat) | 445624.6 ms (1 run)
+vm | phase | insertRows(1) | 4301.2 ms
+vm | phase | undo of insertRows | 30.5 ms
+vm | phase | deleteColumns(0) | 4299.7 ms
+vm | phase | undo of deleteColumns | 145.9 ms
+vm | check | after the undos the saved file holds row 100000
+vm | 1m | fill 20674.7 ms | save 17919.5 ms | total 38594.2 ms | 70875501 bytes | retained store 349076820 bytes | 11666679 cells
+vm | 1m | check | the saved file holds row 1000000
+chrome | generate | run 1 | fill 3073.5 ms | save 4030.4 ms | 7018313 bytes
+chrome | generate | run 2 | fill 3099.2 ms | save 3659.9 ms | 7018313 bytes
+chrome | generate | run 3 | fill 3096.1 ms | save 3655.0 ms | 7018313 bytes
+chrome | phase | generate: fill (setCell of every cell) | 3096.1 ms
+chrome | phase | generate: save | 3659.9 ms
+chrome | phase | generate: fill and save | 6759.1 ms | 7018313 bytes
+chrome | retained store | 35789130 bytes | 30.7 bytes/cell | 1166679 cells
+chrome | check | the saved file holds row 100000
+chrome | model | warm-up | peak JS heap baseline 125938969 | after fill 89032524 | after save 182451497 | above baseline 56512528 bytes
+chrome | model | run 1 | peak JS heap baseline 182464441 | after fill 157132182 | after save 250233006 | above baseline 67768565 bytes
+chrome | model | run 2 | peak JS heap baseline 250239262 | after fill 280742568 | after save 312371178 | above baseline 62131916 bytes
+chrome | model | run 3 | peak JS heap baseline 312375626 | after fill 332575130 | after save 352388467 | above baseline 40012841 bytes
+chrome | process | 67768565 bytes above baseline (largest of 4) | 58.1 bytes/cell
+chrome | phase | XlsxWriter, write and close | 3911.4 ms | 6981925 bytes
+chrome | phase | XlsxStreamWriter, write and close | 3916.9 ms | 6981925 bytes
+chrome | phase | 1000 links (setCell) | 146.3 ms
+chrome | phase | 1000 rules (addConditionalFormat) | 1909.9 ms
+chrome | phase | 5000 links (setCell) | 3116.3 ms
+chrome | phase | 5000 rules (addConditionalFormat) | 47388.9 ms
+chrome | phase | 20000 links (setCell) | 51589.8 ms (1 run)
+chrome | phase | 20000 rules (addConditionalFormat) | 772172.0 ms (1 run)
+chrome | phase | insertRows(1) | 5110.5 ms
+chrome | phase | undo of insertRows | 38.0 ms
+chrome | phase | deleteColumns(0) | 5127.1 ms
+chrome | phase | undo of deleteColumns | 199.7 ms
+chrome | check | after the undos the saved file holds row 100000
+chrome | 1m | fill 34353.2 ms | save 37737.7 ms | total 72090.9 ms | 71058248 bytes | retained store 349076820 bytes | 11666679 cells
+chrome | 1m | check | the saved file holds row 1000000
+```
+
+### Reading the figures
+
+- **Generating with the model costs about 2.2 times the writers' time on the
+  VM and 1.7 times in Chrome.** Fill and save take 3.7 s on the VM against 1.67 s for
+  either writer, and 6.8 s in Chrome against 3.9 s: the model keeps every cell
+  in a store and then serializes it, where the writers encode each row as it
+  comes. The model's file is 37,377 bytes (0.5 %) larger than the writers'; this
+  benchmark does not say why.
+- **The two writers still cost the same as each other** (1.67 s, 3.9 s), as
+  "First figures" found.
+- **The store of a generated sheet is 30.7 bytes a cell**, 35.8 MB for the
+  workload, the same on both platforms; the opened file's store, of the same
+  cells, is 29.0 ("Model figures"), a difference this benchmark does not
+  explain. The process figures (65 MB on the VM, 68 MB in
+  Chrome above the baseline) are upper bounds, with the garbage of the fill
+  and the file's bytes.
+- **The cost scales linearly with the cells up to 1,000,000 rows.** 11.7
+  million cells fill in 20.7 s and save in 17.9 s on the VM (10.4 and 10.3
+  times the 100,000 case's phases), and in 34.4 s and 37.7 s in Chrome (11.1
+  and 10.3 times), a file of 71 MB. The VM held 11.7 million cells (a store of
+  349 MB estimated) and Chrome did too, with no failure for memory. The
+  sheet's XML is 468 MB, which the reader's default limits refuse: a caller
+  who reads such a file back must raise `maxEntryBytes`.
+- **Links and rules are quadratic, as the known-costs table says.** Each add
+  copies the group's list. Five times the links cost 17.6 times the time and
+  four times more cost 17.4 times again (VM); the rules, 24.9 and 16.3 times.
+  20,000 links take 20 s on the VM and 52 s in Chrome; 20,000 rules take
+  7.4 minutes and 12.9 minutes. A sheet with a few hundred of either is not
+  affected (1,000 links: 66 ms; 1,000 rules: 1.1 s), but a generator that
+  wants thousands of conditional formats should merge their ranges into few
+  formats, as Excel does, rather than add one a cell. A link costs about a
+  twenty-second of a rule at 20,000. The links are capped at 65,531 a sheet.
+- **A structural edit costs a pass over the sheet, and its undo almost
+  nothing.** Inserting a row above the last 100,000 takes 4.3 s on the VM and
+  5.1 s in Chrome (a deleted column the same), against 30 ms and 146 ms for
+  the undos.
 
 ## DOCX table figures
 
