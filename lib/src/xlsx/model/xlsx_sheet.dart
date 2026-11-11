@@ -1417,8 +1417,11 @@ final class XlsxSheet
   /// with it: formulas on every sheet, defined names, merges, conditional
   /// formats, validations, links, the filter, tables, notes, sparklines,
   /// views, the anchors of pictures, shapes and charts, the cell a shape's
-  /// text shows and chart series. The inserted rows take the format of the row
-  /// above. A part the model cannot rewrite is kept as read and reported
+  /// text shows and chart series. A table's totals cell that holds its
+  /// column's function over the body (`SUBTOTAL(109,B2:B4)`, as [addTable]
+  /// and the writer fill it in) keeps covering the body, as Excel's
+  /// `SUBTOTAL(109,T[Amount])` does. The inserted rows take the format of the
+  /// row above. A part the model cannot rewrite is kept as read and reported
   /// (`referenceNotShifted`). The save drops `calcChain` and asks Excel to
   /// recalculate when the workbook has formulas. All of it is one change.
   ///
@@ -1478,9 +1481,11 @@ final class XlsxSheet
         index: index,
         count: count,
         () => log.transaction(() {
+          final List<_BodyTotal> totals = _bodyTotals();
           _host.references.apply(edit, edit);
           moveSheetGeometry(this, edit);
           if (insert && !rows) _nameInsertedTableColumns(index, count);
+          _fitBodyTotals(totals);
           _host.workbookPart.structureEdits++;
           log.record(StructureEditChange(_host.workbookPart));
         }),
@@ -1502,6 +1507,68 @@ final class XlsxSheet
         setCell(range.firstRow, c, table.columnName(c - range.firstColumn));
       }
     }
+  }
+
+  /// The totals cells of the sheet's tables that hold their column's
+  /// function over the column's body rows, `SUBTOTAL(109,B2:B4)`, as the
+  /// writer and [addTable] fill them in: Excel reads such a cell as
+  /// `SUBTOTAL(109,T[Amount])`, which always covers the body, and repairs the
+  /// table when the cell's range is not the body. A cell the user changed,
+  /// or one of a shared or array formula, is not one of them.
+  List<_BodyTotal> _bodyTotals() {
+    if (_partName == null) return const <_BodyTotal>[];
+    final List<_BodyTotal> found = <_BodyTotal>[];
+    for (final ({String partName, TablePart table}) t in _sheetTables()) {
+      final XlsxTable table = t.table.value;
+      if (!table.totalsRow) continue;
+      for (int i = 0; i < table.columns.length; i++) {
+        final XlsxTableColumn column = table.columns[i];
+        final String? total = _bodyTotalOf(table, i);
+        if (total == null) continue;
+        final XlsxReadCell? cell = cellAt(
+          table.range.lastRow,
+          table.range.firstColumn + i,
+        );
+        if (cell == null || cell.formulaGroup != null) continue;
+        if (cell.formula != total) continue;
+        found.add((table: table.name, column: column.name));
+      }
+    }
+    return found;
+  }
+
+  /// Sets each of [totals] that a row or column edit left off its column's
+  /// body back to the function over the new body, keeping its style.
+  void _fitBodyTotals(List<_BodyTotal> totals) {
+    if (totals.isEmpty) return;
+    final Map<String, XlsxTable> tables = <String, XlsxTable>{
+      for (final ({String partName, TablePart table}) t in _sheetTables())
+        t.table.displayName: t.table.value,
+    };
+    for (final _BodyTotal total in totals) {
+      final XlsxTable? table = tables[total.table];
+      if (table == null || !table.totalsRow) continue;
+      final int i = table.columns.indexWhere(
+        (XlsxTableColumn c) => c.name == total.column,
+      );
+      if (i < 0) continue;
+      final String? formula = _bodyTotalOf(table, i);
+      if (formula == null) continue;
+      final int row = table.range.lastRow;
+      final int column = table.range.firstColumn + i;
+      if (cellAt(row, column)?.formula == formula) continue;
+      setCell(row, column, XlsxFormula(formula));
+    }
+  }
+
+  /// `SUBTOTAL(code,<body of column i>)` for the column [i] of [table], or
+  /// `null` when its total is not a function.
+  static String? _bodyTotalOf(XlsxTable table, int i) {
+    final int? code = subtotalCode(table.columns[i].totalsFunction);
+    if (code == null) return null;
+    final XlsxRange body = tableDataRange(table);
+    final int column = table.range.firstColumn + i;
+    return 'SUBTOTAL($code,${XlsxRange(body.firstRow, column, body.lastRow).ref})';
   }
 
   static void _checkCell(int row, int column) {
@@ -1556,3 +1623,7 @@ List<PartRelationship> _peekedRelationships(
   }
   return found;
 }
+
+/// A totals cell, by its table's and column's names, that totals the
+/// column's body (see `XlsxSheet._bodyTotals`).
+typedef _BodyTotal = ({String table, String column});

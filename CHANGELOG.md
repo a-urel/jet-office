@@ -47,6 +47,10 @@
 - A shape's `textlink` is a held reference and shifts with structural edits;
   anchors inside `mc:AlternateContent` move like bare ones (a mixed or
   anchorless alternate content stays whole and warns `referenceNotShifted`).
+- A table's totals cell that holds its column's `SUBTOTAL` over the body keeps
+  covering the body when rows or columns are inserted or deleted; before, rows
+  inserted at the edges of the body left it on the old range and Excel
+  repaired the table.
 - Writer parity holds over every fixture of `allFixtures()` except `c1_kinds`
   and `c1_options`, whose charts come with C2.
 - Benchmarks of generating workbooks with the model: 100,000 rows of 12
