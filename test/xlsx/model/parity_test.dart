@@ -5,11 +5,12 @@ import 'package:jet_office/jet_office.dart';
 import 'package:test/test.dart';
 
 import '../../../tool/src/part_compare.dart';
-import '../../fixtures/fixtures.dart' show Fixture;
+import '../../fixtures/fixtures.dart' show Fixture, allFixtures;
 import '../../fixtures/m1_fixtures.dart';
 import '../../fixtures/m2_fixtures.dart';
 import '../../fixtures/m3_fixtures.dart';
 import '../../fixtures/m4_fixtures.dart';
+import '../../fixtures/m5_fixtures.dart';
 import '../../support/read_xlsx.dart';
 import '../read/support/zip_builder.dart';
 
@@ -117,7 +118,19 @@ final Map<String, XlsxResult Function()> _scripted =
       'm4_images': _imagesBook,
       'm4_tables': _tablesBook,
       'm4_objects': _objectsBook,
+      'm5_list_plain': _listPlainBook,
+      'm5_list_table': _listTableBook,
     };
+
+/// The fixtures the model does not rebuild, each with its reason.
+const Map<String, String> _notRebuilt = <String, String>{
+  'c1_kinds':
+      'its charts are written by writeDrawingChartSpace into a '
+      'test-only host; the model hosts charts in C2',
+  'c1_options':
+      'its charts are written by writeDrawingChartSpace into a '
+      'test-only host; the model hosts charts in C2',
+};
 
 /// Where the model's file may differ from the writer's, applied to the
 /// expected package, each with its reason. Everything else of the fixture
@@ -584,6 +597,113 @@ XlsxResult _objectsBook() {
   return book.save();
 }
 
+/// A list of `m5_list_plain` and `m5_list_table`, as `XlsxListExport` writes
+/// it, with the model's calls.
+///
+/// The caption in row 1, the header in row 2, [data] from row 3 (none: one
+/// empty row) and the totals row `Total`, the sum of the balances and the
+/// count of the dates. A column's width and style, a frozen header and the
+/// header row as print titles come first. A plain list styles the header and
+/// totals bold and filters the data rows; with [table] the header and totals
+/// are plain and the table covers them. A row's style is laid under each
+/// cell's; the model lays the column's under both.
+XlsxSheet _listSheet(
+  XlsxWorkbook book,
+  String name,
+  List<List<Object?>> data, {
+  XlsxTableStyle? table,
+}) {
+  const XlsxStyle bold = XlsxStyle(font: XlsxFont(bold: true));
+  const XlsxStyle general = XlsxStyle(numFmt: XlsxNumFmt.general);
+  final XlsxSheet sheet = book.addSheet(name);
+  _setColumns(sheet, <XlsxColumn?>[
+    const XlsxColumn(width: 10),
+    const XlsxColumn(width: 30),
+    XlsxColumn(width: 16, style: XlsxStyle(numFmt: XlsxNumFmt.money())),
+    const XlsxColumn(
+      width: 12,
+      style: XlsxStyle(numFmt: XlsxNumFmt.localeShortDate),
+    ),
+  ]);
+  sheet.view = const XlsxSheetView(pane: XlsxPane.frozen(rows: 2));
+  void row(int r, List<Object?> values, XlsxStyle? style) {
+    for (int c = 0; c < values.length; c++) {
+      final Object? value = values[c];
+      if (value == null) continue;
+      final XlsxStyle? own = value is XlsxCell ? value.style : null;
+      sheet.setCell(
+        r,
+        c,
+        XlsxCell(
+          value is XlsxCell ? value.value : value,
+          style: style?.merge(own) ?? own,
+        ),
+      );
+    }
+  }
+
+  final int lastData = data.isEmpty ? 2 : data.length + 1;
+  row(0, <Object?>[
+    'Accounts',
+  ], const XlsxStyle(font: XlsxFont(bold: true, size: 14)));
+  final XlsxCell count = XlsxCell(
+    XlsxFormula('SUBTOTAL(103,D3:D${lastData + 1})'),
+    style: general,
+  );
+  for (int i = 0; i < data.length; i++) {
+    row(i + 2, data[i], null);
+  }
+  if (table == null) {
+    row(1, <Object?>['Code', 'Name', 'Balance', 'Opened'], bold);
+    row(lastData + 1, <Object?>[
+      'Total',
+      null,
+      XlsxFormula('SUBTOTAL(109,C3:C${lastData + 1})'),
+      count,
+    ], bold);
+    sheet.autoFilter = XlsxRange(1, 0, lastData, 3);
+  } else {
+    sheet.addTable(
+      XlsxTable(
+        'Accounts',
+        XlsxRange(1, 0, lastData + 1, 3),
+        const <XlsxTableColumn>[
+          XlsxTableColumn('Code', totalsLabel: 'Total'),
+          XlsxTableColumn('Name'),
+          XlsxTableColumn('Balance', totalsFunction: XlsxTotalsFunction.sum),
+          XlsxTableColumn('Opened', totalsFunction: XlsxTotalsFunction.count),
+        ],
+        totalsRow: true,
+        style: table,
+      ),
+    );
+    // The table fills in its header and totals cells, the count in the
+    // column's date format; the writer's count is General.
+    sheet.setCell(lastData + 1, 3, count);
+  }
+  // After the filter: the writer lists `_FilterDatabase` before the titles.
+  sheet.setPrintTitles(rows: (1, 1));
+  return sheet;
+}
+
+List<List<Object?>> _accountRows() => <List<Object?>>[
+  for (final (String, String, num, XlsxDate?, int?) a in m5Accounts)
+    <Object?>[a.$1, a.$2, a.$3, a.$4],
+];
+
+XlsxResult _listPlainBook() {
+  final XlsxWorkbook book = XlsxWorkbook();
+  _listSheet(book, 'Accounts', _accountRows());
+  _listSheet(book, 'Empty', const <List<Object?>>[]);
+  return book.save();
+}
+
+XlsxResult _listTableBook() {
+  final XlsxWorkbook book = XlsxWorkbook();
+  _listSheet(book, 'Accounts', _accountRows(), table: XlsxTableStyle.medium(2));
+  return book.save();
+}
+
 /// Sets [rows] on [sheet] from row 0 and returns it.
 XlsxSheet _fill(XlsxSheet sheet, List<List<Object?>> rows) {
   for (int r = 0; r < rows.length; r++) {
@@ -619,6 +739,7 @@ void main() {
       ...m2Fixtures(),
       ...m3Fixtures(),
       ...m4Fixtures(),
+      ...m5Fixtures(),
     ]) {
       final _Sheets? sheets = _rebuilt[f.name];
       final XlsxResult Function()? script = _scripted[f.name];
@@ -722,24 +843,18 @@ void main() {
     );
   });
 
-  test('every rebuilt fixture exists', () {
+  test('every fixture is rebuilt with the model or named with a reason', () {
     final Set<String> names = <String>{
-      for (final Fixture f in <Fixture>[
-        ...m1Fixtures(),
-        ...m2Fixtures(),
-        ...m3Fixtures(),
-        ...m4Fixtures(),
-      ])
-        f.name,
+      for (final Fixture f in allFixtures()) f.name,
     };
-    expect(names, containsAll(_rebuilt.keys));
-    expect(names, containsAll(_scripted.keys));
+    final Set<String> rebuilt = <String>{..._rebuilt.keys, ..._scripted.keys};
+    expect(names, containsAll(rebuilt));
+    expect(names, containsAll(_notRebuilt.keys));
     expect(_scripted.keys, containsAll(_allowed.keys));
+    expect(rebuilt.intersection(_notRebuilt.keys.toSet()), isEmpty);
     expect(
-      <String>{..._rebuilt.keys, ..._scripted.keys},
-      containsAll(
-        <Fixture>[...m3Fixtures(), ...m4Fixtures()].map((Fixture f) => f.name),
-      ),
+      names.difference(rebuilt).difference(_notRebuilt.keys.toSet()),
+      isEmpty,
     );
   });
 }

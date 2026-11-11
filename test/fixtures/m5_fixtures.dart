@@ -14,7 +14,7 @@ List<Fixture> m5Fixtures() => <Fixture>[_listPlain(), _listTable()];
 /// The account rows of `m5_list_plain`: code, name, balance and the date
 /// the account was opened, whose serial is the last entry (`null` for no
 /// date).
-const List<(String, String, num, XlsxDate?, int?)> _accounts =
+const List<(String, String, num, XlsxDate?, int?)> m5Accounts =
     <(String, String, num, XlsxDate?, int?)>[
       ('A-001', 'Anadolu Bank', 1250.5, XlsxDate(2024, 1, 15), 45306),
       ('A-002', 'Bosphorus Trade', -320.75, XlsxDate(2024, 2, 3), 45325),
@@ -33,7 +33,7 @@ const List<(String, String, num, XlsxDate?, int?)> _accounts =
 /// A plain list export (Task 3 of the M5 plan) on two sheets.
 ///
 /// `Accounts`: the caption `Accounts` in row 1, the header in row 2, the
-/// twelve rows of [_accounts] in rows 3 to 14, and the totals in row 15:
+/// twelve rows of [m5Accounts] in rows 3 to 14, and the totals in row 15:
 /// `Total`, `SUBTOTAL(109,C3:C14)` and `SUBTOTAL(103,D3:D14)`. The balances
 /// sum to 105436.27; eleven accounts have an opening date. `Empty`: the
 /// same list without rows, so one empty data row (row 3) and totals over
@@ -45,7 +45,7 @@ Fixture _listPlain() => Fixture(
     'Accounts': <List<String>>[
       <String>['Accounts', '', '', ''],
       <String>['Code', 'Name', 'Balance', 'Opened'],
-      for (final (String, String, num, XlsxDate?, int?) a in _accounts)
+      for (final (String, String, num, XlsxDate?, int?) a in m5Accounts)
         <String>[a.$1, a.$2, '${a.$3}', a.$5 == null ? '' : '${a.$5}'],
       <String>['Total', '', '', ''],
     ],
@@ -60,7 +60,7 @@ Fixture _listPlain() => Fixture(
     'Accounts': <List<Object?>>[
       <Object?>['Accounts'],
       <Object?>['Code', 'Name', 'Balance', 'Opened'],
-      for (final (String, String, num, XlsxDate?, int?) a in _accounts)
+      for (final (String, String, num, XlsxDate?, int?) a in m5Accounts)
         <Object?>[a.$1, a.$2, a.$3, a.$5],
       <Object?>['Total', null, 105436.27, 11],
     ],
@@ -90,7 +90,7 @@ Fixture _listPlain() => Fixture(
     ], caption: 'Accounts');
     final XlsxWriter book = XlsxWriter();
     export.writeTo(book.addSheet('Accounts'), <List<Object?>>[
-      for (final (String, String, num, XlsxDate?, int?) a in _accounts)
+      for (final (String, String, num, XlsxDate?, int?) a in m5Accounts)
         <Object?>[a.$1, a.$2, a.$3, a.$4],
     ]);
     export.writeTo(book.addSheet('Empty'), const <List<Object?>>[]);
@@ -110,7 +110,7 @@ Fixture _listTable() => Fixture(
     'Accounts': <List<String>>[
       <String>['Accounts', '', '', ''],
       <String>['Code', 'Name', 'Balance', 'Opened'],
-      for (final (String, String, num, XlsxDate?, int?) a in _accounts)
+      for (final (String, String, num, XlsxDate?, int?) a in m5Accounts)
         <String>[a.$1, a.$2, '${a.$3}', a.$5 == null ? '' : '${a.$5}'],
       <String>['Total', '', '', ''],
     ],
@@ -119,7 +119,7 @@ Fixture _listTable() => Fixture(
     'Accounts': <List<Object?>>[
       <Object?>['Accounts'],
       <Object?>['Code', 'Name', 'Balance', 'Opened'],
-      for (final (String, String, num, XlsxDate?, int?) a in _accounts)
+      for (final (String, String, num, XlsxDate?, int?) a in m5Accounts)
         <Object?>[a.$1, a.$2, a.$3, a.$5],
       <Object?>['Total', null, 105436.27, 11],
     ],
@@ -149,7 +149,7 @@ Fixture _listTable() => Fixture(
     );
     final XlsxWriter book = XlsxWriter();
     export.writeTo(book.addSheet('Accounts'), <List<Object?>>[
-      for (final (String, String, num, XlsxDate?, int?) a in _accounts)
+      for (final (String, String, num, XlsxDate?, int?) a in m5Accounts)
         <Object?>[a.$1, a.$2, a.$3, a.$4],
     ]);
     return book.close();
