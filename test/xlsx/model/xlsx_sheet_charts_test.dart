@@ -972,6 +972,36 @@ void main() {
       );
     });
 
+    test('a chart takes no number a content type override of no part names, '
+        'so undo keeps that override', () {
+      // Seed 11 case 949 of the feature fuzz's long run (C2): an archive
+      // mutation renamed `xl/charts/chart1.xml`, leaving its override; the
+      // added chart took that name, and undo removed the override with it.
+      final XlsxWorkbook source = XlsxWorkbook();
+      source.addSheet('S').setCell(0, 0, 1);
+      final Map<String, Uint8List> parts = readXlsxBytes(source.save().bytes);
+      parts['[Content_Types].xml'] = utf8.encode(
+        utf8
+            .decode(parts['[Content_Types].xml']!)
+            .replaceFirst(
+              '</Types>',
+              '<Override PartName="/xl/charts/chart1.xml" ContentType="'
+                  'application/vnd.openxmlformats-officedocument.'
+                  'drawingml.chart+xml"/></Types>',
+            ),
+      );
+      final Uint8List input = buildZipOrdered(<(String, List<int>)>[
+        for (final MapEntry<String, Uint8List> e in parts.entries)
+          (e.key, e.value),
+      ], store: true);
+      _undone(input, (XlsxSheet sheet) {
+        sheet.addChart(XlsxChart(_columns(), at));
+      });
+      final XlsxWorkbook book = XlsxWorkbook.open(input);
+      book.sheets.first.addChart(XlsxChart(_columns(), at));
+      expect(_chartParts(book.save().bytes), <String>{'xl/charts/chart2.xml'});
+    });
+
     test('a listed typed chart added again keeps its ids, as a copy', () {
       final XlsxWorkbook book = XlsxWorkbook.open(_fixture('c1_kinds'));
       final XlsxSheet sheet = book.sheet('Data');

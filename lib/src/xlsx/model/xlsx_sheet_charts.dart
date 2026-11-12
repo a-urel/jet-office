@@ -191,9 +191,9 @@ mixin _SheetCharts {
   /// drawing when the sheet has none (as `addPicture` does).
   ///
   /// The chart gets the part `xl/charts/chart{n}.xml`, n the lowest number
-  /// no part has, with a content type override, and the drawing a
-  /// relationship to it, with the lowest `rId{m}` the drawing neither has nor
-  /// names. The frame is an anchor as Excel writes it: a `twoCellAnchor`
+  /// no part has and no content type override names, with a content type
+  /// override, and the drawing a relationship to it, with the lowest
+  /// `rId{m}` the drawing neither has nor names. The frame is an anchor as Excel writes it: a `twoCellAnchor`
   /// (with no `editAs` when the chart moves and sizes with its cells, else
   /// as a picture's) or a `oneCellAnchor`, holding a `graphicFrame` with a
   /// `cNvPr` id one above the highest of the drawing, at least 2, the name
@@ -655,11 +655,18 @@ mixin _SheetCharts {
   }
 
   /// The lowest n from 1 for which the package has no part
-  /// `xl/charts/chart{n}.xml`.
+  /// `xl/charts/chart{n}.xml` and no content type override names one. An
+  /// override of a part the file lacks stays as read: the new part taking
+  /// its name would replace it, and undo, removing the part's override,
+  /// would lose it.
   int _freeChartNumber() {
-    final PackageReader reader = _host.reader;
+    final OpcPackage package = _host.reader.package;
+    final Set<String> declared = <String>{
+      for (final String name in package.overridePartNames) name.toLowerCase(),
+    };
     int n = 1;
-    while (reader.hasPart('xl/charts/chart$n.xml')) {
+    while (package.hasPart('xl/charts/chart$n.xml') ||
+        declared.contains('/xl/charts/chart$n.xml')) {
       n++;
     }
     return n;
