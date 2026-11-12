@@ -397,6 +397,31 @@ void main() {
       );
     });
 
+    test('date categories write 1904 serials with date1904', () {
+      final Chart chart = _chart(
+        ChartKind.line,
+        series: <ChartSeries>[
+          ChartSeries(
+            name: ChartData<String>(values: const <String?>[]),
+            categories: ChartData<Object>(
+              values: <Object?>[DateTime(2026, 1, 1), DateTime(2026, 1, 2)],
+            ),
+            values: ChartData<double>(values: const <double?>[1, 2]),
+          ),
+        ],
+      );
+      final String xml = _xml(
+        writeDrawingChartSpace(
+          DrawingChartSpace(chart: chart),
+          _office,
+          date1904: true,
+        ),
+      );
+      expect(xml, contains('<c:v>44561</c:v>'));
+      expect(xml, contains('<c:v>44562</c:v>'));
+      expect(xml, isNot(contains('<c:v>46023</c:v>')));
+    });
+
     test("date categories take the category axis' format", () {
       final String xml = _xml(
         _write(
@@ -992,6 +1017,11 @@ void main() {
         const DrawingChartIds(categoryAxis: -1),
         const DrawingChartIds(valueAxis: 4294967296),
         const DrawingChartIds(categoryAxis: 7, valueAxis: 7),
+        const DrawingChartIds(secondaryCategoryAxis: 500000001),
+        const DrawingChartIds(secondaryValueAxis: 500000002),
+        const DrawingChartIds(secondaryCategoryAxis: 9, secondaryValueAxis: 9),
+        const DrawingChartIds(secondaryValueAxis: 4294967296),
+        const DrawingChartIds(secondaryCategoryAxis: -1),
       ]) {
         expect(
           () => writeDrawingChartSpace(
@@ -1491,6 +1521,18 @@ void main() {
     expect(
       const DrawingChartIds(categoryAxis: 1),
       isNot(const DrawingChartIds()),
+    );
+    expect(
+      const DrawingChartIds(secondaryValueAxis: 5),
+      isNot(const DrawingChartIds()),
+    );
+    expect(
+      const DrawingChartIds(secondaryCategoryAxis: 5),
+      isNot(const DrawingChartIds()),
+    );
+    expect(
+      const DrawingChartIds(secondaryValueAxis: 5).hashCode,
+      const DrawingChartIds(secondaryValueAxis: 5).hashCode,
     );
   });
 

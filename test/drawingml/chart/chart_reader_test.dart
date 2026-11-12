@@ -427,6 +427,44 @@ void main() {
       );
     });
 
+    test('date categories round trip in the 1904 system', () {
+      final DrawingChartSpace space = DrawingChartSpace(
+        chart: _chart(
+          ChartKind.column,
+          series: <ChartSeries>[
+            _series(
+              categories: <Object?>[
+                DateTime(2026, 1, 1),
+                DateTime(2026, 3, 1, 12, 30),
+              ],
+            ),
+          ],
+        ),
+      );
+      final DrawingChartWritten w1904 = writeDrawingChartSpace(
+        space,
+        _office,
+        date1904: true,
+      );
+      final DrawingChartWritten w1900 = writeDrawingChartSpace(space, _office);
+      expect(utf8.decode(w1904.bytes), contains('<c:v>44561</c:v>'));
+      expect(utf8.decode(w1900.bytes), contains('<c:v>46023</c:v>'));
+      final DrawingChartRead read = readDrawingChartSpace(
+        w1904.bytes,
+        date1904: true,
+      );
+      expect(read.typed, space);
+      expect(read.chart!.series.single.categories.values, <Object?>[
+        DateTime(2026, 1, 1),
+        DateTime(2026, 3, 1, 12, 30),
+      ]);
+      final DrawingChartRead wrong = readDrawingChartSpace(w1904.bytes);
+      expect(
+        wrong.chart!.series.single.categories.values.first,
+        isNot(DateTime(2026, 1, 1)),
+      );
+    });
+
     test('an app theme with fixed colours and an explicit colour', () {
       final ChartTheme app = _office.copyWith(
         exportColors: ChartExportColors.fixed,

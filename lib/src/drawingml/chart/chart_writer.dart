@@ -64,11 +64,15 @@ final class DrawingChartWritten {
 /// within -100 and 100, Excel's ranges (as the layout keeps them), rounded to
 /// whole numbers; a `NaN` gap width is 0.
 ///
+/// A date category is written as a serial of the 1904 date system when
+/// [date1904] is set (a workbook's `date1904`), of the 1900 one otherwise.
+///
 /// Throws an [ArgumentError] when the chart's kind is not column, bar, line
 /// or area, when it has centre text (only a donut shows it; a hole size is
 /// ignored), when it has a secondary value axis, when a series is bound to
 /// the secondary axis or has a kind other than `null` or the chart's, when an
-/// axis id of `space.ids` is outside 0 to 4294967295 or the two are equal, or
+/// axis id of `space.ids` (the four, secondary ones too) is outside 0 to
+/// 4294967295 or two of them are equal, or
 /// when one of its series ids is not a GUID in braces.
 ///
 /// Also throws an [ArgumentError], naming the field (`theme.lineWidth`,
@@ -82,13 +86,19 @@ final class DrawingChartWritten {
 /// checked whatever the chart uses of it.
 DrawingChartWritten writeDrawingChartSpace(
   DrawingChartSpace space,
-  ChartTheme theme,
-) {
+  ChartTheme theme, {
+  bool date1904 = false,
+}) {
   _checkExpressible(space.chart);
   _checkIds(space.ids);
   _checkTheme(theme);
   final StringBuffer out = StringBuffer();
-  final _ChartWriter writer = _ChartWriter(XmlWriter(out), space, theme);
+  final _ChartWriter writer = _ChartWriter(
+    XmlWriter(out),
+    space,
+    theme,
+    date1904,
+  );
   writer.write();
   return DrawingChartWritten(
     utf8.encode(out.toString()),
@@ -187,20 +197,27 @@ void _checkTheme(ChartTheme theme) {
 const int _maxAxisId = 4294967295;
 
 void _checkIds(DrawingChartIds ids) {
-  for (final (String name, int id) in <(String, int)>[
+  final List<(String, int)> axes = <(String, int)>[
     ('ids.categoryAxis', ids.categoryAxis),
     ('ids.valueAxis', ids.valueAxis),
-  ]) {
+    ('ids.secondaryCategoryAxis', ids.secondaryCategoryAxis),
+    ('ids.secondaryValueAxis', ids.secondaryValueAxis),
+  ];
+  for (final (String name, int id) in axes) {
     if (id < 0 || id > _maxAxisId) {
       throw ArgumentError.value(id, name, 'must be within 0 and $_maxAxisId');
     }
   }
-  if (ids.categoryAxis == ids.valueAxis) {
-    throw ArgumentError.value(
-      ids.valueAxis,
-      'ids.valueAxis',
-      'must differ from ids.categoryAxis',
-    );
+  for (int i = 1; i < axes.length; i++) {
+    for (int j = 0; j < i; j++) {
+      if (axes[i].$2 == axes[j].$2) {
+        throw ArgumentError.value(
+          axes[i].$2,
+          axes[i].$1,
+          'must differ from ${axes[j].$1}',
+        );
+      }
+    }
   }
   for (int i = 0; i < ids.series.length; i++) {
     if (!isDrawingChartSeriesId(ids.series[i])) {
@@ -261,7 +278,7 @@ const double _leaderLineWidth = 0.75;
 const double _axisTitleSize = 10;
 
 final class _ChartWriter {
-  _ChartWriter(this.w, this.space, this.theme)
+  _ChartWriter(this.w, this.space, this.theme, this.date1904)
     : chart = space.chart,
       mode = theme.exportColors;
 
@@ -269,6 +286,7 @@ final class _ChartWriter {
   final DrawingChartSpace space;
   final Chart chart;
   final ChartTheme theme;
+  final bool date1904;
   final ChartExportColors mode;
   final List<DrawingChartIssue> issues = <DrawingChartIssue>[];
   late final String language = _scrub(space.language);

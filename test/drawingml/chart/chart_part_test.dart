@@ -36,6 +36,43 @@ Uint8List _joined(PartContent c) =>
     Uint8List.fromList(c.encode().expand((Uint8List b) => b).toList());
 
 void main() {
+  group('date1904', () {
+    final DrawingChartSpace dated = DrawingChartSpace(
+      chart: Chart(
+        kind: ChartKind.column,
+        series: <ChartSeries>[
+          ChartSeries(
+            name: ChartData<String>(values: const <String?>[]),
+            categories: ChartData<Object>(
+              values: <Object?>[DateTime(2026, 1, 1)],
+            ),
+            values: ChartData<double>(values: const <double?>[1]),
+          ),
+        ],
+      ),
+    );
+
+    test('created, replaced and opened use the 1904 system', () {
+      final DrawingChart created = DrawingChart.created(
+        dated,
+        _office,
+        date1904: true,
+      );
+      expect(utf8.decode(_joined(created)), contains('<c:v>44561</c:v>'));
+      final DrawingChart opened = DrawingChart.opened(
+        _joined(created),
+        date1904: true,
+      );
+      expect(opened.chart!.series.single.categories.values, <Object?>[
+        DateTime(2026, 1, 1),
+      ]);
+      expect(opened.typed, dated);
+      final DrawingChart replaced = DrawingChart.created(dated, _office)
+        ..replace(dated, _office, date1904: true);
+      expect(utf8.decode(_joined(replaced)), contains('<c:v>44561</c:v>'));
+    });
+  });
+
   group('opened', () {
     test("an Excel chart encodes to the file's bytes", () {
       final Uint8List bytes = Uint8List.fromList(utf8.encode(excelColumnChart));

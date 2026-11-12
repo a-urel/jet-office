@@ -30,6 +30,21 @@ void main() {
   });
 
   group('drawingSerialOf and drawingDateOf', () {
+    test('the 1904 system counts from 1904-01-01 with no phantom day', () {
+      expect(drawingSerialOf(DateTime.utc(1904, 1, 1), date1904: true), 0);
+      expect(drawingSerialOf(DateTime.utc(1904, 1, 2), date1904: true), 1);
+      expect(
+        drawingSerialOf(DateTime(2026, 1, 1), date1904: true),
+        46023 - 1462,
+      );
+      expect(drawingSerialOf(DateTime(1904, 3, 1, 12), date1904: true), 60.5);
+      expect(drawingDateOf(0, date1904: true), DateTime(1904, 1, 1));
+      expect(drawingDateOf(1, date1904: true), DateTime(1904, 1, 2));
+      expect(drawingDateOf(60, date1904: true), DateTime(1904, 3, 1));
+      expect(drawingDateOf(60.5, date1904: true), DateTime(1904, 3, 1, 12));
+      expect(drawingDateOf(46023 - 1462, date1904: true), DateTime(2026, 1, 1));
+    });
+
     test("skip Excel's 29 February 1900", () {
       expect(drawingSerialOf(DateTime(1900, 1, 1)), 1);
       expect(drawingSerialOf(DateTime(1900, 2, 28)), 59);

@@ -239,7 +239,7 @@ extension _SeriesWriting on _ChartWriter {
           values,
           reference,
           _scrub(chart.categoryAxis.formatCode ?? 'm/d/yyyy'),
-          (Object v) => drawingSerialOf(v as DateTime),
+          (Object v) => drawingSerialOf(v as DateTime, date1904: date1904),
         );
       case _CategoryType.text:
         _writeTexts(values, reference);

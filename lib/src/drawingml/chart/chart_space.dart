@@ -54,6 +54,8 @@ final class DrawingChartIds {
   const DrawingChartIds({
     this.categoryAxis = 500000001,
     this.valueAxis = 500000002,
+    this.secondaryCategoryAxis = 500000003,
+    this.secondaryValueAxis = 500000004,
     this.series = const <String>[],
   });
 
@@ -63,6 +65,14 @@ final class DrawingChartIds {
   /// The `c:axId` of the value axis.
   final int valueAxis;
 
+  /// The `c:axId` of the secondary category axis, written only for a chart
+  /// with a secondary axis.
+  final int secondaryCategoryAxis;
+
+  /// The `c:axId` of the secondary value axis, written only for a chart with
+  /// a secondary axis.
+  final int secondaryValueAxis;
+
   /// The `c16:uniqueId` of each series, in series order.
   final List<String> series;
 
@@ -71,6 +81,8 @@ final class DrawingChartIds {
     if (other is! DrawingChartIds ||
         categoryAxis != other.categoryAxis ||
         valueAxis != other.valueAxis ||
+        secondaryCategoryAxis != other.secondaryCategoryAxis ||
+        secondaryValueAxis != other.secondaryValueAxis ||
         series.length != other.series.length) {
       return false;
     }
@@ -83,12 +95,18 @@ final class DrawingChartIds {
   }
 
   @override
-  int get hashCode =>
-      Object.hash(categoryAxis, valueAxis, Object.hashAll(series));
+  int get hashCode => Object.hash(
+    categoryAxis,
+    valueAxis,
+    secondaryCategoryAxis,
+    secondaryValueAxis,
+    Object.hashAll(series),
+  );
 
   @override
   String toString() =>
-      'DrawingChartIds($categoryAxis, $valueAxis, ${series.length} series)';
+      'DrawingChartIds($categoryAxis, $valueAxis, $secondaryCategoryAxis, '
+      '$secondaryValueAxis, ${series.length} series)';
 }
 
 /// A chart part in typed form: the chart and what the part holds beyond it.

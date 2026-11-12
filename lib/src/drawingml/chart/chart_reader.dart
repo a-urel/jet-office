@@ -65,6 +65,8 @@ final class DrawingChartRead {
 /// theme's `exportColors`, reads as `null`, and the typed form is checked by
 /// writing it in [theme]. [themeColors] are the file theme's colours, which
 /// give a scheme colour its RGB value (the Office theme's when `null`).
+/// [date1904] reads date categories as serials of the 1904 date system, and
+/// checks the typed form by writing it in that system.
 ///
 /// Never throws, whatever [theme] holds: when the writer refuses it (a line
 /// width, marker size or text size the part cannot hold), the part is read
@@ -87,6 +89,7 @@ DrawingChartRead readDrawingChartSpace(
   Uint8List bytes, {
   ChartTheme? theme,
   ThemeColors? themeColors,
+  bool date1904 = false,
 }) {
   final _Node? root;
   try {
@@ -108,6 +111,7 @@ DrawingChartRead readDrawingChartSpace(
     chart,
     theme ?? ChartTheme.office,
     _maxPoints + bytes.length,
+    date1904,
   ).read(bytes);
 }
 
@@ -251,7 +255,13 @@ bool _flag(_Node? node, {required bool absent}) {
 }
 
 final class _ChartReader {
-  _ChartReader(this.root, this.chartNode, this.theme, this.pointBudget);
+  _ChartReader(
+    this.root,
+    this.chartNode,
+    this.theme,
+    this.pointBudget,
+    this.date1904,
+  );
 
   final _Node root;
   final _Node chartNode;
@@ -261,6 +271,9 @@ final class _ChartReader {
   /// The entries the caches of the part may still fill, points they lack
   /// included: 1,048,576 plus the size of the part in bytes at the start.
   int pointBudget;
+
+  /// Whether date categories count in the 1904 date system.
+  final bool date1904;
 
   void _report(DrawingChartIssue issue) {
     if (!issues.contains(issue)) {
@@ -403,7 +416,7 @@ final class _ChartReader {
     );
     final DrawingChartWritten written;
     try {
-      written = writeDrawingChartSpace(space, theme);
+      written = writeDrawingChartSpace(space, theme, date1904: date1904);
     } on ArgumentError {
       // The writer refuses the reader's theme (a line width, marker size or
       // text size the part cannot hold): the part is read but not typed.
