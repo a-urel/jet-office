@@ -3,53 +3,53 @@ text title 125.40,8.00 109.20x16.80 rotation=0.00 size=14.00 color=595959 bold=f
 rect legend 158.30,221.20 43.40x10.80 fill=- stroke=- width=1.00
 arc legend/0/marker centre=161.80,226.60 radius=2.50 inner=0.00 start=0.00 sweep=360.00 fill=156082 stroke=156082 width=0.75
 text legend/0/text 169.30,221.20 32.40x10.80 rotation=0.00 size=9.00 color=595959 bold=false "Orders"
-rect plot 22.80,36.20 321.00x160.80 fill=- stroke=- width=1.00
-path grid/category/0 22.80,36.20 22.80,197.00 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
-path grid/category/1 62.92,36.20 62.92,197.00 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
-path grid/category/2 103.05,36.20 103.05,197.00 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
-path grid/category/3 143.18,36.20 143.18,197.00 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
-path grid/category/4 183.30,36.20 183.30,197.00 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
-path grid/category/5 223.43,36.20 223.43,197.00 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
-path grid/category/6 263.55,36.20 263.55,197.00 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
-path grid/category/7 303.68,36.20 303.68,197.00 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
-path grid/category/8 343.80,36.20 343.80,197.00 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
-path grid/value/0 22.80,197.00 343.80,197.00 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
-path grid/value/1 22.80,180.92 343.80,180.92 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
-path grid/value/2 22.80,164.84 343.80,164.84 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
-path grid/value/3 22.80,148.76 343.80,148.76 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
-path grid/value/4 22.80,132.68 343.80,132.68 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
-path grid/value/5 22.80,116.60 343.80,116.60 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
-path grid/value/6 22.80,100.52 343.80,100.52 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
-path grid/value/7 22.80,84.44 343.80,84.44 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
-path grid/value/8 22.80,68.36 343.80,68.36 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
-path grid/value/9 22.80,52.28 343.80,52.28 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
-path grid/value/10 22.80,36.20 343.80,36.20 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
-clip plot/clip 22.80,36.20 321.00x160.80
-clip plot/markers 19.92,33.33 326.75x166.55
-  arc series/0/marker/0 centre=127.13,132.68 radius=2.50 inner=0.00 start=0.00 sweep=360.00 fill=156082 stroke=156082 width=0.75
-  arc series/0/marker/1 centre=151.20,84.44 radius=2.50 inner=0.00 start=0.00 sweep=360.00 fill=156082 stroke=156082 width=0.75
-  arc series/0/marker/2 centre=191.32,116.60 radius=2.50 inner=0.00 start=0.00 sweep=360.00 fill=156082 stroke=156082 width=0.75
-  arc series/0/marker/3 centre=239.48,52.28 radius=2.50 inner=0.00 start=0.00 sweep=360.00 fill=156082 stroke=156082 width=0.75
-  arc series/0/marker/4 centre=295.65,100.52 radius=2.50 inner=0.00 start=0.00 sweep=360.00 fill=156082 stroke=156082 width=0.75
-path axis/value/line 22.80,36.20 22.80,197.00 closed=false fill=- stroke=BFBFBF width=0.75 dash=-
-path axis/category/line 22.80,197.00 343.80,197.00 closed=false fill=- stroke=BFBFBF width=0.75 dash=-
-text axis/value/label/0 13.40,191.60 5.40x10.80 rotation=0.00 size=9.00 color=595959 bold=false "0"
-text axis/value/label/1 13.40,175.52 5.40x10.80 rotation=0.00 size=9.00 color=595959 bold=false "1"
-text axis/value/label/2 13.40,159.44 5.40x10.80 rotation=0.00 size=9.00 color=595959 bold=false "2"
-text axis/value/label/3 13.40,143.36 5.40x10.80 rotation=0.00 size=9.00 color=595959 bold=false "3"
-text axis/value/label/4 13.40,127.28 5.40x10.80 rotation=0.00 size=9.00 color=595959 bold=false "4"
-text axis/value/label/5 13.40,111.20 5.40x10.80 rotation=0.00 size=9.00 color=595959 bold=false "5"
-text axis/value/label/6 13.40,95.12 5.40x10.80 rotation=0.00 size=9.00 color=595959 bold=false "6"
-text axis/value/label/7 13.40,79.04 5.40x10.80 rotation=0.00 size=9.00 color=595959 bold=false "7"
-text axis/value/label/8 13.40,62.96 5.40x10.80 rotation=0.00 size=9.00 color=595959 bold=false "8"
-text axis/value/label/9 13.40,46.88 5.40x10.80 rotation=0.00 size=9.00 color=595959 bold=false "9"
-text axis/value/label/10 8.00,30.80 10.80x10.80 rotation=0.00 size=9.00 color=595959 bold=false "10"
-text axis/category/label/0 6.60,204.40 32.40x10.80 rotation=0.00 size=9.00 color=595959 bold=false "19 Dec"
-text axis/category/label/1 46.72,204.40 32.40x10.80 rotation=0.00 size=9.00 color=595959 bold=false "24 Dec"
-text axis/category/label/2 86.85,204.40 32.40x10.80 rotation=0.00 size=9.00 color=595959 bold=false "29 Dec"
-text axis/category/label/3 129.68,204.40 27.00x10.80 rotation=0.00 size=9.00 color=595959 bold=false "3 Jan"
-text axis/category/label/4 169.80,204.40 27.00x10.80 rotation=0.00 size=9.00 color=595959 bold=false "8 Jan"
-text axis/category/label/5 207.23,204.40 32.40x10.80 rotation=0.00 size=9.00 color=595959 bold=false "13 Jan"
-text axis/category/label/6 247.35,204.40 32.40x10.80 rotation=0.00 size=9.00 color=595959 bold=false "18 Jan"
-text axis/category/label/7 287.48,204.40 32.40x10.80 rotation=0.00 size=9.00 color=595959 bold=false "23 Jan"
-text axis/category/label/8 327.60,204.40 32.40x10.80 rotation=0.00 size=9.00 color=595959 bold=false "28 Jan"
+rect plot 24.20,36.20 311.60x160.80 fill=- stroke=- width=1.00
+path grid/category/0 24.20,36.20 24.20,197.00 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
+path grid/category/1 63.15,36.20 63.15,197.00 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
+path grid/category/2 102.10,36.20 102.10,197.00 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
+path grid/category/3 141.05,36.20 141.05,197.00 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
+path grid/category/4 180.00,36.20 180.00,197.00 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
+path grid/category/5 218.95,36.20 218.95,197.00 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
+path grid/category/6 257.90,36.20 257.90,197.00 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
+path grid/category/7 296.85,36.20 296.85,197.00 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
+path grid/category/8 335.80,36.20 335.80,197.00 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
+path grid/value/0 24.20,197.00 335.80,197.00 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
+path grid/value/1 24.20,180.92 335.80,180.92 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
+path grid/value/2 24.20,164.84 335.80,164.84 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
+path grid/value/3 24.20,148.76 335.80,148.76 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
+path grid/value/4 24.20,132.68 335.80,132.68 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
+path grid/value/5 24.20,116.60 335.80,116.60 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
+path grid/value/6 24.20,100.52 335.80,100.52 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
+path grid/value/7 24.20,84.44 335.80,84.44 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
+path grid/value/8 24.20,68.36 335.80,68.36 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
+path grid/value/9 24.20,52.28 335.80,52.28 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
+path grid/value/10 24.20,36.20 335.80,36.20 closed=false fill=- stroke=D9D9D9 width=0.75 dash=-
+clip plot/clip 24.20,36.20 311.60x160.80
+clip plot/markers 21.32,33.33 317.35x166.55
+  arc series/0/marker/0 centre=125.47,132.68 radius=2.50 inner=0.00 start=0.00 sweep=360.00 fill=156082 stroke=156082 width=0.75
+  arc series/0/marker/1 centre=148.84,84.44 radius=2.50 inner=0.00 start=0.00 sweep=360.00 fill=156082 stroke=156082 width=0.75
+  arc series/0/marker/2 centre=187.79,116.60 radius=2.50 inner=0.00 start=0.00 sweep=360.00 fill=156082 stroke=156082 width=0.75
+  arc series/0/marker/3 centre=234.53,52.28 radius=2.50 inner=0.00 start=0.00 sweep=360.00 fill=156082 stroke=156082 width=0.75
+  arc series/0/marker/4 centre=289.06,100.52 radius=2.50 inner=0.00 start=0.00 sweep=360.00 fill=156082 stroke=156082 width=0.75
+path axis/value/line 24.20,36.20 24.20,197.00 closed=false fill=- stroke=BFBFBF width=0.75 dash=-
+path axis/category/line 24.20,197.00 335.80,197.00 closed=false fill=- stroke=BFBFBF width=0.75 dash=-
+text axis/value/label/0 14.80,191.60 5.40x10.80 rotation=0.00 size=9.00 color=595959 bold=false "0"
+text axis/value/label/1 14.80,175.52 5.40x10.80 rotation=0.00 size=9.00 color=595959 bold=false "1"
+text axis/value/label/2 14.80,159.44 5.40x10.80 rotation=0.00 size=9.00 color=595959 bold=false "2"
+text axis/value/label/3 14.80,143.36 5.40x10.80 rotation=0.00 size=9.00 color=595959 bold=false "3"
+text axis/value/label/4 14.80,127.28 5.40x10.80 rotation=0.00 size=9.00 color=595959 bold=false "4"
+text axis/value/label/5 14.80,111.20 5.40x10.80 rotation=0.00 size=9.00 color=595959 bold=false "5"
+text axis/value/label/6 14.80,95.12 5.40x10.80 rotation=0.00 size=9.00 color=595959 bold=false "6"
+text axis/value/label/7 14.80,79.04 5.40x10.80 rotation=0.00 size=9.00 color=595959 bold=false "7"
+text axis/value/label/8 14.80,62.96 5.40x10.80 rotation=0.00 size=9.00 color=595959 bold=false "8"
+text axis/value/label/9 14.80,46.88 5.40x10.80 rotation=0.00 size=9.00 color=595959 bold=false "9"
+text axis/value/label/10 9.40,30.80 10.80x10.80 rotation=0.00 size=9.00 color=595959 bold=false "10"
+text axis/category/label/0 8.00,204.40 32.40x10.80 rotation=0.00 size=9.00 color=595959 bold=false "19 Dec"
+text axis/category/label/1 46.95,204.40 32.40x10.80 rotation=0.00 size=9.00 color=595959 bold=false "24 Dec"
+text axis/category/label/2 85.90,204.40 32.40x10.80 rotation=0.00 size=9.00 color=595959 bold=false "29 Dec"
+text axis/category/label/3 127.55,204.40 27.00x10.80 rotation=0.00 size=9.00 color=595959 bold=false "3 Jan"
+text axis/category/label/4 166.50,204.40 27.00x10.80 rotation=0.00 size=9.00 color=595959 bold=false "8 Jan"
+text axis/category/label/5 202.75,204.40 32.40x10.80 rotation=0.00 size=9.00 color=595959 bold=false "13 Jan"
+text axis/category/label/6 241.70,204.40 32.40x10.80 rotation=0.00 size=9.00 color=595959 bold=false "18 Jan"
+text axis/category/label/7 280.65,204.40 32.40x10.80 rotation=0.00 size=9.00 color=595959 bold=false "23 Jan"
+text axis/category/label/8 319.60,204.40 32.40x10.80 rotation=0.00 size=9.00 color=595959 bold=false "28 Jan"

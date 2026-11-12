@@ -568,6 +568,90 @@ void main() {
       expect(findOverlaps(layout.primitives, layout.size), isEmpty);
     });
   });
+  group('labels at the chart edge', () {
+    // The Office theme's padding: every text keeps it from the chart's edge,
+    // where the Office theme draws its border.
+    const double padding = 8;
+    const List<String> months = <String>[
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+    ];
+
+    for (final ChartSize size in const <ChartSize>[
+      ChartSize(240, 160),
+      ChartSize(360, 216),
+      ChartSize(480, 200),
+      ChartSize(600, 300),
+    ]) {
+      for (final bool legend in <bool>[false, true]) {
+        test('an area chart\'s first and last labels keep the padding at '
+            '${size.width} by ${size.height}${legend ? ', legend' : ''}', () {
+          // On tick marks the last label is centred on the plot's right
+          // edge, so the plot must leave it half its width and the padding.
+          final ChartLayout layout = lay(
+            months,
+            size,
+            kind: ChartKind.area,
+            title: 'Monthly sales',
+            legend: ChartLegend(visible: legend),
+          );
+          final Map<int, TextPrimitive> labels = categoryLabels(layout);
+          expect(labels.keys, <int>[0, 1, 2, 3, 4, 5]);
+          final ChartRect plot = layout.plotArea!;
+          final ChartRect last = labels[5]!.bounds;
+          expect(
+            (last.left + last.right) / 2,
+            closeTo(plot.right, 1e-9),
+            reason: 'the last label is centred on the plot\'s right edge',
+          );
+          expect(last.right, lessThanOrEqualTo(size.width - padding + 1e-9));
+          expect(labels[0]!.bounds.left, greaterThanOrEqualTo(padding - 1e-9));
+          expect(findOverlaps(layout.primitives, layout.size), isEmpty);
+        });
+      }
+    }
+
+    test('an area chart\'s last label keeps minTextGap from a legend on the '
+        'right', () {
+      final ChartLayout layout = lay(
+        months,
+        const ChartSize(400, 200),
+        kind: ChartKind.area,
+        legend: const ChartLegend(position: ChartLegendPosition.right),
+      );
+      final TextPrimitive last = categoryLabels(layout)[5]!;
+      final double legendLeft = flat(layout.primitives)
+          .whereType<TextPrimitive>()
+          .where((TextPrimitive p) => p.id.startsWith('legend/'))
+          .map((TextPrimitive p) => p.bounds.left)
+          .reduce(math.min);
+      expect(
+        last.bounds.right,
+        lessThanOrEqualTo(legendLeft - minTextGap + 1e-9),
+      );
+      expect(findOverlaps(layout.primitives, layout.size), isEmpty);
+    });
+
+    test('a turned first label keeps the padding with no value labels', () {
+      // A hidden value axis leaves the first label turned at -45 degrees no
+      // band of tick labels to reach into: the frame keeps room for it.
+      final ChartLayout layout = lay(
+        labelsOf(12, 14),
+        const ChartSize(300, 200),
+        valueAxis: const ChartAxis(visible: false),
+      );
+      final Map<int, TextPrimitive> labels = categoryLabels(layout);
+      expect(labels, isNotEmpty);
+      final TextPrimitive first = labels[labels.keys.reduce(math.min)]!;
+      expect(first.rotationDegrees, isNot(0));
+      expect(first.bounds.left, greaterThanOrEqualTo(padding - 1e-9));
+      expect(findOverlaps(layout.primitives, layout.size), isEmpty);
+    });
+  });
 }
 
 Chart _single(List<String> categories) => Chart(

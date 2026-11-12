@@ -709,31 +709,43 @@ extension on FrameContext {
   /// less `minTextGap`. Nothing else stands there in the labels' way: under
   /// a column chart's plot the turned value title ends at the plot's bottom,
   /// and beside a bar chart's plot the value title starts at its left.
-  (double, double) _edges(FrameShown shown, ChartRect inner) {
+  ///
+  /// When [reserving], the room a label's reserve may count on: the chart's
+  /// padding is none, so a label the frame keeps room for (the first and
+  /// last on tick marks, a first one turned) keeps the padding from the
+  /// chart's edge, where the Office theme draws its border, as every other
+  /// text does. Only a label's spill that no reserve covers (a level label
+  /// a little wider than its band) may reach into the padding.
+  (double, double) _edges(
+    FrameShown shown,
+    ChartRect inner, {
+    bool reserving = false,
+  }) {
     final ChartLegendPosition? legend = shown.legend
         ? chart.legend.position
         : null;
     double beside(double gapToIt) =>
         math.max(0, gapToIt - theme.spacing.minTextGap);
+    double edge(double padding) => reserving ? 0 : padding;
     if (bar) {
       return (
         legend == ChartLegendPosition.bottom
             ? beside(theme.spacing.legendGap)
-            : size.height - inner.bottom,
+            : edge(size.height - inner.bottom),
         legend == ChartLegendPosition.top
             ? beside(theme.spacing.legendGap)
             : shown.title
             ? beside(theme.spacing.titleGap)
-            : inner.top,
+            : edge(inner.top),
       );
     }
     return (
       legend == ChartLegendPosition.left
           ? beside(theme.spacing.legendGap)
-          : inner.left,
+          : edge(inner.left),
       legend == ChartLegendPosition.right
           ? beside(theme.spacing.legendGap)
-          : size.width - inner.right,
+          : edge(size.width - inner.right),
     );
   }
 
@@ -783,9 +795,11 @@ extension on FrameContext {
 
   /// The bands around the plot for the tick [labels], the category [plan] and
   /// the axis titles. The category labels' reach past the axis' ends stays
-  /// within those bands and the edge room past [inner] (`_edges`); the band
-  /// before the axis' start widens to what the labels'
-  /// [CategoryLabelPlan.reserveBefore] needs beyond the edge room.
+  /// within those bands and the edge room past [inner] (`_edges`); the bands
+  /// before the axis' start and past its end widen to what the labels'
+  /// [CategoryLabelPlan.reserveBefore] and [CategoryLabelPlan.reserveAfter]
+  /// need beyond the edge room a reserve may count on, which leaves the
+  /// chart's padding clear.
   _Bands _bandsFor(
     ChartRect inner,
     FrameShown shown,
@@ -812,8 +826,13 @@ extension on FrameContext {
       widest = math.max(widest, label.size.width);
       tallest = math.max(tallest, label.size.height);
     }
-    // What the plan's reserves need inside [inner] past the edge room.
-    final (double edgeBefore, double edgeAfter) = _edges(shown, inner);
+    // What the plan's reserves need inside [inner] past the edge room they
+    // may count on, which leaves the chart's padding clear.
+    final (double edgeBefore, double edgeAfter) = _edges(
+      shown,
+      inner,
+      reserving: true,
+    );
     final double reserve = shown.categoryLabels
         ? plan.reserveBefore - edgeBefore
         : 0;

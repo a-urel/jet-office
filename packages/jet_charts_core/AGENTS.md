@@ -283,6 +283,9 @@ by hand, then fix it.
   `pointColorKeys` (adding it to the J4 `Random` would move every J4 case).
 - Minor: `public_api_test` asserts the exact formatted export text.
 - Known difference F05 (fixed minimum = fixed maximum) in `docs/parity.md`.
+- Unchecked in Excel: the gap Excel leaves between an area chart's last
+  category label and its chart area's edge; this package keeps the padding
+  there (`docs/parity.md`, "Areas"), and the owner's look settles it.
 
 ## Reference
 
