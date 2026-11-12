@@ -1,4 +1,3 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:jet_charts_core/jet_charts_core.dart';
 import 'package:jet_charts_flutter/jet_charts_flutter.dart';
@@ -6,6 +5,7 @@ import 'package:jet_charts_gallery/gallery.dart';
 import 'package:jet_charts_gallery/main.dart';
 import 'package:jet_charts_gallery/monepro.dart';
 import 'package:jet_core/jet_core.dart';
+import 'package:material_ui/material_ui.dart';
 
 void main() {
   test('the gallery holds the 14 J3 core charts, one_series, '

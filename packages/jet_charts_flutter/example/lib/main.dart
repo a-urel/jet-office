@@ -4,10 +4,10 @@
 /// the labels the layout hid, and a "Monépro look" page (`monepro.dart`).
 library;
 
-import 'package:flutter/material.dart';
 import 'package:jet_charts_core/jet_charts_core.dart';
 import 'package:jet_charts_flutter/jet_charts_flutter.dart';
 import 'package:jet_core/jet_core.dart';
+import 'package:material_ui/material_ui.dart';
 
 import 'gallery.dart';
 import 'monepro.dart';

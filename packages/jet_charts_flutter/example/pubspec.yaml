@@ -8,8 +8,10 @@ version: 0.1.0
 publish_to: none
 
 environment:
-  sdk: ^3.9.0
-  flutter: '>=3.35.0'
+  # material_ui (Flutter 3.50 deprecates package:flutter/material.dart for it)
+  # needs Dart 3.13 and Flutter 3.47.
+  sdk: ^3.13.0
+  flutter: '>=3.47.0'
 
 resolution: workspace
 
@@ -26,6 +28,8 @@ dependencies:
     path: ..
   jet_core:
     path: ../../jet_core
+  # Material widgets, which Flutter 3.50 ships as a package of their own.
+  material_ui: ^1.11.0
 
 dev_dependencies:
   flutter_test:

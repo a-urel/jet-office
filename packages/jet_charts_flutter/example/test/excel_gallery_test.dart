@@ -306,9 +306,8 @@ void main() {
     // The owner's E1 file: its pie (251), scatter (240), combination (322)
     // and smoothed line (332) charts' parts.
     final Archive j4 = ZipDecoder().decodeBytes(
-      File(
-        '../../../test/fixtures/owner/charts/chart_reference_j4.xlsx',
-      ).readAsBytesSync(),
+      File('../../../test/fixtures/owner/charts/chart_reference_j4.xlsx')
+          .readAsBytesSync(),
     );
     String e1(String name) => utf8.decode(j4.findFile(name)!.content);
     expect(excelPieChartStyleXml, e1('xl/charts/style1.xml'));
@@ -552,9 +551,8 @@ void main() {
       for (final XmlElement ser in sers) {
         for (final String tag in <String>['c:xVal', 'c:yVal']) {
           final XmlElement ref = all(ser, tag).single;
-          final RegExpMatch m = RegExp(
-            r'!\$([A-Z])\$(\d+):\$([A-Z])\$(\d+)$',
-          ).firstMatch(all(ref, 'c:f').single.innerText)!;
+          final RegExpMatch m = RegExp(r'!\$([A-Z])\$(\d+):\$([A-Z])\$(\d+)$')
+              .firstMatch(all(ref, 'c:f').single.innerText)!;
           expect(m[1], m[3], reason: '$name $tag');
           final int first = int.parse(m[2]!);
           final int last = int.parse(m[4]!);

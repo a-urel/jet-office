@@ -75,7 +75,7 @@ dart test -p chrome
 ```
 
 The workspace has a Flutter package, so resolving it (`flutter pub get` or
-Flutter's `dart pub get` at the root) needs Flutter's SDK, 3.47.9 in CI, and
+Flutter's `dart pub get` at the root) needs Flutter's SDK, 3.50.0 in CI, and
 `dart` must be Flutter's (decision 0016). `jet_charts_flutter`'s tests need
 Flutter's engine and run with `flutter test`. Its golden image tests (tag
 `golden`) run on macOS only: the local `flutter test` runs them, and CI and the
