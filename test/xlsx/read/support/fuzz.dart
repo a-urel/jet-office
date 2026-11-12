@@ -35,14 +35,17 @@ export '../../../support/fuzz_mutations.dart'
 
 /// The fixtures of `allFixtures()` in the corpus: `m1_values`, the smallest
 /// fixture with a formula, the smallest with a date format, the smallest
-/// whose styles reach columns, rows and cells, and `c1_kinds`, a drawing of
-/// twelve chart parts (C1), which the reader and the model keep as they are.
+/// whose styles reach columns, rows and cells, `c1_kinds`, a drawing of
+/// twelve chart parts (C1), which the reader and the model keep as they are,
+/// and `c2_kinds`, seven charts of the C2 kinds the model added over data it
+/// wrote.
 const List<String> _corpusFixtures = <String>[
   'm1_values',
   'm1_formulas',
   'm1_dates',
   'm2_style_precedence',
   'c1_kinds',
+  'c2_kinds',
 ];
 
 /// The corpus entries also added deflated, to fuzz inflation.
