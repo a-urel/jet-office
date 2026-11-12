@@ -20,7 +20,12 @@ part of 'xlsx_sheet.dart';
 /// and the media parts its relationships name, by relationship id. The
 /// changes of an edit keep it up to date.
 final class _PicturesRead {
-  _PicturesRead(this.partName, this.part, this.media);
+  _PicturesRead(
+    this.partName,
+    this.part,
+    this.media, [
+    Map<String, String>? charts,
+  ]) : charts = charts ?? <String, String>{};
 
   /// The drawing part's name without a leading `/`, or `null` for none.
   String? partName;
@@ -32,6 +37,10 @@ final class _PicturesRead {
   /// The names (no leading `/`) of the existing media parts the drawing's
   /// image relationships point at, by relationship id.
   final Map<String, String> media;
+
+  /// The names (no leading `/`) of the existing parts the drawing's chart
+  /// relationships point at, by relationship id.
+  final Map<String, String> charts;
 
   /// The names of the parts the package writes from the typed drawing, for
   /// `attachStoredPart`.
@@ -160,15 +169,16 @@ mixin _SheetPictures {
   /// `pic` whose `r:embed` names a relationship to a part of the file. Sizes
   /// and offsets are in pixels (9,525 EMU each). A picture in a format the
   /// library does not write (GIF, EMF) is listed; its `OfficeImage.format`
-  /// reads `null`. Every other kind of object (a chart, a shape, a group, an
-  /// absolute anchor, a picture inside `mc:AlternateContent`, a picture
-  /// linked instead of embedded) is kept as written and not listed, without a
-  /// warning. A picture the model cannot read (a dangling `r:embed`, a marker
-  /// or size that is not a number, a `cNvPr` without an id) is kept, not
-  /// listed and reported once as `featureEntryInvalid` with the detail
-  /// `pic`; a drawing part that is not a spreadsheet drawing reads no
-  /// pictures and is reported with the detail `drawing`. Pictures that show
-  /// the same media part share one `Uint8List`, across sheets too.
+  /// reads `null`. Every other kind of object (a chart, which `charts`
+  /// lists, a shape, a group, an absolute anchor, a picture inside
+  /// `mc:AlternateContent`, a picture linked instead of embedded) is kept as
+  /// written and not listed, without a warning. A picture the model cannot
+  /// read (a dangling `r:embed`, a marker or size that is not a number, a
+  /// `cNvPr` without an id) is kept, not listed and reported once as
+  /// `featureEntryInvalid` with the detail `pic`; a drawing part that is not
+  /// a spreadsheet drawing reads no pictures and is reported with the detail
+  /// `drawing`. Pictures that show the same media part share one
+  /// `Uint8List`, across sheets too.
   ///
   /// Unmodifiable. Loads the sheet. Throws an [XlsxReadException] when the
   /// sheet, its relationships, the drawing part or a media part cannot be
@@ -430,9 +440,16 @@ mixin _SheetPictures {
       ),
     );
     if (drawing == null) problems.add('drawing');
+    final List<PartRelationship> rels = relationshipsOf(name);
     final Map<String, String> media = <String, String>{
-      for (final PartRelationship rel in relationshipsOf(name))
+      for (final PartRelationship rel in rels)
         if (rel.type == RelType.image && reader.hasPart(rel.target))
+          rel.id: rel.target,
+    };
+    final Map<String, String> charts = <String, String>{
+      for (final PartRelationship rel in rels)
+        if (rel.type == drawingChartRelationshipType &&
+            reader.hasPart(rel.target))
           rel.id: rel.target,
     };
     for (final DrawingEntry e in drawing?.entries ?? const <DrawingEntry>[]) {
@@ -444,7 +461,7 @@ mixin _SheetPictures {
         _warn(XlsxWarningCode.featureEntryInvalid, null, detail: detail);
       }
     }
-    return _picturesRead = _PicturesRead(name, drawing, media);
+    return _picturesRead = _PicturesRead(name, drawing, media, charts);
   }
 
   /// Where the pictures listed in [pictures] are among the drawing's entries.
@@ -454,7 +471,8 @@ mixin _SheetPictures {
     return <int>[
       for (int at = 0; at < entries.length; at++)
         if (entries[at].anchor != null &&
-            read.media.containsKey(entries[at].pic?.embedId))
+            entries[at].pic != null &&
+            read.media.containsKey(entries[at].pic!.embedId))
           at,
     ];
   }

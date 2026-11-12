@@ -14,6 +14,7 @@ void main() {
     expect(limits.maxSheets, 10000);
     expect(limits.maxCellFormats, 1000000);
     expect(limits.maxMerges, 1000000);
+    expect(limits.maxChartPartBytes, 32 * 1024 * 1024);
     limits.check();
   });
 
@@ -30,6 +31,7 @@ void main() {
       'maxSheets': const XlsxReadLimits(maxSheets: 0),
       'maxCellFormats': const XlsxReadLimits(maxCellFormats: 0),
       'maxMerges': const XlsxReadLimits(maxMerges: 0),
+      'maxChartPartBytes': const XlsxReadLimits(maxChartPartBytes: 0),
     };
     for (final MapEntry<String, XlsxReadLimits> e in bad.entries) {
       expect(

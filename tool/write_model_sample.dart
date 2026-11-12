@@ -56,7 +56,6 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
-import 'package:jet_charts_core/jet_charts_core.dart';
 import 'package:jet_office/jet_office.dart';
 import 'package:jet_office/src/drawingml/chart/chart_space.dart';
 import 'package:jet_office/src/drawingml/chart/chart_writer.dart';

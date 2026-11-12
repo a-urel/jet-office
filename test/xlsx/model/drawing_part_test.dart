@@ -53,6 +53,41 @@ void main() {
     expect(_encoded(part), isNot(contains('Chart')));
   });
 
+  test('types a chart frame: its anchor, cNvPr and chart r:id', () {
+    String chart({String cNvPr = 'id="7" name="Chart 2" descr="D"'}) =>
+        '<xdr:oneCellAnchor><xdr:from><xdr:col>1</xdr:col><xdr:row>2</xdr:row>'
+        '</xdr:from><xdr:ext cx="95250" cy="19050"/><xdr:graphicFrame>'
+        '<xdr:nvGraphicFramePr><xdr:cNvPr $cNvPr/></xdr:nvGraphicFramePr>'
+        '<a:graphic><a:graphicData '
+        'uri="http://schemas.openxmlformats.org/drawingml/2006/chart">'
+        '<c:chart xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/'
+        'chart" r:id="rId4"/></a:graphicData></a:graphic></xdr:graphicFrame>'
+        '<xdr:clientData/></xdr:oneCellAnchor>';
+    final List<String> warnings = <String>[];
+    final DrawingPart part = _read(
+      '$_head${chart()}${chart(cNvPr: 'name="X"')}</xdr:wsDr>',
+      warnings,
+    )!;
+    final DrawingEntry typed = part.entries[0];
+    expect(typed.chartFrame, (
+      id: 7,
+      name: 'Chart 2',
+      description: 'D',
+      chartId: 'rId4',
+    ));
+    expect(typed.pic, isNull);
+    expect(typed.anchor, isNotNull);
+    expect(part.entries[1].chartFrame, isNull);
+    expect(part.entries[1].anchor, isNull);
+    expect(warnings, <String>['chart']);
+    // A frame of no chart is no chart, and no problem.
+    expect(
+      _read('$_head$frame</xdr:wsDr>', warnings)!.entries[0].chartFrame,
+      isNull,
+    );
+    expect(warnings, <String>['chart']);
+  });
+
   test('is null when the root is no spreadsheet drawing', () {
     expect(_read('<root/>'), isNull);
     expect(_read('<wsDr/>'), isNull);

@@ -222,11 +222,15 @@ enum XlsxWarningCode {
   layoutInvalid,
 
   /// Editing an opened workbook: an entry of a sheet or workbook feature (a
-  /// link, a validation, a rule, a note, a picture, a table, a defined name,
-  /// a document property and the like) could not be read; it is kept as
-  /// written and left out of the typed list. The detail names the
+  /// link, a validation, a rule, a note, a picture, a chart, a table, a
+  /// defined name, a document property and the like) could not be read; it
+  /// is kept as written and left out of the typed list. The detail names the
   /// element, and the problem, in English; after ten, one warning without a
-  /// detail counts the rest. A workbook's entry has an empty
+  /// detail counts the rest. A chart (detail `chart`, once per sheet) is a
+  /// frame whose relationship dangles or is not a chart's, a part that is not
+  /// a chart or is larger than `XlsxReadLimits.maxChartPartBytes`, which
+  /// lists with no view, or a part with a number that cannot be read, which
+  /// lists. A workbook's entry has an empty
   /// [XlsxWarning.sheet]. It names no cell.
   featureEntryInvalid,
 }

@@ -239,20 +239,25 @@ final class OpcPackage {
   /// XML that cannot start. XML errors that only surface while reading are
   /// [XmlParseException]s from the returned reader.
   XmlPullReader openXml(String name) {
+    final Uint8List bytes = bytesOf(name);
+    return _parseXml(_plain(name), () => _pull(bytes, _maxDepth));
+  }
+
+  /// The bytes of the part [name] as the package would write it now: its
+  /// content encoded when a model set it, else its original bytes, inflated
+  /// and not cached.
+  ///
+  /// Throws an [OpcFormatException] for an unknown part or a corrupt entry.
+  Uint8List bytesOf(String name) {
     final _Part? part = _parts[_key(name)];
     if (part == null) {
       throw OpcFormatException(OpcFormatKind.missingPart, part: _plain(name));
     }
     final PartContent? content = part.content;
-    final Uint8List bytes;
-    if (content == null) {
-      bytes = _readEntry(_zip!, part.zipName!);
-    } else {
-      final BytesBuilder builder = BytesBuilder(copy: false);
-      content.encode().forEach(builder.add);
-      bytes = builder.takeBytes();
-    }
-    return _parseXml(_plain(name), () => _pull(bytes, _maxDepth));
+    if (content == null) return _readEntry(_zip!, part.zipName!);
+    final BytesBuilder builder = BytesBuilder(copy: false);
+    content.encode().forEach(builder.add);
+    return builder.takeBytes();
   }
 
   /// The relationships of [source], in file order, external ones included.

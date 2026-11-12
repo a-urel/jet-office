@@ -23,6 +23,7 @@ final class XlsxReadLimits {
     this.maxSheets = 10000,
     this.maxCellFormats = 1000000,
     this.maxMerges = 1000000,
+    this.maxChartPartBytes = 32 * 1024 * 1024,
   });
 
   /// The most entries the ZIP archive may hold.
@@ -77,6 +78,15 @@ final class XlsxReadLimits {
   /// the styles part's differential styles.
   final int maxMerges;
 
+  /// The most bytes of a chart part (`xl/charts/chartN.xml`) that
+  /// `XlsxSheet.charts` reads.
+  ///
+  /// A larger part is not read: it is listed without a view or a typed
+  /// form, reported as `featureEntryInvalid` with the detail `chart`, and
+  /// saved byte for byte. Nothing throws. The default, 32 MiB, is the chart
+  /// reader's point budget of 1,048,576 points at about 30 bytes each.
+  final int maxChartPartBytes;
+
   /// Throws an [ArgumentError] naming the first field below 1.
   void check() {
     final Map<String, int> fields = <String, int>{
@@ -90,6 +100,7 @@ final class XlsxReadLimits {
       'maxSheets': maxSheets,
       'maxCellFormats': maxCellFormats,
       'maxMerges': maxMerges,
+      'maxChartPartBytes': maxChartPartBytes,
     };
     for (final MapEntry<String, int> field in fields.entries) {
       if (field.value < 1) {

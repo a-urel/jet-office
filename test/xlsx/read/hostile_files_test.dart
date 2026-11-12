@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:jet_office/jet_office.dart';
 import 'package:test/test.dart';
 
+import '../../support/read_xlsx.dart';
 import 'support/workbook_builder.dart';
 import 'support/zip_builder.dart';
 
@@ -331,6 +332,76 @@ void main() {
         model: _Model.sheet,
         limit: 'maxMerges',
         limits: const XlsxReadLimits(maxMerges: 5),
+      );
+    });
+
+    test('maxChartPartBytes', () {
+      // Nothing refuses it: the reader never reads chart parts, and the
+      // workbook model lists a larger part without a view, warns and keeps
+      // its bytes.
+      const String rel =
+          'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
+      const String pkg =
+          'http://schemas.openxmlformats.org/package/2006/relationships';
+      final String chart =
+          '<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/'
+          'drawingml/2006/chart"><c:chart/>${'<!-- padding -->' * 20}'
+          '</c:chartSpace>';
+      final Map<String, List<int>> parts = <String, List<int>>{
+        ...readXlsxBytes(
+          buildWorkbook(<String, String>{
+            'S':
+                '<worksheet xmlns="$mainNs" xmlns:r="$rel"><sheetData/>'
+                '<drawing r:id="rId1"/></worksheet>',
+          }),
+        ),
+        'xl/worksheets/_rels/sheet1.xml.rels': utf8.encode(
+          '<Relationships xmlns="$pkg"><Relationship Id="rId1" '
+          'Type="$rel/drawing" Target="../drawings/drawing1.xml"/>'
+          '</Relationships>',
+        ),
+        'xl/drawings/drawing1.xml': utf8.encode(
+          '<xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/'
+          '2006/spreadsheetDrawing" xmlns:a="http://schemas.openxmlformats.'
+          'org/drawingml/2006/main" xmlns:r="$rel"><xdr:oneCellAnchor>'
+          '<xdr:from><xdr:col>0</xdr:col><xdr:row>0</xdr:row></xdr:from>'
+          '<xdr:ext cx="9525" cy="9525"/><xdr:graphicFrame macro="">'
+          '<xdr:nvGraphicFramePr><xdr:cNvPr id="2" name="Chart 1"/>'
+          '<xdr:cNvGraphicFramePr/></xdr:nvGraphicFramePr><xdr:xfrm/>'
+          '<a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/'
+          'drawingml/2006/chart"><c:chart xmlns:c="http://schemas.'
+          'openxmlformats.org/drawingml/2006/chart" r:id="rId1"/>'
+          '</a:graphicData></a:graphic></xdr:graphicFrame><xdr:clientData/>'
+          '</xdr:oneCellAnchor></xdr:wsDr>',
+        ),
+        'xl/drawings/_rels/drawing1.xml.rels': utf8.encode(
+          '<Relationships xmlns="$pkg"><Relationship Id="rId1" '
+          'Type="$rel/chart" Target="../charts/chart1.xml"/></Relationships>',
+        ),
+        'xl/charts/chart1.xml': utf8.encode(chart),
+      };
+      final Uint8List zip = buildZip(parts);
+      XlsxReader(
+        zip,
+        limits: const XlsxReadLimits(maxChartPartBytes: 100),
+      ).rowsAt(0).toList();
+      final XlsxWorkbook book = XlsxWorkbook.open(
+        zip,
+        limits: const XlsxReadLimits(maxChartPartBytes: 100),
+      );
+      final List<XlsxSheetChart> charts = book.sheets.single.charts;
+      expect(charts, hasLength(1));
+      expect(charts.single.view, isNull);
+      expect(book.warnings.single.code, XlsxWarningCode.featureEntryInvalid);
+      expect(book.warnings.single.detail, 'chart');
+      expect(
+        readXlsxBytes(book.save().bytes)['xl/charts/chart1.xml'],
+        utf8.encode(chart),
+      );
+      // Within the limit the part reads.
+      expect(
+        XlsxWorkbook.open(zip).sheets.single.charts.single.view,
+        isNotNull,
       );
     });
   });

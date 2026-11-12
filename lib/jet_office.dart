@@ -107,12 +107,15 @@
 /// ([XlsxSheet.richTextAt], and [XlsxSheet.setCell] with an [XlsxRichText]),
 /// notes ([XlsxSheet.notes], [XlsxSheet.noteAt], [XlsxSheet.setNote]),
 /// pictures ([XlsxSheet.pictures], [XlsxSheet.addPicture],
-/// [XlsxSheet.movePictureAt], [XlsxSheet.removePictureAt]) and tables
+/// [XlsxSheet.movePictureAt], [XlsxSheet.removePictureAt]), tables
 /// ([XlsxSheet.tables], [XlsxSheet.addTable], [XlsxSheet.setTableStyle],
-/// [XlsxSheet.resizeTable], [XlsxSheet.removeTable]). A chart, a shape, a form
-/// control or a threaded comment beside them is kept as written, and removing
-/// a table turns the formulas that name it into plain ranges, as Excel's
-/// Convert to Range does.
+/// [XlsxSheet.resizeTable], [XlsxSheet.removeTable]) and charts
+/// ([XlsxSheet.charts], each an [XlsxSheetChart] showing a [Chart], typed as
+/// an [XlsxChart] when writing it again loses nothing; the chart types of the
+/// jet_charts_core package are re-exported, so a caller needs no import of
+/// it). A shape, a form control or a threaded comment beside them is kept as
+/// written, and removing a table turns the formulas that name it into plain
+/// ranges, as Excel's Convert to Range does.
 ///
 /// A sheet edits its structure: [XlsxSheet.insertRows], [XlsxSheet.deleteRows],
 /// [XlsxSheet.insertColumns] and [XlsxSheet.deleteColumns] move cells,
@@ -236,6 +239,7 @@
 /// This file is the whole public API. Everything under `lib/src/` is private,
 /// and a type is public only once it is exported here.
 ///
+/// @docImport 'package:jet_charts_core/jet_charts_core.dart';
 /// @docImport 'package:jet_core/jet_core.dart';
 /// @docImport 'src/common/locale.dart';
 /// @docImport 'src/docx/builtin_styles.dart';
@@ -257,6 +261,7 @@
 /// @docImport 'src/docx/read_limits.dart';
 /// @docImport 'src/docx/warnings.dart';
 /// @docImport 'src/xlsx/cell_formatting.dart';
+/// @docImport 'src/xlsx/chart.dart';
 /// @docImport 'src/xlsx/color.dart';
 /// @docImport 'src/xlsx/column.dart';
 /// @docImport 'src/xlsx/formula/formula_lexer.dart';
@@ -280,6 +285,26 @@
 /// @docImport 'src/xlsx/xlsx_writer.dart';
 library;
 
+export 'package:jet_charts_core/jet_charts_core.dart'
+    show
+        Chart,
+        ChartAxis,
+        ChartAxisBinding,
+        ChartColor,
+        ChartData,
+        ChartDataLabels,
+        ChartExportColors,
+        ChartGrouping,
+        ChartKind,
+        ChartLegend,
+        ChartLegendPosition,
+        ChartSchemeColor,
+        ChartSeries,
+        ChartSpacing,
+        ChartTextStyle,
+        ChartTheme,
+        ChartTitle,
+        ChartTooltipStyle;
 export 'package:jet_core/jet_core.dart'
     show
         FormatDecimal,
@@ -426,6 +451,7 @@ export 'src/xlsx/alignment.dart'
 export 'src/xlsx/border.dart' show XlsxBorder, XlsxBorderSide, XlsxBorderStyle;
 export 'src/xlsx/cell_formatting.dart'
     show XlsxCellFormatting, XlsxFormatColor, XlsxFormatWarning;
+export 'src/xlsx/chart.dart' show XlsxChart, XlsxSheetChart;
 export 'src/xlsx/color.dart' show XlsxColor, XlsxColorKind;
 export 'src/xlsx/column.dart' show XlsxColumn;
 export 'src/xlsx/comparison.dart' show XlsxComparison;

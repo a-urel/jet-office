@@ -817,6 +817,9 @@ final class _Book implements SheetHost {
   bool get date1904 => workbook.date1904;
 
   @override
+  ThemeColors? get themeColors => _themeColors();
+
+  @override
   WorkbookPart get workbookPart => workbook;
 
   @override
