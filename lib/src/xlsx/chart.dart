@@ -120,6 +120,27 @@ XlsxChart readXlsxChart(
 /// with [XlsxChart.new].
 DrawingChartIds? xlsxChartIds(XlsxChart chart) => chart._ids;
 
+/// The ids the model gives the chart part `chart{n}.xml` when it has none of
+/// its own, for [series] series: the category and value axes `100000 + 2n`
+/// and `100001 + 2n`, the secondary pair `200000 + 2n` and `200001 + 2n`,
+/// and series `i` the GUID `{00000000-00C1-0000-nnnn-iiiiiiiiiiii}`, n in
+/// four digits and i in twelve.
+///
+/// Excel picks these at random; the model derives them from the part number
+/// so the same calls give the same bytes, and so C1's fixtures rebuilt chart
+/// by chart keep their parts.
+DrawingChartIds xlsxChartPartIds(int n, int series) => DrawingChartIds(
+  categoryAxis: 100000 + 2 * n,
+  valueAxis: 100001 + 2 * n,
+  secondaryCategoryAxis: 200000 + 2 * n,
+  secondaryValueAxis: 200001 + 2 * n,
+  series: <String>[for (int i = 0; i < series; i++) _seriesId(n, i)],
+);
+
+String _seriesId(int n, int i) =>
+    '{00000000-00C1-0000-${n.toString().padLeft(4, '0')}-'
+    '${i.toString().padLeft(12, '0')}}';
+
 /// A chart frame of a sheet's drawing, as `XlsxSheet.charts` lists it.
 ///
 /// Value equality over every field.

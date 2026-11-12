@@ -479,14 +479,17 @@ mixin _SheetPictures {
     ];
   }
 
-  /// The pictures read, to edit them. Throws a [StateError] for a `<drawing>`
-  /// the model has no typed part for.
-  _PicturesRead _editablePictures(WorksheetPart part) {
+  /// The pictures read, to edit them or, [what] says, the charts. Throws a
+  /// [StateError] for a `<drawing>` the model has no typed part for.
+  _PicturesRead _editablePictures(
+    WorksheetPart part, {
+    String what = 'pictures',
+  }) {
     final _PicturesRead read = _readPictures();
     if (read.part == null && part.layoutElement('drawing') != null) {
       throw StateError(
         'The drawing of sheet "$name" is missing or is not a spreadsheet '
-        'drawing; its pictures cannot be set.',
+        'drawing; its $what cannot be set.',
       );
     }
     return read;
@@ -596,6 +599,9 @@ mixin _SheetPictures {
     final Iterable<String> left = _relationshipTargets(drawingName).values;
     <String, String>{...read.media}.forEach((String id, String media) {
       applyChange(log, _DrawingMediaChange(read, id, media, null));
+    });
+    <String, String>{...read.charts}.forEach((String id, String chart) {
+      applyChange(log, _DrawingChartChange(read, id, chart, null));
     });
     final bool used = reader.guardXml(
       drawingName,

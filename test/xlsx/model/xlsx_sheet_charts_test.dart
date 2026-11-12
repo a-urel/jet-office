@@ -4,7 +4,10 @@ import 'dart:typed_data';
 import 'package:jet_office/jet_office.dart';
 import 'package:jet_office/src/drawingml/chart/chart_space.dart';
 import 'package:jet_office/src/drawingml/chart/chart_writer.dart';
+import 'package:jet_office/src/opc/change_log.dart';
 import 'package:jet_office/src/xlsx/chart.dart' show xlsxChartIds;
+import 'package:jet_office/src/xlsx/model/xlsx_workbook.dart' show changeLogOf;
+import 'package:jet_office/src/xml/xml_equivalence.dart';
 import 'package:test/test.dart';
 
 import '../../../tool/src/part_compare.dart';
@@ -13,6 +16,7 @@ import '../../fixtures/c1_fixtures.dart';
 import '../../fixtures/fixtures.dart';
 import '../../fixtures/m4_fixtures.dart';
 import '../../support/read_xlsx.dart';
+import '../read/support/producers.dart';
 import '../read/support/workbook_builder.dart';
 import '../read/support/zip_builder.dart';
 import 'support/workbook_support.dart';
@@ -71,6 +75,7 @@ Uint8List _package(
   bool picture = false,
   bool date1904 = false,
   String? theme,
+  Map<String, List<int>> extraParts = const <String, List<int>>{},
 }) {
   final Map<String, Uint8List> parts = readXlsxBytes(
     buildWorkbook(
@@ -115,7 +120,7 @@ Uint8List _package(
       '<Relationships xmlns="$pkgRelNs">$rels$extraRels</Relationships>',
     ),
   );
-  return buildZip(<String, List<int>>{...parts});
+  return buildZip(<String, List<int>>{...parts, ...extraParts});
 }
 
 int _invalid(XlsxWorkbook book, String detail) => book.warnings
@@ -140,6 +145,148 @@ const XlsxAnchor _anchor = XlsxTwoCellAnchor(
   XlsxAnchorPoint(2, 1, offsetX: 1, offsetY: 20),
   XlsxAnchorPoint(17, 7),
 );
+
+/// The deterministic ids of chart part n with [series] series (Global
+/// Constraints of C2).
+DrawingChartIds _ids(int n, int series) => DrawingChartIds(
+  categoryAxis: 100000 + 2 * n,
+  valueAxis: 100001 + 2 * n,
+  secondaryCategoryAxis: 200000 + 2 * n,
+  secondaryValueAxis: 200001 + 2 * n,
+  series: <String>[
+    for (int i = 0; i < series; i++)
+      '{00000000-00C1-0000-${n.toString().padLeft(4, '0')}-'
+          '${i.toString().padLeft(12, '0')}}',
+  ],
+);
+
+/// A column chart of two series over three categories.
+Chart _columns({String? title}) => Chart(
+  kind: ChartKind.column,
+  title: title == null ? null : ChartTitle(text: title),
+  series: <ChartSeries>[
+    for (final String name in <String>['North', 'South'])
+      ChartSeries(
+        name: ChartData<String>(values: <String?>[name]),
+        categories: ChartData<Object>(values: const <Object?>['a', 'b', 'c']),
+        values: ChartData<double>(values: const <double?>[1, 2, 3]),
+      ),
+  ],
+);
+
+/// A pie chart of one series whose values are [values].
+Chart _pie(List<double?> values) => Chart(
+  kind: ChartKind.pie,
+  series: <ChartSeries>[
+    ChartSeries(
+      name: ChartData<String>(values: const <String?>['Share']),
+      categories: ChartData<Object>(
+        values: <Object?>[for (int i = 0; i < values.length; i++) 'c$i'],
+      ),
+      values: ChartData<double>(values: values),
+    ),
+  ],
+);
+
+String _text(Uint8List xlsx, String part) =>
+    utf8.decode(readXlsxBytes(xlsx)[part]!);
+
+/// What a drawing's root holds: its text between the root's start tag and
+/// its end tag.
+String _drawingBody(String xml) {
+  final int root = xml.indexOf('wsDr');
+  final int start = xml.indexOf('>', root) + 1;
+  return xml.substring(start, xml.lastIndexOf('</'));
+}
+
+/// The chart part names of [xlsx].
+Set<String> _chartParts(Uint8List xlsx) => <String>{
+  for (final String name in readXlsxBytes(xlsx).keys)
+    if (name.startsWith('xl/charts/')) name,
+};
+
+/// [_column] with relationships to a style and a colour-style part, beside a
+/// picture.
+Uint8List _styledColumn({bool picture = false}) => _package(
+  '${_twoCell(_frame(2, 'rIdC'))}${picture ? _oneCellPic(3) : ''}',
+  charts: <String, List<int>>{'rIdC': _column},
+  picture: picture,
+  extraParts: <String, List<int>>{
+    'xl/charts/_rels/chart1.xml.rels': utf8.encode(
+      '<Relationships xmlns="$pkgRelNs">'
+      '<Relationship Id="rId2" Type="$_chartColorStyle" '
+      'Target="colors1.xml"/>'
+      '<Relationship Id="rId1" Type="$_chartStyle" Target="style1.xml"/>'
+      '</Relationships>',
+    ),
+    'xl/charts/style1.xml': utf8.encode(
+      '<cs:chartStyle xmlns:cs="http://schemas.microsoft.com/office/drawing/'
+      '2012/chartStyle" id="201"/>',
+    ),
+    'xl/charts/colors1.xml': utf8.encode(
+      '<cs:colorStyle xmlns:cs="http://schemas.microsoft.com/office/drawing/'
+      '2012/chartStyle" meth="cycle" id="10"/>',
+    ),
+  },
+);
+
+const String _chartStyle =
+    'http://schemas.microsoft.com/office/2011/relationships/chartStyle';
+const String _chartColorStyle =
+    'http://schemas.microsoft.com/office/2011/relationships/chartColorStyle';
+
+/// Expects [read], the ids a part read back with, to be [written]'s, the
+/// secondary axes aside: a part without a secondary axis does not hold them.
+void _sameIds(DrawingChartIds read, DrawingChartIds written) {
+  expect(read.categoryAxis, written.categoryAxis);
+  expect(read.valueAxis, written.valueAxis);
+  expect(read.series, written.series);
+}
+
+/// Expects [edit] to throw [matcher] and leave [book] saving as before.
+void _refused(XlsxWorkbook book, void Function() edit, Matcher matcher) {
+  final Uint8List before = book.save().bytes;
+  final int warnings = book.warnings.length;
+  expect(edit, matcher);
+  expect(comparePackages(before, book.save().bytes), isEmpty);
+  expect(book.warnings, hasLength(warnings));
+}
+
+int _warned(XlsxWorkbook book, XlsxWarningCode code) => book.warnings
+    .where((XlsxWarning w) => w.code == code)
+    .fold<int>(0, (int s, XlsxWarning w) => s + w.count);
+
+/// Edits the first sheet of [input] with [edit] as one transaction, then
+/// checks undo gives the input back byte for byte (bookkeeping aside), redo
+/// the edited file, and undo the input again.
+void _undone(Uint8List input, void Function(XlsxSheet sheet) edit) {
+  final XlsxWorkbook book = XlsxWorkbook.open(input);
+  final XlsxSheet sheet = book.sheets.first;
+  final ChangeLog log = changeLogOf(book);
+  final List<XlsxSheetChart> before = sheet.charts;
+  final List<XlsxPicture> pictures = sheet.pictures;
+  final ChangeSet set = log.transaction(() => edit(sheet));
+  final List<XlsxSheetChart> after = sheet.charts;
+  final Uint8List edited = book.save().bytes;
+  log.revertSet(set);
+  expect(sheet.charts, before);
+  expect(sheet.pictures, pictures);
+  expect(
+    comparePackages(input, book.save().bytes, ignoreBookkeeping: true),
+    isEmpty,
+  );
+  log.reapplySet(set);
+  expect(sheet.charts, after);
+  expect(
+    comparePackages(edited, book.save().bytes, ignoreBookkeeping: true),
+    isEmpty,
+  );
+  log.revertSet(set);
+  expect(
+    comparePackages(input, book.save().bytes, ignoreBookkeeping: true),
+    isEmpty,
+  );
+}
 
 void main() {
   group('XlsxChart', () {
@@ -624,6 +771,613 @@ void main() {
           expect(after[name], before[name], reason: name);
         }
       }
+    });
+  });
+
+  group('addChart', () {
+    const XlsxAnchor at = XlsxTwoCellAnchor(
+      XlsxAnchorPoint(1, 1),
+      XlsxAnchorPoint(16, 9),
+    );
+
+    test('adds a part, its relationship and frame to a new workbook', () {
+      final XlsxWorkbook book = XlsxWorkbook();
+      final XlsxSheet sheet = book.addSheet('S');
+      final Chart chart = _columns(title: 'Sales');
+      sheet.addChart(XlsxChart(chart, at));
+      final Uint8List saved = book.save().bytes;
+      final Map<String, Uint8List> parts = readXlsxBytes(saved);
+      expect(
+        xmlDifference(
+          parts['xl/charts/chart1.xml']!,
+          writeDrawingChartSpace(
+            DrawingChartSpace(chart: chart, ids: _ids(1, 2)),
+            ChartTheme.office,
+          ).bytes,
+        ),
+        isNull,
+      );
+      expect(
+        _drawingBody(utf8.decode(parts['xl/drawings/drawing1.xml']!)),
+        '<xdr:twoCellAnchor>${_marker('from', 1, 1)}${_marker('to', 9, 16)}'
+        '<xdr:graphicFrame macro=""><xdr:nvGraphicFramePr>'
+        '<xdr:cNvPr id="2" name="Chart 1"/><xdr:cNvGraphicFramePr/>'
+        '</xdr:nvGraphicFramePr><xdr:xfrm><a:off x="0" y="0"/>'
+        '<a:ext cx="0" cy="0"/></xdr:xfrm><a:graphic><a:graphicData '
+        'uri="http://schemas.openxmlformats.org/drawingml/2006/chart">'
+        '<c:chart xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/'
+        'chart" xmlns:r="$relNs" r:id="rId1"/></a:graphicData></a:graphic>'
+        '</xdr:graphicFrame><xdr:clientData/></xdr:twoCellAnchor>',
+      );
+      final String rels = utf8.decode(
+        parts['xl/drawings/_rels/drawing1.xml.rels']!,
+      );
+      expect(rels, contains('Id="rId1"'));
+      expect(rels, contains('Type="$relNs/chart"'));
+      expect(rels, contains('Target="../charts/chart1.xml"'));
+      expect(
+        utf8.decode(parts['[Content_Types].xml']!),
+        contains(
+          '<Override PartName="/xl/charts/chart1.xml" '
+          'ContentType="$drawingChartContentType"/>',
+        ),
+      );
+      final XlsxSheetChart listed = XlsxWorkbook.open(
+        saved,
+      ).sheet('S').charts.single;
+      expect(listed.typed, XlsxChart(chart, at, name: 'Chart 1'));
+      _sameIds(xlsxChartIds(listed.typed!)!, _ids(1, 2));
+      expect(book.warnings, isEmpty);
+    });
+
+    test('a one-cell anchor gives its size; without one it throws', () {
+      final XlsxWorkbook book = XlsxWorkbook();
+      final XlsxSheet sheet = book.addSheet('S');
+      const XlsxAnchor one = XlsxOneCellAnchor(
+        XlsxAnchorPoint(2, 1),
+        width: 100,
+        height: 50,
+      );
+      _refused(
+        book,
+        () => sheet.addChart(
+          XlsxChart(
+            _columns(),
+            const XlsxOneCellAnchor(XlsxAnchorPoint(2, 1), width: 100),
+          ),
+        ),
+        throwsA(
+          isA<ArgumentError>().having(
+            (ArgumentError e) => e.name,
+            'name',
+            'anchor',
+          ),
+        ),
+      );
+      sheet.addChart(XlsxChart(_columns(), one, description: 'Two & one'));
+      final String drawing = _text(
+        book.save().bytes,
+        'xl/drawings/drawing1.xml',
+      );
+      expect(
+        drawing,
+        contains(
+          '<xdr:oneCellAnchor>${_marker('from', 1, 2)}'
+          '<xdr:ext cx="952500" cy="476250"/><xdr:graphicFrame macro="">'
+          '<xdr:nvGraphicFramePr><xdr:cNvPr id="2" name="Chart 1" '
+          'descr="Two &amp; one"/>',
+        ),
+      );
+      final XlsxSheetChart listed = XlsxWorkbook.open(
+        book.save().bytes,
+      ).sheet('S').charts.single;
+      expect(listed.anchor, one);
+      expect(listed.description, 'Two & one');
+    });
+
+    test('the editAs of a two-cell anchor follows its resize', () {
+      final XlsxWorkbook book = XlsxWorkbook();
+      final XlsxSheet sheet = book.addSheet('S');
+      sheet
+        ..addChart(
+          XlsxChart(
+            _columns(),
+            const XlsxTwoCellAnchor(
+              XlsxAnchorPoint(0, 0),
+              XlsxAnchorPoint(5, 5),
+              resize: XlsxPictureResize.move,
+            ),
+          ),
+        )
+        ..addChart(
+          XlsxChart(
+            _columns(),
+            const XlsxTwoCellAnchor(
+              XlsxAnchorPoint(0, 0),
+              XlsxAnchorPoint(5, 5),
+              resize: XlsxPictureResize.none,
+            ),
+          ),
+        );
+      final String drawing = _text(
+        book.save().bytes,
+        'xl/drawings/drawing1.xml',
+      );
+      expect(drawing, contains('<xdr:twoCellAnchor editAs="oneCell">'));
+      expect(drawing, contains('<xdr:twoCellAnchor editAs="absolute">'));
+    });
+
+    test('a second chart takes the next part, id and name', () {
+      final XlsxWorkbook book = XlsxWorkbook();
+      final XlsxSheet sheet = book.addSheet('S');
+      sheet
+        ..addChart(XlsxChart(_columns(), at))
+        ..addChart(XlsxChart(_pie(const <double?>[1, 2]), at));
+      expect(sheet.charts.map((XlsxSheetChart c) => c.name), <String>[
+        'Chart 1',
+        'Chart 2',
+      ]);
+      final Uint8List saved = book.save().bytes;
+      expect(_chartParts(saved), <String>{
+        'xl/charts/chart1.xml',
+        'xl/charts/chart2.xml',
+      });
+      final String drawing = _text(saved, 'xl/drawings/drawing1.xml');
+      expect(drawing, contains('<xdr:cNvPr id="3" name="Chart 2"/>'));
+      expect(drawing, contains('r:id="rId2"'));
+      expect(
+        xlsxChartIds(
+          XlsxWorkbook.open(saved).sheet('S').charts[1].typed!,
+        )!.series,
+        _ids(2, 1).series,
+      );
+    });
+
+    test('a listed typed chart added again keeps its ids, as a copy', () {
+      final XlsxWorkbook book = XlsxWorkbook.open(_fixture('c1_kinds'));
+      final XlsxSheet sheet = book.sheet('Data');
+      final XlsxChart first = sheet.charts.first.typed!;
+      sheet.addChart(first);
+      expect(sheet.charts, hasLength(13));
+      final XlsxSheetChart copy = XlsxWorkbook.open(
+        book.save().bytes,
+      ).sheet('Data').charts.last;
+      expect(copy.typed, first);
+      expect(xlsxChartIds(copy.typed!), xlsxChartIds(first));
+      expect(_chartParts(book.save().bytes), contains('xl/charts/chart13.xml'));
+    });
+
+    test('a value that is not finite warns chartValueOmitted once', () {
+      final XlsxWorkbook book = XlsxWorkbook();
+      final XlsxSheet sheet = book.addSheet('S');
+      sheet.addChart(
+        XlsxChart(_pie(const <double?>[1, double.nan, double.infinity]), at),
+      );
+      expect(_warned(book, XlsxWarningCode.chartValueOmitted), 1);
+      final XlsxWarning w = book.warnings.single;
+      expect(w.sheet, 'S');
+      expect(w.detail, 'Chart 1');
+      expect(w.message(), contains('Chart 1'));
+    });
+
+    test('characters XML forbids in the text warn '
+        'invalidCharactersRemoved', () {
+      final XlsxWorkbook book = XlsxWorkbook();
+      final XlsxSheet sheet = book.addSheet('S');
+      sheet.addChart(XlsxChart(_columns(title: 'A\u0001B'), at, name: 'K'));
+      expect(_warned(book, XlsxWarningCode.invalidCharactersRemoved), 1);
+      expect(book.warnings.single.detail, 'K');
+      expect(book.warnings.single.message(), contains('K'));
+    });
+
+    test('a kind the writer refuses throws and nothing changes', () {
+      final Uint8List input = _fixture('c1_kinds');
+      final XlsxWorkbook book = XlsxWorkbook.open(input);
+      final XlsxSheet sheet = book.sheet('Data');
+      final Chart spark = Chart(
+        kind: ChartKind.sparkline,
+        series: _columns().series,
+      );
+      expect(() => sheet.addChart(XlsxChart(spark, at)), throwsArgumentError);
+      expect(sheet.charts, hasLength(12));
+      expect(changeLogOf(book).hasChanges, isFalse);
+      _unchanged(input, book);
+    });
+
+    test('a bad anchor or name throws and nothing changes', () {
+      final XlsxWorkbook book = XlsxWorkbook();
+      final XlsxSheet sheet = book.addSheet('S');
+      _refused(
+        book,
+        () => sheet.addChart(
+          XlsxChart(
+            _columns(),
+            const XlsxTwoCellAnchor(
+              XlsxAnchorPoint(5, 5),
+              XlsxAnchorPoint(1, 1),
+            ),
+          ),
+        ),
+        throwsArgumentError,
+      );
+      _refused(
+        book,
+        () => sheet.addChart(XlsxChart(_columns(), at, name: 'a\u0000')),
+        throwsArgumentError,
+      );
+      expect(sheet.charts, isEmpty);
+    });
+
+    test('beside pictures, shapes and a chart (excel_objects): pictures and '
+        'every entry stay', () {
+      final ProducerFile file = producerFiles().firstWhere(
+        (ProducerFile f) => f.name == 'excel_objects',
+      );
+      final XlsxWorkbook book = XlsxWorkbook.open(file.bytes);
+      final XlsxSheet sheet = book.sheets.first;
+      final List<XlsxPicture> pictures = sheet.pictures;
+      final List<XlsxSheetChart> charts = sheet.charts;
+      final String drawingName = readXlsxBytes(
+        file.bytes,
+      ).keys.firstWhere((String n) => n.startsWith('xl/drawings/drawing'));
+      final String before = _drawingBody(_text(file.bytes, drawingName));
+      sheet.addChart(XlsxChart(_columns(), at));
+      expect(sheet.pictures, pictures);
+      expect(sheet.charts.take(charts.length), charts);
+      final Uint8List saved = book.save().bytes;
+      final String after = _drawingBody(_text(saved, drawingName));
+      expect(after.startsWith(before), isTrue, reason: after);
+      for (final String part in readXlsxBytes(file.bytes).keys) {
+        if (part.startsWith('xl/charts/') || part.startsWith('xl/media/')) {
+          expect(readXlsxBytes(saved)[part], readXlsxBytes(file.bytes)[part]);
+        }
+      }
+      sheet.removeChartAt(sheet.charts.length - 1);
+      expect(sheet.pictures, pictures);
+      expect(sheet.charts, charts);
+      _unchanged(file.bytes, book);
+    });
+  });
+
+  group('replaceChartAt', () {
+    test('an equal chart records nothing', () {
+      final XlsxWorkbook book = XlsxWorkbook.open(_fixture('c1_kinds'));
+      final XlsxSheet sheet = book.sheet('Data');
+      sheet.replaceChartAt(0, sheet.charts.first.typed!.chart);
+      expect(changeLogOf(book).hasChanges, isFalse);
+    });
+
+    test('keeps the frame, language, ids and automatic title', () {
+      final XlsxWorkbook book = XlsxWorkbook.open(_fixture('c1_kinds'));
+      final XlsxSheet sheet = book.sheet('Data');
+      final XlsxSheetChart old = sheet.charts.first;
+      final Chart chart = old.typed!.chart.copyWith(kind: ChartKind.line);
+      sheet.replaceChartAt(0, chart);
+      final XlsxSheetChart now = XlsxWorkbook.open(
+        book.save().bytes,
+      ).sheet('Data').charts.first;
+      expect(now.anchor, old.anchor);
+      expect(now.name, old.name);
+      expect(now.typed!.chart, chart);
+      expect(now.typed!.language, old.typed!.language);
+      expect(now.typed!.autoTitle, old.typed!.autoTitle);
+      expect(xlsxChartIds(now.typed!), xlsxChartIds(old.typed!));
+      expect(sheet.charts.first.typed!.chart, chart);
+    });
+
+    test("a pie for Excel's column chart drops its style parts", () {
+      final Uint8List input = _styledColumn();
+      final XlsxWorkbook book = XlsxWorkbook.open(input);
+      final XlsxSheet sheet = book.sheets.single;
+      final XlsxSheetChart old = sheet.charts.single;
+      final Chart pie = _pie(const <double?>[1, 2, 3]);
+      sheet.replaceChartAt(0, pie);
+      final Uint8List saved = book.save().bytes;
+      // The chart's relationships part stays, empty.
+      expect(_chartParts(saved), <String>{
+        'xl/charts/chart1.xml',
+        'xl/charts/_rels/chart1.xml.rels',
+      });
+      expect(
+        _text(saved, 'xl/charts/_rels/chart1.xml.rels'),
+        isNot(contains('<Relationship ')),
+      );
+      final XlsxSheetChart now = XlsxWorkbook.open(
+        saved,
+      ).sheets.single.charts.single;
+      expect(now.anchor, old.anchor);
+      expect(now.typed!.chart, pie);
+      expect(now.typed!.language, 'tr-TR');
+      expect(
+        xlsxChartIds(now.typed!)!.series,
+        xlsxChartIds(old.typed!)!.series.take(1),
+      );
+      expect(_text(saved, 'xl/drawings/drawing1.xml'), contains('rIdC'));
+    });
+
+    test('more series take the ids of their positions; a part that showed '
+        'a pie takes the axis ids of its number', () {
+      final XlsxWorkbook book = XlsxWorkbook.open(_styledColumn());
+      final XlsxSheet sheet = book.sheets.single;
+      final DrawingChartIds old = xlsxChartIds(sheet.charts.single.typed!)!;
+      final int m = old.series.length;
+      final Chart more = Chart(
+        kind: ChartKind.column,
+        series: <ChartSeries>[
+          for (int i = 0; i < m + 2; i++) _columns().series.first,
+        ],
+      );
+      sheet.replaceChartAt(0, more);
+      final DrawingChartIds grown = xlsxChartIds(sheet.charts.single.typed!)!;
+      expect(grown.categoryAxis, old.categoryAxis);
+      expect(grown.valueAxis, old.valueAxis);
+      expect(grown.series, <String>[
+        ...old.series,
+        ..._ids(1, m + 2).series.skip(m),
+      ]);
+      sheet
+        ..replaceChartAt(0, _pie(const <double?>[1]))
+        ..replaceChartAt(0, _columns());
+      final DrawingChartIds back = xlsxChartIds(sheet.charts.single.typed!)!;
+      expect(back.categoryAxis, _ids(1, 2).categoryAxis);
+      expect(back.valueAxis, _ids(1, 2).valueAxis);
+      expect(back.series, <String>[old.series.first, _ids(1, 2).series[1]]);
+    });
+
+    test('the same kind keeps the style parts', () {
+      final XlsxWorkbook book = XlsxWorkbook.open(_styledColumn());
+      final XlsxSheet sheet = book.sheets.single;
+      sheet.replaceChartAt(0, _columns(title: 'New'));
+      expect(_chartParts(book.save().bytes), <String>{
+        'xl/charts/chart1.xml',
+        'xl/charts/_rels/chart1.xml.rels',
+        'xl/charts/style1.xml',
+        'xl/charts/colors1.xml',
+      });
+    });
+
+    test('a style part another chart targets stays', () {
+      final Map<String, Uint8List> parts = readXlsxBytes(_styledColumn());
+      parts['xl/charts/chart2.xml'] = Uint8List.fromList(_column);
+      parts['xl/charts/_rels/chart2.xml.rels'] =
+          parts['xl/charts/_rels/chart1.xml.rels']!;
+      final XlsxWorkbook book = XlsxWorkbook.open(
+        buildZip(<String, List<int>>{...parts}),
+      );
+      book.sheets.single.replaceChartAt(0, _pie(const <double?>[1]));
+      final Set<String> left = _chartParts(book.save().bytes);
+      expect(left, contains('xl/charts/style1.xml'));
+      expect(left, contains('xl/charts/colors1.xml'));
+      expect(
+        _text(book.save().bytes, 'xl/charts/_rels/chart1.xml.rels'),
+        isNot(contains('<Relationship ')),
+      );
+    });
+
+    test('a part that is not a chart is rebuilt with deterministic ids', () {
+      final XlsxWorkbook book = XlsxWorkbook.open(
+        _package(
+          _twoCell(_frame(2, 'rIdC')),
+          charts: <String, List<int>>{'rIdC': utf8.encode('<other/>')},
+        ),
+      );
+      final XlsxSheet sheet = book.sheets.single;
+      expect(sheet.charts.single.view, isNull);
+      final Chart chart = _columns();
+      sheet.replaceChartAt(0, chart, theme: ChartTheme.office);
+      final XlsxChart typed = sheet.charts.single.typed!;
+      expect(typed.chart, chart);
+      expect(typed.language, 'en-US');
+      _sameIds(xlsxChartIds(typed)!, _ids(1, 2));
+    });
+
+    test('warns about what the writer leaves out', () {
+      final XlsxWorkbook book = XlsxWorkbook.open(_fixture('c1_kinds'));
+      book.sheet('Data').replaceChartAt(0, _pie(const <double?>[double.nan]));
+      expect(_warned(book, XlsxWarningCode.chartValueOmitted), 1);
+      expect(book.warnings.single.detail, 'Chart 1');
+    });
+
+    test('a bad index or chart throws and nothing changes', () {
+      final Uint8List input = _fixture('c1_kinds');
+      final XlsxWorkbook book = XlsxWorkbook.open(input);
+      final XlsxSheet sheet = book.sheet('Data');
+      expect(() => sheet.replaceChartAt(12, _columns()), throwsRangeError);
+      expect(() => sheet.replaceChartAt(-1, _columns()), throwsRangeError);
+      expect(
+        () => sheet.replaceChartAt(
+          0,
+          Chart(kind: ChartKind.sparkline, series: _columns().series),
+        ),
+        throwsArgumentError,
+      );
+      expect(changeLogOf(book).hasChanges, isFalse);
+      _unchanged(input, book);
+    });
+  });
+
+  group('moveChartAt', () {
+    test('moves, keeping the frame; an equal anchor records nothing', () {
+      final XlsxWorkbook book = XlsxWorkbook.open(_fixture('c1_kinds'));
+      final XlsxSheet sheet = book.sheet('Data');
+      sheet.moveChartAt(1, sheet.charts[1].anchor);
+      expect(changeLogOf(book).hasChanges, isFalse);
+      const XlsxAnchor one = XlsxOneCellAnchor(
+        XlsxAnchorPoint(40, 2),
+        width: 300,
+        height: 200,
+      );
+      final XlsxSheetChart old = sheet.charts[1];
+      sheet.moveChartAt(1, one);
+      final XlsxSheetChart moved = XlsxWorkbook.open(
+        book.save().bytes,
+      ).sheet('Data').charts[1];
+      expect(moved.anchor, one);
+      expect(moved.name, old.name);
+      expect(moved.view, old.view);
+    });
+
+    test('a one-cell anchor without a size, a bad anchor or index throws '
+        'and nothing changes', () {
+      final XlsxWorkbook book = XlsxWorkbook.open(_fixture('c1_kinds'));
+      final XlsxSheet sheet = book.sheet('Data');
+      expect(
+        () => sheet.moveChartAt(
+          0,
+          const XlsxOneCellAnchor(XlsxAnchorPoint(1, 1), height: 3),
+        ),
+        throwsA(
+          isA<ArgumentError>().having(
+            (ArgumentError e) => e.name,
+            'name',
+            'anchor',
+          ),
+        ),
+      );
+      expect(
+        () => sheet.moveChartAt(
+          0,
+          const XlsxOneCellAnchor(XlsxAnchorPoint(-1, 1), width: 1, height: 1),
+        ),
+        throwsArgumentError,
+      );
+      expect(
+        () => sheet.moveChartAt(
+          12,
+          const XlsxOneCellAnchor(XlsxAnchorPoint(1, 1), width: 1, height: 1),
+        ),
+        throwsRangeError,
+      );
+      expect(changeLogOf(book).hasChanges, isFalse);
+    });
+  });
+
+  group('removeChartAt', () {
+    test('removes the frame, the part and the parts only it targets', () {
+      final XlsxWorkbook book = XlsxWorkbook.open(_styledColumn(picture: true));
+      final XlsxSheet sheet = book.sheets.single;
+      final List<XlsxPicture> pictures = sheet.pictures;
+      sheet.removeChartAt(0);
+      expect(sheet.charts, isEmpty);
+      expect(sheet.pictures, pictures);
+      final Uint8List saved = book.save().bytes;
+      expect(_chartParts(saved), isEmpty);
+      final String drawing = _text(saved, 'xl/drawings/drawing1.xml');
+      expect(drawing, isNot(contains('graphicFrame')));
+      expect(
+        _text(saved, 'xl/drawings/_rels/drawing1.xml.rels'),
+        isNot(contains('rIdC')),
+      );
+      expect(
+        _text(saved, '[Content_Types].xml'),
+        isNot(contains('/xl/charts/')),
+      );
+      expect(XlsxWorkbook.open(saved).sheets.single.pictures, pictures);
+    });
+
+    test('the last entry takes the drawing and <drawing> with it', () {
+      final XlsxWorkbook book = XlsxWorkbook.open(_styledColumn());
+      final XlsxSheet sheet = book.sheets.single;
+      sheet.removeChartAt(0);
+      final Uint8List saved = book.save().bytes;
+      expect(readXlsxBytes(saved).keys, isNot(contains(startsWith('xl/dr'))));
+      expect(
+        _text(saved, 'xl/worksheets/sheet1.xml'),
+        isNot(contains('<drawing')),
+      );
+      expect(XlsxWorkbook.open(saved).sheets.single.charts, isEmpty);
+    });
+
+    test('removing every chart of c1_kinds removes every chart part', () {
+      final XlsxWorkbook book = XlsxWorkbook.open(_fixture('c1_kinds'));
+      final XlsxSheet sheet = book.sheet('Data');
+      for (int i = 11; i >= 0; i--) {
+        sheet.removeChartAt(i);
+      }
+      final Uint8List saved = book.save().bytes;
+      expect(_chartParts(saved), isEmpty);
+      expect(readXlsxBytes(saved).keys, isNot(contains(startsWith('xl/dr'))));
+    });
+
+    test('a bad index throws and nothing changes', () {
+      final XlsxWorkbook book = XlsxWorkbook.open(_fixture('c1_kinds'));
+      expect(() => book.sheet('Data').removeChartAt(12), throwsRangeError);
+      expect(changeLogOf(book).hasChanges, isFalse);
+    });
+  });
+
+  group('undo of add, replace, move and remove restores the file', () {
+    test('add', () {
+      _undone(
+        buildWorkbook(<String, String>{
+          'S': '<worksheet xmlns="$mainNs"><sheetData/></worksheet>',
+        }),
+        (XlsxSheet s) => s.addChart(XlsxChart(_columns(), _anchor)),
+      );
+      _undone(_fixture('c1_kinds'), (XlsxSheet s) {
+        s
+          ..addChart(XlsxChart(_columns(), _anchor))
+          ..addChart(s.charts.first.typed!);
+      });
+      _undone(_styledColumn(picture: true), (XlsxSheet s) {
+        s.addChart(XlsxChart(_pie(const <double?>[1]), _anchor));
+      });
+    });
+
+    test('replace', () {
+      _undone(_fixture('c1_kinds'), (XlsxSheet s) {
+        s.replaceChartAt(0, _columns(title: 'X'));
+      });
+      _undone(_styledColumn(), (XlsxSheet s) {
+        s.replaceChartAt(0, _pie(const <double?>[1, 2]));
+      });
+    });
+
+    test('move', () {
+      _undone(_fixture('c1_kinds'), (XlsxSheet s) {
+        s
+          ..moveChartAt(
+            0,
+            const XlsxOneCellAnchor(XlsxAnchorPoint(1, 1), width: 9, height: 9),
+          )
+          ..moveChartAt(3, _anchor);
+      });
+    });
+
+    test('remove', () {
+      _undone(_fixture('c1_kinds'), (XlsxSheet s) => s.removeChartAt(4));
+      _undone(_styledColumn(), (XlsxSheet s) => s.removeChartAt(0));
+      _undone(_styledColumn(picture: true), (XlsxSheet s) {
+        s.removeChartAt(0);
+      });
+    });
+
+    test('an add removed in the same breath', () {
+      _undone(_styledColumn(), (XlsxSheet s) {
+        s
+          ..addChart(XlsxChart(_columns(), _anchor))
+          ..removeChartAt(1)
+          ..removeChartAt(0);
+      });
+    });
+
+    test('a structural edit after a replace undoes to the replaced chart', () {
+      final XlsxWorkbook book = XlsxWorkbook.open(_fixture('c1_kinds'));
+      final XlsxSheet sheet = book.sheet('Data');
+      sheet.insertRows(0, 1);
+      final Chart chart = sheet.charts.first.typed!.chart.copyWith(
+        title: const ChartTitle(text: 'Replaced'),
+      );
+      sheet.replaceChartAt(0, chart);
+      final XlsxChangeSet insert = book.transaction(
+        () => sheet.insertRows(0, 1),
+      );
+      expect(
+        sheet.charts.first.typed!.chart.series.first.values.reference,
+        r'Data!$B$4:$B$7',
+      );
+      book.undo(insert);
+      expect(sheet.charts.first.typed!.chart, chart);
     });
   });
 }

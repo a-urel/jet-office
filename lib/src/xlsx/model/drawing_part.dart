@@ -84,6 +84,33 @@ final class DrawingEntry {
     _noWarning,
   );
 
+  /// The entry of a chart frame as [writeChartFrame] renders it: at
+  /// [anchor] (one-cell sizes [extent]), with the `cNvPr` [id], [name] and
+  /// [description], showing the chart part of the relationship [chartId].
+  factory DrawingEntry.renderedChart(
+    XlsxAnchor anchor, {
+    required ({int cx, int cy})? extent,
+    required int id,
+    required String name,
+    required String? description,
+    required String chartId,
+  }) => _entry(
+    renderElements(
+      (XmlWriter w) => writeChartFrame(
+        w,
+        anchor,
+        extent: extent,
+        id: id,
+        name: name,
+        description: description,
+        chartId: chartId,
+      ),
+      namespaces: const <String, String>{'xdr': Ns.xdr, 'a': Ns.drawingMain},
+    ).single,
+    <int>[id],
+    _noWarning,
+  );
+
   /// The element as written.
   final OpaqueXml source;
 

@@ -24,6 +24,8 @@ library;
 
 import 'dart:typed_data';
 
+import 'package:jet_charts_core/jet_charts_core.dart'
+    show Chart, ChartKind, ChartTheme;
 import 'package:jet_core/jet_core.dart' show FormatKind;
 
 import '../../common/image.dart'
@@ -59,6 +61,7 @@ import '../drawing.dart'
         XlsxOneCellAnchor,
         XlsxPicture,
         checkAnchor,
+        checkChartFrame,
         checkPicture;
 import '../formula/formula_rewrite.dart';
 import '../formula/reference_shift.dart';

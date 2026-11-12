@@ -27,6 +27,8 @@ detail, which counts the settings after the first ten.
 of sheet `Daten`, its second the warning without a detail,
 which counts the entries after the first ten. A workbook's
 entry says "the workbook" instead of the sheet.
+`invalidCharactersRemoved` (chart) and `chartValueOmitted`
+name the chart `Chart 1` of sheet `Daten` and no cell.
 
 The native-speaker check of the German and Turkish text is
 recorded under "Native-speaker check" in
@@ -35,6 +37,7 @@ recorded under "Native-speaker check" in
 | Code | en | de | tr |
 |---|---|---|---|
 | `invalidCharactersRemoved` | 2 cell(s) on sheet 'Daten' had characters removed that XML does not allow (A1, B2). | 2 Zelle(n) im Blatt „Daten“ enthielten Zeichen, die XML nicht erlaubt; sie wurden entfernt (A1, B2). | “Daten” sayfasındaki 2 hücreden XML'in izin vermediği karakterler çıkarıldı (A1, B2). |
+| `invalidCharactersRemoved` (chart) | Characters that XML does not allow were removed from the text of chart 'Chart 1' on sheet 'Daten'. | Zeichen, die XML nicht erlaubt, wurden aus dem Text des Diagramms „Chart 1“ im Blatt „Daten“ entfernt. | “Daten” sayfasındaki “Chart 1” grafiğinin metninden XML'in izin vermediği karakterler çıkarıldı. |
 | `textTruncated` | 2 cell(s) on sheet 'Daten' were cut to 32,767 characters, Excel's limit (A1, B2). | 2 Zelle(n) im Blatt „Daten“ wurden auf 32.767 Zeichen gekürzt, die Obergrenze von Excel (A1, B2). | “Daten” sayfasındaki 2 hücre, Excel sınırı olan 32.767 karaktere kısaltıldı (A1, B2). |
 | `sheetNameChanged` | Sheet name 'Daten:1' is not allowed in Excel and was changed to 'Daten'. | Der Blattname „Daten:1“ ist in Excel nicht zulässig und wurde in „Daten“ geändert. | “Daten:1” sayfa adına Excel'de izin verilmiyor; ad “Daten” olarak değiştirildi. |
 | `sheetNameDuplicated` | Sheet name 'daten' was already used and was changed to 'Daten'. | Der Blattname „daten“ war bereits vergeben und wurde in „Daten“ geändert. | “daten” sayfa adı zaten kullanılıyordu; ad “Daten” olarak değiştirildi. |
@@ -73,6 +76,7 @@ recorded under "Native-speaker check" in
 | `layoutInvalid` (no detail) | 2 layout settings of sheet 'Daten' cannot be read exactly; what cannot be read takes its default, and the settings are saved as written. | 2 Layouteinstellungen im Blatt „Daten“ können nicht exakt gelesen werden; was nicht gelesen werden kann, erhält den Standardwert, und die Einstellungen werden unverändert gespeichert. | “Daten” sayfasındaki 2 düzen ayarı tam olarak okunamıyor; okunamayan kısımlar varsayılan değeri alıyor ve ayarlar olduğu gibi kaydediliyor. |
 | `featureEntryInvalid` | A feature entry of sheet 'Daten' cannot be read (dataValidation: sqref "abc" is not a range.); it is kept as written and left out of the typed list. | Ein Funktionseintrag im Blatt „Daten“ kann nicht gelesen werden (dataValidation: sqref "abc" is not a range.); er wird unverändert gespeichert und in der Liste ausgelassen. | “Daten” sayfasındaki bir özellik girdisi okunamıyor (dataValidation: sqref "abc" is not a range.); olduğu gibi korunuyor ve listeye alınmıyor. |
 | `featureEntryInvalid` (no detail) | 2 feature entries of sheet 'Daten' cannot be read; they are kept as written and left out of the typed lists. | 2 Funktionseinträge im Blatt „Daten“ können nicht gelesen werden; sie werden unverändert gespeichert und in den Listen ausgelassen. | “Daten” sayfasındaki 2 özellik girdisi okunamıyor; olduğu gibi korunuyor ve listelere alınmıyor. |
+| `chartValueOmitted` | A value that is not a finite number was left out of chart 'Chart 1' on sheet 'Daten'; the chart shows a gap there. | Ein Wert, der keine endliche Zahl ist, wurde im Diagramm „Chart 1“ im Blatt „Daten“ ausgelassen; das Diagramm zeigt dort eine Lücke. | “Daten” sayfasındaki “Chart 1” grafiğinde sonlu sayı olmayan bir değer dışarıda bırakıldı; grafik orada boşluk gösteriyor. |
 
 ## DOCX
 
