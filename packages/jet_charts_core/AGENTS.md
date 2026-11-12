@@ -233,6 +233,8 @@ by hand, then fix it.
   name.
 - Writing pie, donut, scatter, combination and secondary-axis charts in
   DrawingML is C2 and C3; the writer refuses them until then.
+- Zooming and scrolling a chart on screen (decision 0023): covered in the
+  end, nothing planned; every chart fits its size until then.
 - Excel's time-scale date axis (owner decision O2; dates are categories, a
   scatter chart's dates are serials on a value axis).
 - The en-US and de-DE oracle regions are unverified; so are fonts other than

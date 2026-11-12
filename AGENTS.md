@@ -29,7 +29,9 @@ level and order undecided; supersedes 0010's "text boxes and floating
 pictures stay opaque") and `0022` (what phase 4 leaves opaque, tracked
 changes, comments, notes, content controls and a table of contents, is
 covered in the end; template fill first; macros stay out; supersedes part of
-`0010`) before any design change.
+`0010`) and `0023` (zooming and scrolling a chart on screen are covered in
+the end; level, model and order undecided; files and PDF keep the whole
+chart) before any design change.
 
 Phase 3, the workbook model, is complete at W6 (proof and release readiness):
 its names are fixed, so a rename of a public name of `XlsxWorkbook` is breaking
