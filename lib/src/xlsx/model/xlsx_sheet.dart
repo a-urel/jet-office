@@ -25,7 +25,7 @@ library;
 import 'dart:typed_data';
 
 import 'package:jet_charts_core/jet_charts_core.dart'
-    show Chart, ChartKind, ChartTheme;
+    show Chart, ChartKind, ChartSeries, ChartTheme;
 import 'package:jet_core/jet_core.dart' show FormatKind;
 
 import '../../common/image.dart'
@@ -63,6 +63,7 @@ import '../drawing.dart'
         checkAnchor,
         checkChartFrame,
         checkPicture;
+import '../formula/formula_reference.dart' show renderSheetPrefix;
 import '../formula/formula_rewrite.dart';
 import '../formula/reference_shift.dart';
 import '../formula/structured_reference.dart';
