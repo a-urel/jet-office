@@ -284,6 +284,70 @@ void main() {
     expect(probe.cells.last.value, 'moved by the model');
   });
 
+  test('an edited workbook holds a column chart over data the model wrote, '
+      'moved by the structural edits and bound to the renamed sheet', () {
+    writeOnly(input, <String>{'m1_values.xlsx'});
+    final int row = newRow('m1_values.xlsx');
+    final XlsxSheet sheet = editedBook('m1_values.xlsx').sheets.first;
+    final XlsxSheetChart chart = sheet.charts.single;
+    expect(chart.name, 'Model column chart');
+    // Written two rows below the probe from column N before the structural
+    // edits: two rows and a column later, the row after the new row from O.
+    expect(chart.anchor.from, XlsxAnchorPoint(row + 1, 18));
+    final XlsxChart? typed = chart.typed;
+    expect(typed, isNotNull);
+    expect(typed!.chart.kind, ChartKind.column);
+    final List<ChartSeries> series = typed.chart.series;
+    expect(series, hasLength(2));
+    String rows(String column) =>
+        "'Model edit'!\$$column\$${row + 3}:\$$column\$${row + 5}";
+    expect(series[0].name.reference, "'Model edit'!\$P\$${row + 2}");
+    expect(series[0].categories.reference, rows('O'));
+    expect(series[0].values.reference, rows('P'));
+    expect(series[1].name.reference, "'Model edit'!\$Q\$${row + 2}");
+    expect(series[1].values.reference, rows('Q'));
+    expect(sheet.cellAt(row + 1, 15)?.value, series[0].name.values.single);
+    expect(sheet.cellAt(row + 2, 14)?.value, series[0].categories.values[0]);
+    // A number the model reads keeps its decimal digits.
+    expect(
+      (sheet.cellAt(row + 3, 16)?.value as XlsxDecimal?)?.toDouble(),
+      series[1].values.values[1],
+    );
+  });
+
+  test('the first typed chart of the first sheet takes a title and moves one '
+      'row down', () {
+    writeOnly(input, <String>{'c1_kinds.xlsx'});
+    final File file = File('${input.path}/c1_kinds.xlsx');
+    // The tool's structural edits alone, for where the chart is before the
+    // move.
+    final XlsxWorkbook shifted = XlsxWorkbook.open(file.readAsBytesSync());
+    final XlsxSheet first = shifted.sheets.first;
+    final int index = first.charts.indexWhere(
+      (XlsxSheetChart c) => c.typed != null,
+    );
+    expect(index, 0);
+    first
+      ..insertRows(first.rows.last.index, 2)
+      ..insertColumns(1);
+    final XlsxTwoCellAnchor before =
+        first.charts[index].anchor as XlsxTwoCellAnchor;
+    final XlsxSheet sheet = editedBook('c1_kinds.xlsx').sheets.first;
+    final List<XlsxSheetChart> charts = sheet.charts;
+    expect(charts, hasLength(13));
+    expect(charts[index].view?.title?.text, 'Model chart');
+    expect(charts[index].typed?.chart.title?.text, 'Model chart');
+    expect(
+      charts[index].anchor,
+      XlsxTwoCellAnchor(
+        XlsxAnchorPoint(before.from.row + 1, before.from.column),
+        XlsxAnchorPoint(before.to.row + 1, before.to.column),
+        resize: before.resize,
+      ),
+    );
+    expect(charts[1].view?.title?.text, isNot('Model chart'));
+  });
+
   test('the table takes a number when its name is taken', () {
     final XlsxWorkbook source = XlsxWorkbook();
     source.addSheet('One').setCell(0, 0, 'x');

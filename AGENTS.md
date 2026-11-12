@@ -269,10 +269,15 @@ dotnet run --project tool/ooxml_validate -- build/excel_gallery
   rich text cell, a note and a 4 by 2 pixel PNG picture on the next free columns
   of the new row, adds a table `Model_table` (a number added when taken) over
   the two rows below it, adds a sheet, then (W5) sets a probe text and a
-  formula using it on a free row, inserts two rows above the sheet's last row
+  formula using it on a free row, (C2) writes a two-series, three-category
+  block with `writeChartData` two rows below it and adds a column chart over
+  it (`addChart`), inserts two rows above the sheet's last row
   and a column at B and renames the sheet `Model edit` (a number added when
-  taken), saves to the second directory, and checks the edits read back with
-  `XlsxReader` and the model; it also writes the
+  taken), then (C2) gives the first sheet's first typed chart the title
+  `Model chart` (`replaceChartAt`) and moves it one row down (`moveChartAt`),
+  saves to the second directory, and checks the edits read back with
+  `XlsxReader` and the model (the added chart typed, moved with its cells and
+  bound to them on the renamed sheet); it also writes the
   generated workbooks of `tool/write_model_sample.dart`, `w1_generated.xlsx`,
   `w2_generated.xlsx`, `w3_generated.xlsx` (a `Report` sheet with a filter, a
   validation, the four conditional rule kinds, two links, print settings, header
