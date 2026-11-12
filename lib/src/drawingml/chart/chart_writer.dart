@@ -582,11 +582,7 @@ final class _ChartWriter {
       value: false,
     );
     if (axis.visible) {
-      w.start('c:spPr');
-      w.empty('a:noFill');
-      _line(theme.axisLine, theme.spacing.axisLineWidth);
-      w.empty('a:effectLst');
-      w.end();
+      _axisLineShape(theme.axisLine);
       _writeAxisLabels();
     }
     _value('c:crossAx', space.ids.valueAxis.toString());
@@ -629,11 +625,17 @@ final class _ChartWriter {
   /// grid lines, the title, the number format and Excel's tick settings
   /// (`low` labels on a category axis that crosses inside the plot,
   /// [_crossesInside]).
+  ///
+  /// [vertical] turns the title (by default, the value axis' except in a bar
+  /// chart, where the category axis'); without [numberFormat] the axis has
+  /// no `c:numFmt` unless it has a format code (a scatter chart's x axis).
   void _writeAxisStart(
     ChartAxis axis,
     int id,
     String position, {
     required bool value,
+    bool? vertical,
+    bool numberFormat = true,
   }) {
     _value('c:axId', id.toString());
     w.start('c:scaling');
@@ -667,20 +669,25 @@ final class _ChartWriter {
         axis: true,
         // The value axis is vertical except in a bar chart, where the
         // category axis is.
-        vertical: value != (chart.kind == ChartKind.bar),
+        vertical: vertical ?? value != (chart.kind == ChartKind.bar),
       );
     }
     final String? formatCode = axis.formatCode;
-    w.empty('c:numFmt', <String, String>{
-      'formatCode': formatCode != null
-          ? _scrub(formatCode)
-          // A percent stacked value axis is linked to the source but shows
-          // `0%` (`chart_reference.xlsx`, charts 3, 6, 9 and 12).
-          : (value && chart.grouping == ChartGrouping.percentStacked
-                ? '0%'
-                : 'General'),
-      'sourceLinked': formatCode == null ? '1' : '0',
-    });
+    if (numberFormat || formatCode != null) {
+      w.empty('c:numFmt', <String, String>{
+        'formatCode': formatCode != null
+            ? _scrub(formatCode)
+            // A percent stacked value axis is linked to the source but shows
+            // `0%` (`chart_reference.xlsx`, charts 3, 6, 9 and 12); a
+            // scatter chart has no grouping.
+            : (value &&
+                      chart.kind != ChartKind.scatter &&
+                      chart.grouping == ChartGrouping.percentStacked
+                  ? '0%'
+                  : 'General'),
+        'sourceLinked': formatCode == null ? '1' : '0',
+      });
+    }
     // Excel ticks an area chart's category axis outside
     // (`chart_reference.xlsx`, charts 10 to 12).
     _value(
@@ -768,6 +775,16 @@ final class _ChartWriter {
     w.attribute('algn', 'ctr');
     _solidFill(color);
     w.empty('a:round');
+    w.end();
+  }
+
+  /// An axis' `c:spPr`: no fill, a line of [color] in the spacing's axis
+  /// line width, and an empty effect list.
+  void _axisLineShape(ChartColor color) {
+    w.start('c:spPr');
+    w.empty('a:noFill');
+    _line(color, theme.spacing.axisLineWidth);
+    w.empty('a:effectLst');
     w.end();
   }
 

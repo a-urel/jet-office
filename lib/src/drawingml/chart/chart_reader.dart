@@ -11,7 +11,8 @@
 /// names, categories, values, references and colours, the title, the legend,
 /// the two axes and the data labels, and of a pie or doughnut (a plot area of
 /// its one group and no axis) the slice colours and the hole size, and of a
-/// scatter chart (its one group on two value axes, the first the x axis)
+/// scatter chart (its one group on two value axes, the x axis the one of the
+/// group's first axis id)
 /// each series' x values as its categories. A part the model does not draw
 /// (another group, several groups, a third axis, a pie beside axes, a scatter
 /// group beside a category axis) is [ChartKind.unsupported], with the series
@@ -307,9 +308,9 @@ final class _ChartReader {
       }
     }
     final _Node? group = groups.firstOrNull;
-    // A scatter chart's x axis is a value axis, the first of the two (Excel
-    // writes x first, chart 4 of `chart_reference_j4.xlsx`); the typed check
-    // catches a part that has them the other way.
+    // A scatter chart's x axis is the value axis whose id is the group's
+    // first `c:axId`, else the first of the two (Excel writes x first, chart
+    // 4 of `chart_reference_j4.xlsx`).
     final bool scatter =
         group != null &&
         group.name == 'scatterChart' &&
@@ -317,12 +318,12 @@ final class _ChartReader {
         axes.length == 2 &&
         axes.every((_Node a) => a.name == 'valAx');
     final _Node? categoryAxis = scatter
-        ? axes.first
+        ? _scatterXAxis(group, axes)
         : axes
               .where((_Node a) => a.name == 'catAx' || a.name == 'dateAx')
               .firstOrNull;
     final _Node? valueAxis = scatter
-        ? axes.last
+        ? axes.firstWhere((_Node a) => !identical(a, categoryAxis))
         : axes.where((_Node a) => a.name == 'valAx').firstOrNull;
     ChartKind kind = ChartKind.unsupported;
     if (scatter) {
@@ -466,6 +467,16 @@ final class _ChartReader {
       return null;
     }
     return xmlDifference(written.bytes, bytes) == null ? space : null;
+  }
+
+  /// The x axis of a scatter [group] on the two value [axes]: the one whose
+  /// `c:axId` is the group's first, else the first in document order.
+  static _Node _scatterXAxis(_Node group, List<_Node> axes) {
+    final String? first = group.child('axId')?.val;
+    return axes
+            .where((_Node a) => first != null && a.child('axId')?.val == first)
+            .firstOrNull ??
+        axes.first;
   }
 
   static int? _axisId(_Node axis) {

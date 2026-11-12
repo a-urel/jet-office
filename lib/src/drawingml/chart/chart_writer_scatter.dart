@@ -93,64 +93,23 @@ extension _ScatterWriting on _ChartWriter {
     final int id = x ? space.ids.categoryAxis : space.ids.valueAxis;
     final int crossId = x ? space.ids.valueAxis : space.ids.categoryAxis;
     w.start('c:valAx');
-    _value('c:axId', id.toString());
-    w.start('c:scaling');
-    _value('c:orientation', 'minMax');
-    final double? max = axis.max;
-    final double? min = axis.min;
-    if (max != null) {
-      _writeNumberValue('c:max', max);
-    }
-    if (min != null) {
-      _writeNumberValue('c:min', min);
-    }
-    w.end();
-    _value('c:delete', axis.visible ? '0' : '1');
-    _value('c:axPos', x ? 'b' : 'l');
-    if (axis.gridLines) {
-      w.start('c:majorGridlines');
-      w.start('c:spPr');
-      _line(theme.gridLine, theme.spacing.gridLineWidth);
-      w.empty('a:effectLst');
-      w.end();
-      w.end();
-    }
-    final String? title = axis.title;
-    if (title != null) {
-      _writeTitle(
-        title,
-        theme.axisLabels.copyWith(size: _axisTitleSize),
-        axis: true,
-        vertical: !x,
-      );
-    }
-    final String? formatCode = axis.formatCode;
-    if (formatCode != null || !x) {
-      w.empty('c:numFmt', <String, String>{
-        'formatCode': formatCode != null ? _scrub(formatCode) : 'General',
-        'sourceLinked': formatCode == null ? '1' : '0',
-      });
-    }
-    _value('c:majorTickMark', 'none');
-    _value('c:minorTickMark', 'none');
-    // Excel keeps the labels next to the axis though a value is negative
-    // (chart 4).
-    _value('c:tickLblPos', 'nextTo');
+    // A value axis' start, whose labels Excel keeps next to the axis though
+    // a value is negative (chart 4).
+    _writeAxisStart(
+      axis,
+      id,
+      x ? 'b' : 'l',
+      value: true,
+      vertical: !x,
+      numberFormat: !x,
+    );
     if (axis.visible) {
       final ChartColor? line = theme.scatterAxisLine;
       if (line != null) {
-        w.start('c:spPr');
-        w.empty('a:noFill');
-        _line(line, theme.spacing.axisLineWidth);
-        w.empty('a:effectLst');
-        w.end();
+        _axisLineShape(line);
       } else if (x) {
         // As a category axis' line.
-        w.start('c:spPr');
-        w.empty('a:noFill');
-        _line(theme.axisLine, theme.spacing.axisLineWidth);
-        w.empty('a:effectLst');
-        w.end();
+        _axisLineShape(theme.axisLine);
       } else {
         // As a value axis', which has none.
         _noFillShape();

@@ -88,8 +88,9 @@ Each rule has the test that holds it.
   `chart_reader_test.dart` ("pies and doughnuts").
 - **Scatter charts of markers only are written and read as Excel writes them
   (C2).** A plot area of one `c:scatterChart` on two `c:valAx` reads as
-  `scatter`, the first axis as the category (x) axis. The writer writes
-  Excel's chart 4 of `chart_reference_j4.xlsx`: `c:scatterStyle lineMarker`,
+  `scatter`, the axis of the group's first `c:axId` (else the first axis) as
+  the category (x) axis. The writer writes Excel's chart 4 of
+  `chart_reference_j4.xlsx`: `c:scatterStyle lineMarker`,
   `c:varyColors 0`, each series' line `a:noFill` 3 pt (`38100`, round cap),
   a circle marker of `markerSize` in its colour whatever `lineMarkers` says,
   its categories as `c:xVal` and its values as `c:yVal`, and `c:smooth 0`

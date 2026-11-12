@@ -899,6 +899,44 @@ void main() {
         );
       });
 
+      test("the x axis is the value axis of the group's first axis id, "
+          'whatever the order of the axes', () {
+        final String xml = utf8.decode(
+          writeDrawingChartSpace(
+            DrawingChartSpace(
+              chart: scatter(
+                categoryAxis: const ChartAxis(title: 'X'),
+                valueAxis: const ChartAxis(title: 'Y', gridLines: true),
+              ),
+            ),
+            _office,
+          ).bytes,
+        );
+        final List<String> axes = RegExp(
+          '<c:valAx>.*?</c:valAx>',
+        ).allMatches(xml).map((RegExpMatch m) => m[0]!).toList();
+        final String swapped = xml.replaceFirst(
+          axes.join(),
+          axes.reversed.join(),
+        );
+        expect(swapped, isNot(xml));
+        final DrawingChartRead read = _read(swapped);
+        expect(read.chart!.kind, ChartKind.scatter);
+        expect(read.chart!.categoryAxis.title, 'X');
+        expect(read.chart!.valueAxis.title, 'Y');
+        // Excel writes x first; the swapped part is not typed.
+        expect(read.typed, isNull);
+        // Without a matching id, document order decides.
+        final DrawingChartRead unmatched = _read(
+          swapped.replaceFirst(
+            '<c:axId val="500000001"/><c:axId val="500000002"/>'
+                '</c:scatterChart>',
+            '<c:axId val="7"/><c:axId val="8"/></c:scatterChart>',
+          ),
+        );
+        expect(unmatched.chart!.categoryAxis.title, 'Y');
+      });
+
       test('a scatter group beside a category axis is unsupported', () {
         final String xml = utf8
             .decode(
