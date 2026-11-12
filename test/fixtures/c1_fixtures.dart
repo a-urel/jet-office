@@ -1,24 +1,21 @@
 /// The fixtures of milestone C1 (chart parts in a workbook).
 ///
-/// New in jet_office. Each fixture is a workbook of [XlsxWriter] with chart
-/// parts of `writeDrawingChartSpace` drawn on one sheet by the test host
-/// `withCharts` (`test/drawingml/chart/support/chart_host.dart`), so the
-/// parts reach the Open XML SDK, LibreOffice and Excel inside a real file.
-/// The values follow the conventions documented in `m1_fixtures.dart`; the
-/// charts' series refer to the sheet's cells and cache their values.
-/// [c1Charts] gives each fixture's charts, in part order, for
+/// New in jet_office. Each fixture is a workbook of [XlsxWorkbook] whose
+/// charts `XlsxSheet.addChart` draws on one sheet, so the parts reach the
+/// Open XML SDK, LibreOffice and Excel inside a real file. Until C2 a
+/// test-only host drew them; each chart carries the ids C1 gave it
+/// (`xlsxChartWithIds`), so every chart part is still the one C1's Excel
+/// check opened (`docs/excel-checks.md`, "C1"). The values follow the
+/// conventions documented in `m1_fixtures.dart`; the charts' series refer to
+/// the sheet's cells and cache their values. [c1Charts] gives each
+/// fixture's charts, in part order, for
 /// `test/drawingml/chart/chart_fixtures_test.dart`.
 library;
 
-import 'dart:typed_data';
-
-import 'package:jet_charts_core/jet_charts_core.dart';
 import 'package:jet_office/jet_office.dart';
 import 'package:jet_office/src/drawingml/chart/chart_space.dart';
-import 'package:jet_office/src/drawingml/chart/chart_writer.dart';
-import 'package:jet_office/src/xlsx/xlsx_writer.dart' show xlsxResultOf;
+import 'package:jet_office/src/xlsx/chart.dart' show xlsxChartWithIds;
 
-import '../drawingml/chart/support/chart_host.dart';
 import 'fixture.dart';
 
 /// One chart of a fixture: its typed form and the theme it is written in.
@@ -40,18 +37,49 @@ String _seriesId(int chart, int series) =>
     '{00000000-00C1-0000-${chart.toString().padLeft(4, '0')}-'
     '${series.toString().padLeft(12, '0')}}';
 
-/// The ids of chart [chart] with [series] series.
+/// The ids of chart [chart] (0-based: the part `chart{chart + 1}.xml`) with
+/// [series] series.
 DrawingChartIds _ids(int chart, int series) => DrawingChartIds(
   categoryAxis: 100000 + 2 * chart,
   valueAxis: 100001 + 2 * chart,
   series: <String>[for (int s = 0; s < series; s++) _seriesId(chart, s)],
 );
 
-/// The bytes of [charts]' parts.
-List<Uint8List> _parts(List<C1Chart> charts) => <Uint8List>[
-  for (final C1Chart c in charts)
-    writeDrawingChartSpace(c.space, c.theme).bytes,
-];
+/// Adds [charts] to [sheet] in order, each with its ids, in a grid of three
+/// across, 8 columns by 15 rows each, from row 2, moving with its cells but
+/// keeping its size: where C1's host drew them.
+void _addCharts(XlsxSheet sheet, List<C1Chart> charts) {
+  for (int i = 0; i < charts.length; i++) {
+    final DrawingChartSpace space = charts[i].space;
+    final int column = (i % 3) * 8;
+    final int row = 1 + (i ~/ 3) * 15;
+    sheet.addChart(
+      xlsxChartWithIds(
+        XlsxChart(
+          space.chart,
+          XlsxTwoCellAnchor(
+            XlsxAnchorPoint(row, column),
+            XlsxAnchorPoint(row + 15, column + 8),
+            resize: XlsxPictureResize.move,
+          ),
+          theme: charts[i].theme,
+          language: space.language,
+          autoTitle: space.autoTitle,
+        ),
+        space.ids,
+      ),
+    );
+  }
+}
+
+/// Sets [rows] on [sheet] from A1.
+void _setRows(XlsxSheet sheet, List<List<Object?>> rows) {
+  for (int r = 0; r < rows.length; r++) {
+    for (int c = 0; c < rows[r].length; c++) {
+      sheet.setCell(r, c, rows[r][c]);
+    }
+  }
+}
 
 // ---------------------------------------------------------------- c1_kinds
 
@@ -125,17 +153,14 @@ Fixture _kinds() => Fixture(
     ],
   },
   () {
-    final XlsxWriter book = XlsxWriter();
-    final XlsxSheetWriter sheet = book.addSheet('Data')
-      ..row(<Object?>['Çeyrek', 'Kuzey', 'Güney']);
-    for (int r = 0; r < 4; r++) {
-      sheet.row(<Object?>[_quarters[r], _north[r], _south[r]]);
-    }
-    final XlsxResult result = book.close();
-    return xlsxResultOf(
-      withCharts(result.bytes, 'Data', _parts(_kindsCharts())),
-      result.warnings,
-    );
+    final XlsxWorkbook book = XlsxWorkbook();
+    final XlsxSheet sheet = book.addSheet('Data');
+    _setRows(sheet, <List<Object?>>[
+      <Object?>['Çeyrek', 'Kuzey', 'Güney'],
+      for (int r = 0; r < 4; r++) <Object?>[_quarters[r], _north[r], _south[r]],
+    ]);
+    _addCharts(sheet, _kindsCharts());
+    return book.save();
   },
 );
 
@@ -335,20 +360,17 @@ Fixture _options() => Fixture(
     ],
   },
   () {
-    final XlsxWriter book = XlsxWriter();
-    final XlsxSheetWriter sheet = book.addSheet(_sheet)
-      ..row(<Object?>['Tarih', for (int s = 0; s < 8; s++) 'S${s + 1}']);
-    for (int r = 0; r < 4; r++) {
-      final DateTime d = _dates[r];
-      sheet.row(<Object?>[
-        XlsxDate(d.year, d.month, d.day),
-        for (int s = 0; s < 8; s++) _value(s, r),
-      ]);
-    }
-    final XlsxResult result = book.close();
-    return xlsxResultOf(
-      withCharts(result.bytes, _sheet, _parts(_optionsCharts())),
-      result.warnings,
-    );
+    final XlsxWorkbook book = XlsxWorkbook();
+    final XlsxSheet sheet = book.addSheet(_sheet);
+    _setRows(sheet, <List<Object?>>[
+      <Object?>['Tarih', for (int s = 0; s < 8; s++) 'S${s + 1}'],
+      for (int r = 0; r < 4; r++)
+        <Object?>[
+          XlsxDate(_dates[r].year, _dates[r].month, _dates[r].day),
+          for (int s = 0; s < 8; s++) _value(s, r),
+        ],
+    ]);
+    _addCharts(sheet, _optionsCharts());
+    return book.save();
   },
 );

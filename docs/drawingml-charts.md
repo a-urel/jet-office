@@ -9,10 +9,16 @@ import. The layer knows neither XLSX nor DOCX. Its types carry the prefix
 `Drawing`.
 
 **Status of C1: done** (the owner's Excel check of the fixtures is in
-`docs/excel-checks.md`). The owner's reference workbook is committed and every chart in
-it but one reads typed ("Excel's reference workbook" below). Nothing here
-is exported from `lib/jet_office.dart` yet: the public API arrives with the
-hosts, C2 (XLSX) and C3 (DOCX).
+`docs/excel-checks.md`). The owner's reference workbook is committed and
+every chart in it but one reads typed ("Excel's reference workbook" below).
+
+**Status of C2: built; the owner's Excel check is open**
+(`docs/excel-checks.md`, "C2"). The XLSX host is `XlsxWorkbook`'s
+(`docs/xlsx-model.md`, "What C2 adds"); the layer writes and reads the J4
+kinds below. Nothing of this layer is exported: `lib/jet_office.dart` exports
+the host's `XlsxChart` and `XlsxSheetChart` and re-exports the
+`jet_charts_core` types they take, and the `Drawing*` types stay private. C3
+is the DOCX host.
 
 ## What is in it
 
@@ -33,7 +39,14 @@ hosts, C2 (XLSX) and C3 (DOCX).
 - `lib/src/xml/xml_equivalence.dart`: `xmlDifference`.
 
 Kinds written: column, bar, line and area, each clustered, stacked or percent
-stacked, on one category axis and one value axis.
+stacked (C1), with smooth lines (J4's field), on one category axis and one
+value axis; and since C2 pie, donut, scatter of markers only, combination of
+column, line and area groups, and a secondary value axis for a column, line,
+area or combination chart. Estimates, not yet checked in Excel (the owner's C2 check,
+which holds the E3 steps, decides): the secondary axis, numeric scatter x
+values, an area group in a combination, a scatter chart's data labels
+without the `c15` leader line extension, a scatter or date x axis without
+`c:numFmt`, and a doughnut's data label position (none written).
 
 ## Rules
 
@@ -63,16 +76,109 @@ Each rule has the test that holds it.
   writer refuses (below) gives a view and no typed form.
   `chart_reader_test.dart` ("a theme the writer refuses gives a view only,
   never a throw").
-- **A kind outside the model (a pie, a combination) or a third axis is
-  `unsupportedKind`:** a view with the kind `unsupported`, no typed form.
-  `chart_reader_test.dart`.
-- **The typed form carries the language, the two axis ids, each series'
-  `c16:uniqueId` and Excel's automatic title.** Anything else Excel writes is
+- **A kind outside the model (a horizontal bar group beside another group,
+  a pie beside axes, a scatter group beside a category axis) or a third axis
+  (pair) is `unsupportedKind`:** a view with the kind `unsupported`, no typed
+  form. `chart_reader_test.dart`.
+- **Pies and doughnuts are written and read as Excel writes them (C2).** A
+  plot area of one `c:pieChart` or `c:doughnutChart` and no axis reads as
+  `pie` or `donut`. The writer writes no axes (the ids' axis fields are
+  checked but unused, and a pie reads back with `DrawingChartIds`' defaults),
+  `c:varyColors 1`, per slice a `c:dPt` in its point colour or the theme's
+  colour of its index, outlined `sliceBorderWidth` wide in the background
+  (`lt1` when that is the first light slot, as Excel's style 251 names it;
+  `a:noFill` at 0), `c:firstSliceAng 0` and a donut's `holeSizePercent`
+  rounded as `c:holeSize`; no series `c:spPr`, so a series' own colour, its
+  smoothing, the grouping and the axes are not written. Shown labels are
+  each series' with Excel's chart 7 values (a pie's `bestFit`, none for a
+  doughnut, an estimate), leader lines in the theme's `leaderLine` at 0.75 pt
+  and an empty `c15` extension; the group's repeat their position and flags,
+  with `c:showLeaderLines 1` always. The reader gives a slice in the theme's
+  colour of its index back as automatic, reads `showVal` and `showPercent`,
+  and a hole size that is missing, outside 10 to 90 or not a number (that last
+  a `badNumber`) as 75, so such a part is untyped. Charts 1, 2, 3 and 7 of
+  `chart_reference_j4.xlsx` read typed and write their parts again.
+  `excel_reference_j4_test.dart`, `chart_writer_test.dart` and
+  `chart_reader_test.dart` ("pies and doughnuts").
+- **Scatter charts of markers only are written and read as Excel writes them
+  (C2).** A plot area of one `c:scatterChart` on two `c:valAx` reads as
+  `scatter`, the axis of the group's first `c:axId` (else the first axis) as
+  the category (x) axis. The writer writes Excel's chart 4 of
+  `chart_reference_j4.xlsx`: `c:scatterStyle lineMarker`,
+  `c:varyColors 0`, each series' line `a:noFill` 3 pt (`38100`, round cap),
+  a circle marker of `markerSize` in its colour whatever `lineMarkers` says,
+  its categories as `c:xVal` and its values as `c:yVal`, and `c:smooth 0`
+  (a series' `smooth` draws nothing in a scatter chart and is not written);
+  the x axis at the bottom with the ids' `categoryAxis` and the category
+  axis' options (grid lines when `categoryAxis.gridLines`; no `c:numFmt`
+  unless it has a format code), the y axis at the left with `valueAxis`,
+  both with no tick marks, labels `nextTo` (though a value is negative),
+  the theme's `scatterAxisLine`, crossing at `autoZero` and `midCat`. The
+  reader takes a series' colour from its marker's fill. Excel's chart took
+  text x values (`c:strRef`); numeric x values (`c:xVal/c:numRef`, as
+  `_writeCategories` writes numbers and dates) are an estimate, not checked
+  in Excel: E3 decides (`packages/jet_charts_core/docs/excel-checks.md`,
+  "E3"; its steps are part of the owner's C2 check).
+  So are a scatter chart's data labels (a line's, without the `c15` leader
+  line extension the Open XML SDK refuses there), point colours (a line's
+  markers, the line without fill), an x axis' number format and axis lines
+  in a theme without `scatterAxisLine` (any chart's). Chart 4 reads typed
+  and writes its part again. `excel_reference_j4_test.dart`,
+  `chart_writer_test.dart` and `chart_reader_test.dart` ("scatter charts").
+- **Combination charts and the secondary value axis are written and read
+  (C2).** The writer writes a combination as a group per drawn kind (the
+  series' own: column, line or area; no kind is a column; a pie, donut,
+  scatter, bar or other kind there is an `ArgumentError` naming
+  `chart.series[i].kind`), in the layout's order of areas, columns, then
+  lines, each group's series in series order. Excel's chart 5 of
+  `chart_reference_j4.xlsx` ("Clustered Column - Line", one axis) is the
+  template: columns `c:gapWidth 150` and no overlap
+  (`combinationGapWidthPercent`), a line group `standard` whatever the
+  grouping, its lines 2.25 pt without markers (`combinationLineMarkers`
+  off), and no `c:crosses` on the primary axes. In a column, line, area or
+  combination chart a series bound to the secondary axis, while some series
+  is bound to the primary one, goes in a group of its own after every
+  primary group, on a second pair of the ids' `secondaryCategoryAxis` and
+  `secondaryValueAxis`, written after the primary pair: a `c:valAx` on the
+  right (`axPos r`, `crosses max`, the options of `secondaryValueAxis`, no
+  grid lines unless it asks, `0%` only when a percent stacked group is on
+  it), then a deleted `c:catAx` (`delete 1`, ticks `out`). A
+  `secondaryValueAxis` with no series on it, and a binding when every series
+  is secondary, write no second pair (the layout shows none); a bar, pie,
+  donut or scatter chart's secondary axis is an `ArgumentError`. **E3
+  decides:** the secondary axes and a combination with an area group are
+  estimates from the gallery workbook (`excel_gallery.dart`, which the owner
+  opened in Excel in E2), not checked in Excel. The reader reads several
+  bar, line and area groups whose axis ids name one or two pairs, the first
+  group's the primary one: groups of one kind as that kind, of several as a
+  combination whose series carry their group's kind (so a series of no kind
+  reads back as a column), a secondary group's series bound to the
+  secondary axis, the series in their `c:order`, and a secondary axis of
+  default options as `null`. Chart 5 reads typed but for its category
+  labels: Excel writes `nextTo` beside the value -4, the writer `low` (the
+  owner's choice, below), so Excel's own part is untyped and the part with
+  `low` reads typed and writes again. `excel_reference_j4_test.dart`,
+  `chart_writer_test.dart` and `chart_reader_test.dart` ("combination charts
+  and the secondary axis").
+- **The typed form carries the language, the axis ids (four with a
+  secondary axis), each series' `c16:uniqueId` and Excel's automatic
+  title.** Anything else Excel writes is
   fixed by the writer; a part that differs is not typed.
   `chart_reader_test.dart` ("the column chart keeps its ids").
 - **Scheme names.** `dark1`, `light1`, `dark2`, `light2` are written `tx1`,
   `bg1`, `tx2`, `bg2`; `dk1`, `lt1`, `dk2`, `lt2` are read as the same slots
-  (and the part is then not typed). `test/drawingml/color_test.dart`.
+  (and the part is then not typed). One exception: a pie's or doughnut's
+  slice border in `light1` is written `lt1`, as Excel's style 251 names it,
+  and such a part reads typed. `test/drawingml/color_test.dart`,
+  `chart_writer_test.dart` ("a pie: varied colours, a slice point per value
+  outlined in lt1, ...").
+- **Leader lines.** A pie's or doughnut's shown labels have leader lines in
+  the theme's `ChartTheme.leaderLine`, as Excel draws them; a column, bar,
+  line or area series' labels write Excel's fixed `A6A6A6` (`tx1` at
+  `lumMod` 35000 and `lumOff` 65000) whatever the theme. Intended: those
+  charts write `c:showLeaderLines 0`, so the line is never drawn and the
+  part keeps Excel's own value (charts 20 and 21 of `chart_reference.xlsx`).
+  `chart_writer_test.dart`.
 - **The text font follows the colours.** With `ChartExportColors.fileTheme` it
   is the theme's minor font (`+mn-lt`, `+mn-ea`, `+mn-cs`); with `fixed` it is
   `latin typeface`. `test/drawingml/text_test.dart`, `chart_writer_test.dart`
@@ -110,15 +216,22 @@ Each rule has the test that holds it.
 - **A number that does not parse, `NaN` and infinity are empty points** and
   report `badNumber`. A long run of digits is read in linear time.
   `chart_reader_test.dart`.
-- **The fuzz.** `chart_fuzz_test.dart` mutates the corpus (the Excel charts and
-  every C1 chart; seeds 1 to 4, 100 cases each, the same cases on the VM and in
-  Chrome, proved by a digest) and requires: the reader throws nothing, a typed
-  form writes a part that reads typed again, an opened part encodes its bytes.
-  Longer runs: `dart run tool/fuzz_chart.dart --seeds 1-200 --cases 1000`.
-  The XLSX fuzz corpora also hold `c1_kinds`, so every chart part name is
+- **The fuzz.** `chart_fuzz_test.dart` mutates the corpus (the Excel charts,
+  the seven of `chart_reference_j4.xlsx` and every C1 and `c2_kinds` chart;
+  seeds 1 to 4, 100 cases each, the same cases on the VM and in Chrome, proved
+  by a digest) and requires: the reader throws nothing, a typed form writes a
+  part that reads typed again, an opened part encodes its bytes. Longer runs:
+  `dart run tool/fuzz_chart.dart --seeds 1-200 --cases 1000`. The XLSX fuzz
+  corpora also hold `c1_kinds` and `c2_kinds`, so every chart part name is
   mutated there: the gate runs 500 cases per seed
   (`test/xlsx/read/fuzz_test.dart`, "every part name is mutated in some corpus
-  entry").
+  entry"), and the feature fuzz edits their charts through the host
+  (`test/xlsx/model/feature_fuzz_test.dart`).
+- **A pie's typed check stays linear.** A series with fewer `c:dPt` than
+  values cannot be the typed form (the writer writes one per value), so it is
+  not written to compare: a `c:ptCount` of twenty digits reads in
+  milliseconds, untyped. `chart_reader_test.dart` ("a point count beyond the
+  limit is read promptly, untyped").
 
 ### Writing
 
@@ -128,17 +241,19 @@ Each rule has the test that holds it.
   `chart_reference.xlsx` read typed. `chart_writer_test.dart` ("Excel's
   default charts"), `excel_reference_test.dart`.
 - **Data problems are issues, programmer errors throw.** A chart the writer
-  cannot express (a kind outside the J2 set, a secondary axis, a series of
-  another kind, centre text, which only a donut shows) is an `ArgumentError`;
+  cannot express (a kind other than column, bar, line, area, pie, donut,
+  scatter or combination, a secondary axis of a bar, pie, donut or scatter
+  chart, a series of another kind, centre text, which no part carries) is an
+  `ArgumentError`;
   so are axis ids that are not distinct unsigned 32-bit numbers and series
   ids that are not braced GUIDs.
   `chart_writer_test.dart` ("ArgumentError", "ids").
 - **A theme value the part cannot hold is an `ArgumentError` naming the
-  field:** a line width (`lineWidth`, the spacing's grid and axis line
-  widths) that is not finite or outside 0 to 1584 points (`ST_LineWidth`), a
-  `markerSize` that is not finite or negative (it is then kept within 2 and
-  72), a text size that is not finite or outside 1 to 4000 points
-  (`ST_TextFontSize`, `sz` 100 to 400000). `chart_writer_test.dart`
+  field:** a line width (`lineWidth`, `sliceBorderWidth`, the spacing's grid
+  and axis line widths) that is not finite or outside 0 to 1584 points
+  (`ST_LineWidth`), a `markerSize` that is not finite or negative (it is then
+  kept within 2 and 72), a text size that is not finite or outside 1 to 4000
+  points (`ST_TextFontSize`, `sz` 100 to 400000). `chart_writer_test.dart`
   ("ArgumentError").
 - **The gap width and overlap are clamped** to 0 to 500 and -100 to 100,
   rounded; a `NaN` gap width is 0. `chart_writer_test.dart` ("clamping").
@@ -157,16 +272,22 @@ Each rule has the test that holds it.
   (Excel's behaviour there is unknown). `chart_values_test.dart`,
   `chart_writer_test.dart` ("xstring escaping"), `chart_reader_test.dart`.
 - **Dates are Excel serials** (the 1900 system, with its phantom 29 February
-  1900), written in `m/d/yyyy` unless the category axis has a format.
-  `chart_values_test.dart`, `chart_writer_test.dart` ("data").
+  1900, or with `date1904` the 1904 system, counted from 1 January 1904; a
+  part written so declares `c:date1904 1`), written in `m/d/yyyy` unless the
+  category axis has a format. The XLSX host passes the workbook's system.
+  `chart_values_test.dart` ("the 1904 system counts from 1904-01-01 with no
+  phantom day"), `chart_writer_test.dart` ("data", "date categories write
+  1904 serials with date1904"), `chart_reader_test.dart` ("date categories
+  round trip in the 1904 system"), `chart_part_test.dart` ("created,
+  replaced and opened use the 1904 system").
 - **More than six series use `ChartTheme.colorOf`'s later passes:** Excel's
   colour cycle (`colors1.xml` of the owner's `chart_defaults.xlsx`): series 7
   to 12 of the Office theme are its accents at `lumMod` 60000, series 13 to 18
   at `lumMod` 80000 and `lumOff` 20000, and so on through the file's nine
-  variations, each bound to the scheme (only the list of variations is from Excel's
-  file; Excel's own rendering of series 13 and later is unchecked); a fixed
-  palette gives fixed colours of the same variations. Ten series write and
-  read back equal, and 10,000 points write and read in linear time.
+  variations, each bound to the scheme (only the list of variations is from
+  Excel's file; Excel's own rendering of series 13 and later is unchecked); a
+  fixed palette gives fixed colours of the same variations. Ten series write
+  and read back equal, and 10,000 points write and read in linear time.
   `chart_reader_test.dart` ("round trip"), `chart_writer_test.dart`
   ("colours").
 - **Line markers follow `ChartTheme.lineMarkers`:** on, each line series has
@@ -243,8 +364,9 @@ checks what it shows. What it showed, each now what the writer writes:
   `(opacity * 100000).round()` after the fill colour's luminance children,
   and `areaLine` writes the series' `a:ln` (series colour, `lineWidth`,
   round cap) in place of no line; other kinds ignore both. `showValue: false`
-  is `c:showVal 0`; `showPercent` is always `c:showPercent 0` (Excel allows
-  it in pies only), and a `holeSizePercent` is ignored outside a donut.
+  is `c:showVal 0`; `showPercent` is `c:showPercent 0` but in a pie or
+  doughnut (Excel allows it there only), and a `holeSizePercent` is ignored
+  outside a donut.
   The reader reads `smooth` and the point colours back, and reads (and drops)
   an `a:alpha` of a series fill only (any other translucent colour reads as
   no colour, as before), so the typed form still depends on writing the
@@ -265,19 +387,24 @@ checks what it shows. What it showed, each now what the writer writes:
   while `c:lang` and every other text are `tr-TR`: Office.js set the text.
   The typed form carries one language (ruling R3 of C1), so the chart gives a
   view only and its bytes are kept. A title typed in Excel's own window may
-  carry the part's language; a chart made by hand would tell.
+  carry the part's language; a chart made by hand would tell (a step of the
+  owner's C2 check).
 - **Names.** Chart 23 used the name `Tutarlar` (`Veri!$B$2:$B$5`) as its
   first series' values, but Office.js resolved it: the part's `c:f` is
-  `Veri!$B$2:$B$5`. Whether Excel writes `[0]!Tutarlar` for a name stays open
-  for C2: it needs a chart made by hand in Excel.
+  `Veri!$B$2:$B$5`. Whether Excel writes `[0]!Tutarlar` for a name stays
+  open: it needs a chart made by hand in Excel (an optional step of the
+  owner's C2 check).
 
 ### Validation
 
 - **Every written chart part is accepted by the Open XML SDK.** The fixtures
-  `c1_kinds` and `c1_options` (`test/fixtures/c1_fixtures.dart`) go through
-  `tool/ooxml_validate` in CI; `chart_fixtures_test.dart` checks they write
-  without an issue, read back typed and equal, and that the drawing holds one
-  graphic frame per chart.
+  `c1_kinds` and `c1_options` (`test/fixtures/c1_fixtures.dart`) and
+  `c2_kinds` and `c2_data` (`test/fixtures/c2_fixtures.dart`), all built by
+  `XlsxWorkbook` since C2, go through `tool/ooxml_validate` in CI;
+  `chart_fixtures_test.dart` checks they write without an issue, read back
+  typed and equal, and that the drawing holds one graphic frame per chart.
+  The SDK accepts pies, doughnuts, scatter and combination charts and the
+  secondary axis as written; no ignore was added for them.
 - **The tool ignores three SDK errors in every run:** `Sch_UndeclaredAttribute`
   and `Sch_InvalidElementContentExpectingComplex` on Excel's own
   `c16r3:dataDisplayOptions16` extension, and only on the `c:ext` at
@@ -308,34 +435,55 @@ reader's view is always available, so a host can draw a chart from any
 producer; the typed form is the promise that editing it loses nothing. A
 chart that is only a view keeps its bytes until replaced.
 
-## Open for C2
+## What C2 closed
 
-- The drawing anchor (`xdr:graphicFrame`) and the sheet's `drawing` wiring in
-  the workbook model and the writer.
-- The public API: `addChart`, the charts of a sheet.
-- `DrawingChartIssue` mapped to `XlsxWarningCode`s, with messages in `en`,
-  `de` and `tr`.
-- References generated for a list export.
-- The `style` and `colors` parts of an opened chart kept with it.
-- `date1904` from the workbook (`drawingSerialOf` knows the 1900 system only).
-- The file theme's `ThemeColors` passed to the reader.
-- The `chart_defaults` theme items still unconfirmed (`docs/excel-checks.md` of
-  `jet_charts_core`).
-- Whether Excel writes `[0]!Name` in a series reference to a workbook name:
-  `chart_reference.xlsx`'s chart 23 was made through Office.js, which
-  resolved the name to its range. A chart made by hand in Excel answers it.
-- Whether a title typed in Excel carries the part's language (chart 13 of
-  `chart_reference.xlsx`, set through Office.js, has `en-US` in a `tr-TR`
-  part and is not typed).
-- A cap on a chart part's size before it is read. `readDrawingChartSpace`
-  builds a node per element, so it holds several times the part's size in
-  memory, and `ReadLimits` allows ZIP entries of 256 MiB: C2 must refuse a
-  chart part above a size of its own choosing before reading it (or read it
-  streaming).
-- `DrawingChart.typed` after `created` or `replace` is the space as given,
-  which can differ from what reopening the bytes gives (a UTC date reads back
-  local, a category axis minimum the writer drops, scrubbed characters, `NaN`
-  scaling). A host that needs what the part holds reopens it.
+Each item C1 left open for C2, and where it went:
+
+- The drawing anchor (`xdr:graphicFrame`), the sheet's `drawing` wiring and
+  the public API: done in the model (`XlsxSheet.charts`, `addChart`,
+  `replaceChartAt`, `moveChartAt`, `removeChartAt`, `writeChartData`;
+  `docs/xlsx-model.md`, "What C2 adds"). The writer (`XlsxWriter`,
+  `XlsxStreamWriter`) gets no chart API (the owner's decision 2): its output
+  can be opened with the model and charted.
+- `DrawingChartIssue` as warnings: `unreadable` and `badNumber` are
+  `featureEntryInvalid` with the detail `chart`, `invalidCharacter` is
+  `invalidCharactersRemoved` and `nonFiniteValue` the new
+  `chartValueOmitted`, with `en`, `de` and `tr` messages;
+  `unsupportedKind` is no warning.
+- References generated for a list export: `writeChartData` writes a chart's
+  data to cells and binds it. `XlsxListExport` gets no chart: re-filed as
+  later work, when Monépro asks for a chart beside a list.
+- The `style` and `colors` parts of an opened chart: kept with it; a
+  `replaceChartAt` of another kind drops them (their content is per kind), of
+  the same kind keeps them, and `removeChartAt` drops them with the part.
+- `date1904` from the workbook and the file theme's `ThemeColors` passed to
+  the reader: done (the host passes both).
+- The `chart_defaults` theme items still unconfirmed: the spacing values
+  (padding, title and legend gaps, legend symbol and item gap) can be seen
+  only on a drawn chart, as Excel lays out a chart with an empty `c:layout`
+  itself; the owner's C2 check compares them on `c2_dashboard.xlsx` beside
+  the gallery. The label gaps (4 and 2 pt) stay with `jet_charts_core`
+  (`docs/excel-checks.md` there): no file holds them and the eye cannot
+  measure them.
+- Whether Excel writes `[0]!Name` for a series bound to a workbook name:
+  pending the owner's chart made by hand (an optional step of the C2 check).
+  A hand-written part holding `[0]!Tutarlar` reads, lists and saves
+  unchanged, and structural edits and renames leave it alone
+  (`test/xlsx/model/chart_names_test.dart`); `writeChartData` never writes
+  one.
+- Whether a title typed in Excel carries the part's language (chart 13):
+  pending a step of the owner's C2 check.
+- A cap on a chart part's size: `XlsxReadLimits.maxChartPartBytes`, 32 MiB by
+  default, checked on the entry's declared size before it is read; a part
+  over it lists with no view, warns and is kept byte for byte.
+- `DrawingChart.typed` after `created` or `replace` is the space as given:
+  the host lists a chart from the part it holds and reopens a part whose
+  content changed (a structural edit's rewrite, an undo), so `charts` gives
+  what the part holds. Caches stay as written after `setCell` or a
+  structural edit (the owner's decision 5).
+- Still open: a part name a content type override declares but no part has
+  is skipped by `addChart`, while drawings and tables (W4 code) may still
+  take such a name; a general fix in the OPC layer is a follow-up outside C2.
 
 ## Open for C3
 
@@ -346,8 +494,9 @@ chart that is only a view keeps its bytes until replaced.
 
 ## Open for both
 
-- The secondary axis, combination charts and the other kinds (J4; C2 and C3
-  write them, and the writer refuses them until then).
+- The other kinds (decision 0017 orders them later; the writer refuses them
+  until then). The secondary axis, a numeric scatter and a combination's area
+  group wait for the owner's C2 check (its E3 steps).
 - Excel's palette past 54 series: the colour cycle starts again after its
   nine variations, which `colors1.xml` does not state (unconfirmed). Series 7
   and 8 match a new chart made in Excel (the owner's check, 2026-11-09).

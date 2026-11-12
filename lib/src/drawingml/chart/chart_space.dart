@@ -4,11 +4,12 @@
 ///
 /// Not ported from Quds; written for jet_office.
 ///
-/// Beyond the chart, the typed form carries the language of the part, the two
-/// axis ids, each series' `c16:uniqueId` and whether the chart shows Excel's
-/// automatic title (ruling R3 of C1). Everything else the writer writes is
-/// fixed, as Excel for Mac writes it. A part read from a file is offered in
-/// this form only when writing the form gives the part again.
+/// Beyond the chart, the typed form carries the language of the part, the
+/// axis ids (four with a secondary axis), each series' `c16:uniqueId` and
+/// whether the chart shows Excel's automatic title (ruling R3 of C1).
+/// Everything else the writer writes is fixed, as Excel for Mac writes it. A
+/// part read from a file is offered in this form only when writing the form
+/// gives the part again.
 ///
 /// This layer imports `opc`, `xml`, `common`, `jet_charts_core` and `jet_core`
 /// only, never `xlsx` or `docx` (decisions 0014 and 0015).
@@ -54,14 +55,24 @@ final class DrawingChartIds {
   const DrawingChartIds({
     this.categoryAxis = 500000001,
     this.valueAxis = 500000002,
+    this.secondaryCategoryAxis = 500000003,
+    this.secondaryValueAxis = 500000004,
     this.series = const <String>[],
   });
 
-  /// The `c:axId` of the category axis.
+  /// The `c:axId` of the category axis, or of a scatter chart's x axis.
   final int categoryAxis;
 
-  /// The `c:axId` of the value axis.
+  /// The `c:axId` of the value axis, or of a scatter chart's y axis.
   final int valueAxis;
+
+  /// The `c:axId` of the secondary category axis, written only for a chart
+  /// with a secondary axis.
+  final int secondaryCategoryAxis;
+
+  /// The `c:axId` of the secondary value axis, written only for a chart with
+  /// a secondary axis.
+  final int secondaryValueAxis;
 
   /// The `c16:uniqueId` of each series, in series order.
   final List<String> series;
@@ -71,6 +82,8 @@ final class DrawingChartIds {
     if (other is! DrawingChartIds ||
         categoryAxis != other.categoryAxis ||
         valueAxis != other.valueAxis ||
+        secondaryCategoryAxis != other.secondaryCategoryAxis ||
+        secondaryValueAxis != other.secondaryValueAxis ||
         series.length != other.series.length) {
       return false;
     }
@@ -83,12 +96,18 @@ final class DrawingChartIds {
   }
 
   @override
-  int get hashCode =>
-      Object.hash(categoryAxis, valueAxis, Object.hashAll(series));
+  int get hashCode => Object.hash(
+    categoryAxis,
+    valueAxis,
+    secondaryCategoryAxis,
+    secondaryValueAxis,
+    Object.hashAll(series),
+  );
 
   @override
   String toString() =>
-      'DrawingChartIds($categoryAxis, $valueAxis, ${series.length} series)';
+      'DrawingChartIds($categoryAxis, $valueAxis, $secondaryCategoryAxis, '
+      '$secondaryValueAxis, ${series.length} series)';
 }
 
 /// A chart part in typed form: the chart and what the part holds beyond it.

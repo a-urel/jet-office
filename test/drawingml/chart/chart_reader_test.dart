@@ -427,6 +427,51 @@ void main() {
       );
     });
 
+    test('date categories round trip in the 1904 system', () {
+      final DrawingChartSpace space = DrawingChartSpace(
+        chart: _chart(
+          ChartKind.column,
+          series: <ChartSeries>[
+            _series(
+              categories: <Object?>[
+                DateTime(2026, 1, 1),
+                DateTime(2026, 3, 1, 12, 30),
+              ],
+            ),
+          ],
+        ),
+      );
+      final DrawingChartWritten w1904 = writeDrawingChartSpace(
+        space,
+        _office,
+        date1904: true,
+      );
+      final DrawingChartWritten w1900 = writeDrawingChartSpace(space, _office);
+      expect(utf8.decode(w1904.bytes), contains('<c:v>44561</c:v>'));
+      expect(utf8.decode(w1900.bytes), contains('<c:v>46023</c:v>'));
+      final DrawingChartRead read = readDrawingChartSpace(
+        w1904.bytes,
+        date1904: true,
+      );
+      expect(read.typed, space);
+      expect(read.chart!.series.single.categories.values, <Object?>[
+        DateTime(2026, 1, 1),
+        DateTime(2026, 3, 1, 12, 30),
+      ]);
+      final DrawingChartRead wrong = readDrawingChartSpace(w1904.bytes);
+      // 44561 read as a 1900 serial: 1,462 days earlier than the real date.
+      expect(
+        wrong.chart!.series.single.categories.values.first,
+        DateTime(2021, 12, 31),
+      );
+      // The part declares 1904, the reader was told 1900: not typed.
+      expect(wrong.typed, isNull);
+      expect(utf8.decode(w1904.bytes), contains('<c:date1904 val="1"/>'));
+      expect(utf8.decode(w1900.bytes), contains('<c:date1904 val="0"/>'));
+      // And the other way round.
+      expect(readDrawingChartSpace(w1900.bytes, date1904: true).typed, isNull);
+    });
+
     test('an app theme with fixed colours and an explicit colour', () {
       final ChartTheme app = _office.copyWith(
         exportColors: ChartExportColors.fixed,
@@ -531,6 +576,240 @@ void main() {
     });
   });
 
+  group('combination charts and the secondary axis', () {
+    final DrawingChartIds ids = DrawingChartIds(
+      categoryAxis: 100002,
+      valueAxis: 100003,
+      secondaryCategoryAxis: 200002,
+      secondaryValueAxis: 200003,
+      series: <String>[_guid(0), _guid(1), _guid(2)],
+    );
+
+    String written(Chart chart) => utf8.decode(
+      writeDrawingChartSpace(
+        DrawingChartSpace(chart: chart, ids: ids),
+        _office,
+      ).bytes,
+    );
+
+    test('a column and line combination on one axis reads back typed', () {
+      _expectRoundTrip(
+        DrawingChartSpace(
+          chart: Chart(
+            kind: ChartKind.combination,
+            series: <ChartSeries>[
+              _series(name: 'a').copyWith(kind: ChartKind.column),
+              _series(
+                name: 'b',
+                values: const <double?>[120, 95, 140],
+              ).copyWith(kind: ChartKind.line),
+            ],
+            legend: const ChartLegend(),
+          ),
+          language: 'tr-TR',
+          ids: DrawingChartIds(
+            categoryAxis: 100002,
+            valueAxis: 100003,
+            series: <String>[_guid(0), _guid(1)],
+          ),
+          autoTitle: true,
+        ),
+      );
+    });
+
+    test('a column and line combination with the line on the secondary '
+        'axis reads back typed, with the four axis ids', () {
+      final DrawingChartSpace space = DrawingChartSpace(
+        chart: Chart(
+          kind: ChartKind.combination,
+          series: <ChartSeries>[
+            _series(name: 'a').copyWith(kind: ChartKind.column),
+            _series(
+              name: 'b',
+              formatCode: '0.0',
+            ).copyWith(kind: ChartKind.line, axis: ChartAxisBinding.secondary),
+          ],
+          secondaryValueAxis: const ChartAxis(
+            title: 'Adet',
+            min: 0,
+            max: 200,
+            formatCode: '#,##0',
+          ),
+        ),
+        ids: DrawingChartIds(
+          categoryAxis: 100002,
+          valueAxis: 100003,
+          secondaryCategoryAxis: 200002,
+          secondaryValueAxis: 200003,
+          series: <String>[_guid(0), _guid(1)],
+        ),
+      );
+      _expectRoundTrip(space);
+      expect(_roundTrip(space).typed!.ids.secondaryValueAxis, 200003);
+    });
+
+    test('a combination of column, area and line reads back typed, its '
+        'series in their order', () {
+      _expectRoundTrip(
+        DrawingChartSpace(
+          chart: Chart(
+            kind: ChartKind.combination,
+            grouping: ChartGrouping.stacked,
+            series: <ChartSeries>[
+              _series(name: 'line').copyWith(kind: ChartKind.line),
+              _series(name: 'column').copyWith(kind: ChartKind.column),
+              _series(name: 'area').copyWith(kind: ChartKind.area),
+            ],
+          ),
+          // No secondary axes: their ids are not written, and read back as
+          // the defaults.
+          ids: DrawingChartIds(
+            categoryAxis: 100002,
+            valueAxis: 100003,
+            series: <String>[_guid(0), _guid(1), _guid(2)],
+          ),
+        ),
+      );
+    });
+
+    test('a line chart with a secondary series reads back typed', () {
+      _expectRoundTrip(
+        DrawingChartSpace(
+          chart: _chart(
+            ChartKind.line,
+            series: <ChartSeries>[
+              _series(name: 'a').copyWith(axis: ChartAxisBinding.secondary),
+              _series(name: 'b'),
+              _series(name: 'c').copyWith(axis: ChartAxisBinding.secondary),
+            ],
+          ),
+          ids: ids,
+        ),
+      );
+    });
+
+    test('a column chart with a secondary series and data labels reads '
+        'back typed', () {
+      _expectRoundTrip(
+        DrawingChartSpace(
+          chart: _chart(
+            ChartKind.column,
+            series: <ChartSeries>[
+              _series(name: 'a'),
+              _series(name: 'b').copyWith(axis: ChartAxisBinding.secondary),
+            ],
+            dataLabels: const ChartDataLabels(visible: true),
+          ).copyWith(secondaryValueAxis: const ChartAxis(gridLines: true)),
+          ids: DrawingChartIds(
+            categoryAxis: 100002,
+            valueAxis: 100003,
+            secondaryCategoryAxis: 200002,
+            secondaryValueAxis: 200003,
+            series: <String>[_guid(0), _guid(1)],
+          ),
+        ),
+      );
+    });
+
+    test('a secondary axis of default options reads back as null', () {
+      final Chart chart = _chart(
+        ChartKind.area,
+        series: <ChartSeries>[
+          _series(),
+          _series().copyWith(axis: ChartAxisBinding.secondary),
+        ],
+      );
+      final DrawingChartRead read = _roundTrip(
+        DrawingChartSpace(
+          chart: chart.copyWith(secondaryValueAxis: const ChartAxis()),
+        ),
+      );
+      expect(read.chart, chart);
+      expect(read.typed, isNotNull);
+    });
+
+    test('a series of no kind in a combination reads back as a column', () {
+      final DrawingChartRead read = _roundTrip(
+        DrawingChartSpace(
+          chart: Chart(
+            kind: ChartKind.combination,
+            series: <ChartSeries>[
+              _series(),
+              _series().copyWith(kind: ChartKind.line),
+            ],
+          ),
+        ),
+      );
+      expect(read.chart!.series.first.kind, ChartKind.column);
+      expect(read.typed, isNotNull);
+    });
+
+    test('a group on axes the part lacks is unsupported', () {
+      final String xml =
+          written(
+            Chart(
+              kind: ChartKind.combination,
+              series: <ChartSeries>[
+                _series().copyWith(kind: ChartKind.column),
+                _series().copyWith(kind: ChartKind.line),
+              ],
+            ),
+          ).replaceFirst(
+            '<c:axId val="100002"/><c:axId val="100003"/></c:lineChart>',
+            '<c:axId val="7"/><c:axId val="8"/></c:lineChart>',
+          );
+      final DrawingChartRead read = _read(xml);
+      expect(read.chart!.kind, ChartKind.unsupported);
+      expect(read.chart!.unsupportedName, 'barChart+lineChart');
+      expect(read.typed, isNull);
+    });
+
+    test('a secondary pair no group uses is unsupported', () {
+      final String xml =
+          written(
+            _chart(
+              ChartKind.line,
+              series: <ChartSeries>[
+                _series(),
+                _series().copyWith(axis: ChartAxisBinding.secondary),
+              ],
+            ),
+          ).replaceFirst(
+            '<c:axId val="200002"/><c:axId val="200003"/></c:lineChart>',
+            '<c:axId val="100002"/><c:axId val="100003"/></c:lineChart>',
+          );
+      expect(_read(xml).chart!.kind, ChartKind.unsupported);
+    });
+
+    test('a horizontal bar group beside another is unsupported', () {
+      final String xml = written(
+        Chart(
+          kind: ChartKind.combination,
+          series: <ChartSeries>[
+            _series().copyWith(kind: ChartKind.column),
+            _series().copyWith(kind: ChartKind.line),
+          ],
+        ),
+      ).replaceFirst('<c:barDir val="col"/>', '<c:barDir val="bar"/>');
+      expect(_read(xml).chart!.kind, ChartKind.unsupported);
+    });
+
+    test('a pie beside a column group is unsupported', () {
+      final String xml = written(
+        Chart(
+          kind: ChartKind.combination,
+          series: <ChartSeries>[
+            _series().copyWith(kind: ChartKind.column),
+            _series().copyWith(kind: ChartKind.line),
+          ],
+        ),
+      ).replaceAll('c:lineChart>', 'c:pieChart>');
+      final DrawingChartRead read = _read(xml);
+      expect(read.chart!.kind, ChartKind.unsupported);
+      expect(read.chart!.unsupportedName, 'barChart+pieChart');
+    });
+  });
+
   group('parts that are not typed', () {
     test('a theme the writer refuses gives a view only, never a throw', () {
       final ChartTextStyle text = _office.titleText;
@@ -586,7 +865,7 @@ void main() {
       expect(read.typed!.ids.series, isEmpty);
     });
 
-    test('a pie chart is unsupported', () {
+    test('a pie chart beside two axes is unsupported', () {
       final DrawingChartRead read = _read(
         excelColumnChart
             .replaceFirst('<c:barChart><c:barDir val="col"/>', '<c:pieChart>')
@@ -602,7 +881,355 @@ void main() {
       ]);
     });
 
-    test('a bar and line combination is unsupported', () {
+    group('pies and doughnuts', () {
+      test('a pie reads back typed', () {
+        _expectRoundTrip(
+          DrawingChartSpace(
+            chart: _chart(ChartKind.pie, legend: const ChartLegend()),
+            language: 'tr-TR',
+            ids: DrawingChartIds(series: <String>[_guid(1)]),
+            autoTitle: true,
+          ),
+        );
+      });
+
+      test('a doughnut of two series and a hole of 40 reads back typed', () {
+        _expectRoundTrip(
+          DrawingChartSpace(
+            chart: Chart(
+              kind: ChartKind.donut,
+              series: <ChartSeries>[
+                _series(name: 'a'),
+                _series(name: 'b'),
+              ],
+              holeSizePercent: 40,
+              title: const ChartTitle(text: 'Halka'),
+            ),
+          ),
+        );
+      });
+
+      test('labels with values and percents read back typed', () {
+        for (final ChartKind kind in <ChartKind>[
+          ChartKind.pie,
+          ChartKind.donut,
+        ]) {
+          _expectRoundTrip(
+            DrawingChartSpace(
+              chart: _chart(
+                kind,
+                dataLabels: const ChartDataLabels(
+                  visible: true,
+                  showValue: false,
+                  showPercent: true,
+                  formatCode: '0.0%',
+                ),
+              ),
+            ),
+          );
+        }
+      });
+
+      test('a point colour of its own reads back; an accent of its index '
+          'reads as automatic', () {
+        final ChartSeries series = _series().copyWith(
+          pointColors: <ChartColor?>[null, ChartColor.rgb(0x123456)],
+        );
+        _expectRoundTrip(
+          DrawingChartSpace(chart: _chart(ChartKind.pie, series: [series])),
+        );
+        final DrawingChartRead read = _roundTrip(
+          DrawingChartSpace(
+            chart: _chart(
+              ChartKind.pie,
+              series: <ChartSeries>[
+                _series().copyWith(
+                  pointColors: <ChartColor?>[_office.seriesColor(0)],
+                ),
+              ],
+            ),
+          ),
+        );
+        expect(read.chart!.series.single.pointColors, isEmpty);
+        expect(read.typed, isNotNull);
+      });
+
+      test('an app theme with fixed colours reads back equal', () {
+        final ChartTheme app = _office.copyWith(
+          exportColors: ChartExportColors.fixed,
+        );
+        _expectRoundTrip(
+          DrawingChartSpace(
+            chart: _chart(
+              ChartKind.pie,
+              legend: const ChartLegend(),
+              dataLabels: const ChartDataLabels(visible: true),
+            ),
+          ),
+          theme: app,
+        );
+      });
+
+      test('a hole size that cannot be read is a bad number, untyped', () {
+        final String xml = utf8
+            .decode(
+              writeDrawingChartSpace(
+                DrawingChartSpace(chart: _chart(ChartKind.donut)),
+                _office,
+              ).bytes,
+            )
+            .replaceFirst('<c:holeSize val="75"/>', '<c:holeSize val="x"/>');
+        final DrawingChartRead read = _read(xml);
+        expect(read.chart!.kind, ChartKind.donut);
+        expect(read.chart!.holeSizePercent, 75);
+        expect(read.typed, isNull);
+        expect(read.issues, <DrawingChartIssue>[DrawingChartIssue.badNumber]);
+      });
+
+      test('a point count beyond the limit is read promptly, untyped', () {
+        // Seed 2 case 123 of the chart fuzz's long run (C2): the values'
+        // `c:ptCount` of `c2_kinds`' doughnut set to twenty digits read in
+        // about four seconds, as the typed check wrote a `c:dPt` for each of
+        // a million slices.
+        for (final ChartKind kind in <ChartKind>[
+          ChartKind.pie,
+          ChartKind.donut,
+        ]) {
+          final String xml = utf8
+              .decode(
+                writeDrawingChartSpace(
+                  DrawingChartSpace(chart: _chart(kind)),
+                  _office,
+                ).bytes,
+              )
+              .replaceFirstMapped(
+                RegExp(
+                  r'(<c:numCache>(<c:formatCode>[^<]*</c:formatCode>)?)'
+                  r'<c:ptCount val="\d+"/>',
+                ),
+                (Match m) => '${m[1]}<c:ptCount val="99999999999999999999"/>',
+              );
+          expect(xml, contains('99999999999999999999'), reason: '$kind');
+          final Stopwatch watch = Stopwatch()..start();
+          final DrawingChartRead read = _read(xml);
+          watch.stop();
+          expect(
+            read.chart!.series.first.values.values,
+            hasLength(1 << 20),
+            reason: '$kind',
+          );
+          expect(read.typed, isNull, reason: '$kind');
+          expect(read.issues, contains(DrawingChartIssue.badNumber));
+          // About 22 ms on the VM once fixed, 3.6 s before; the bound
+          // leaves Chrome and a loaded machine room.
+          expect(watch.elapsed, lessThan(const Duration(seconds: 3)));
+        }
+      });
+
+      test('a hole size outside 10 to 90 reads as 75, untyped', () {
+        for (final String size in <String>['5', '95']) {
+          final String xml = utf8
+              .decode(
+                writeDrawingChartSpace(
+                  DrawingChartSpace(chart: _chart(ChartKind.donut)),
+                  _office,
+                ).bytes,
+              )
+              .replaceFirst(
+                '<c:holeSize val="75"/>',
+                '<c:holeSize val="$size"/>',
+              );
+          final DrawingChartRead read = _read(xml);
+          expect(read.chart!.holeSizePercent, 75, reason: size);
+          expect(read.typed, isNull, reason: size);
+        }
+      });
+    });
+
+    group('scatter charts', () {
+      Chart scatter({
+        List<ChartSeries>? series,
+        ChartAxis categoryAxis = const ChartAxis(gridLines: true),
+        ChartAxis valueAxis = const ChartAxis(gridLines: true),
+        ChartDataLabels dataLabels = const ChartDataLabels(),
+      }) => Chart(
+        kind: ChartKind.scatter,
+        series:
+            series ??
+            <ChartSeries>[
+              _series(
+                name: 'Satış',
+                nameReference: r'Sheet1!$B$1',
+                categories: const <Object?>[1.5, 2, 4],
+              ),
+            ],
+        categoryAxis: categoryAxis,
+        valueAxis: valueAxis,
+        dataLabels: dataLabels,
+        legend: const ChartLegend(),
+      );
+
+      test('numeric x values read back typed', () {
+        _expectRoundTrip(
+          DrawingChartSpace(
+            chart: scatter(),
+            ids: DrawingChartIds(series: <String>[_guid(1)]),
+            autoTitle: true,
+          ),
+        );
+      });
+
+      test('text x values of two series read back typed', () {
+        _expectRoundTrip(
+          DrawingChartSpace(
+            chart: scatter(
+              series: <ChartSeries>[
+                _series(name: 'a'),
+                _series(name: 'b', values: const <double?>[-4, null, 9]),
+              ],
+            ),
+            language: 'tr-TR',
+          ),
+        );
+      });
+
+      test('date x values read back typed, in both date systems', () {
+        final DrawingChartSpace space = DrawingChartSpace(
+          chart: scatter(
+            series: <ChartSeries>[
+              _series(
+                categories: <Object?>[
+                  DateTime(2026, 1, 1),
+                  DateTime(2026, 2, 1),
+                  DateTime(2026, 3, 1),
+                ],
+              ),
+            ],
+          ),
+        );
+        _expectRoundTrip(space);
+        for (final bool date1904 in <bool>[false, true]) {
+          final DrawingChartRead read = readDrawingChartSpace(
+            writeDrawingChartSpace(space, _office, date1904: date1904).bytes,
+            date1904: date1904,
+          );
+          expect(read.typed, space, reason: '$date1904');
+        }
+      });
+
+      test('the axes\' options read back typed: no x grid lines, titles, '
+          'a fixed range, formats, a hidden axis', () {
+        _expectRoundTrip(
+          DrawingChartSpace(
+            chart: scatter(
+              categoryAxis: const ChartAxis(
+                title: 'X',
+                min: 0,
+                max: 10,
+                majorUnit: 2,
+                formatCode: '0.0',
+              ),
+              valueAxis: const ChartAxis(
+                title: 'Y',
+                formatCode: '#,##0',
+                gridLines: false,
+              ),
+            ),
+          ),
+        );
+        _expectRoundTrip(
+          DrawingChartSpace(
+            chart: scatter(
+              valueAxis: const ChartAxis(visible: false, gridLines: true),
+            ),
+          ),
+        );
+      });
+
+      test('a series and point colour of its own read back typed', () {
+        final ChartColor red = ChartColor.rgb(0xFF0000);
+        final DrawingChartSpace space = DrawingChartSpace(
+          chart: scatter(
+            series: <ChartSeries>[
+              _series(
+                color: ChartColor.rgb(0x123456),
+              ).copyWith(pointColors: <ChartColor?>[null, red]),
+            ],
+          ),
+        );
+        _expectRoundTrip(space);
+        final ChartSeries read = _roundTrip(space).chart!.series.single;
+        expect(read.color, ChartColor.rgb(0x123456));
+        expect(read.pointColors, <ChartColor?>[null, red]);
+      });
+
+      test('data labels and an app theme with fixed colours read back '
+          'typed', () {
+        _expectRoundTrip(
+          DrawingChartSpace(
+            chart: scatter(dataLabels: const ChartDataLabels(visible: true)),
+          ),
+          theme: _office.copyWith(exportColors: ChartExportColors.fixed),
+        );
+      });
+
+      test("the x axis is the value axis of the group's first axis id, "
+          'whatever the order of the axes', () {
+        final String xml = utf8.decode(
+          writeDrawingChartSpace(
+            DrawingChartSpace(
+              chart: scatter(
+                categoryAxis: const ChartAxis(title: 'X'),
+                valueAxis: const ChartAxis(title: 'Y', gridLines: true),
+              ),
+            ),
+            _office,
+          ).bytes,
+        );
+        final List<String> axes = RegExp(
+          '<c:valAx>.*?</c:valAx>',
+        ).allMatches(xml).map((RegExpMatch m) => m[0]!).toList();
+        final String swapped = xml.replaceFirst(
+          axes.join(),
+          axes.reversed.join(),
+        );
+        expect(swapped, isNot(xml));
+        final DrawingChartRead read = _read(swapped);
+        expect(read.chart!.kind, ChartKind.scatter);
+        expect(read.chart!.categoryAxis.title, 'X');
+        expect(read.chart!.valueAxis.title, 'Y');
+        // Excel writes x first; the swapped part is not typed.
+        expect(read.typed, isNull);
+        // Without a matching id, document order decides.
+        final DrawingChartRead unmatched = _read(
+          swapped.replaceFirst(
+            '<c:axId val="500000001"/><c:axId val="500000002"/>'
+                '</c:scatterChart>',
+            '<c:axId val="7"/><c:axId val="8"/></c:scatterChart>',
+          ),
+        );
+        expect(unmatched.chart!.categoryAxis.title, 'Y');
+      });
+
+      test('a scatter group beside a category axis is unsupported', () {
+        final String xml = utf8
+            .decode(
+              writeDrawingChartSpace(
+                DrawingChartSpace(chart: scatter()),
+                _office,
+              ).bytes,
+            )
+            .replaceFirst('<c:valAx>', '<c:catAx>')
+            .replaceFirst('</c:valAx>', '</c:catAx>');
+        final DrawingChartRead read = _read(xml);
+        expect(read.chart!.kind, ChartKind.unsupported);
+        expect(read.chart!.unsupportedName, 'scatterChart');
+        expect(read.typed, isNull);
+      });
+    });
+
+    test('a bar and line combination on axes the part lacks is '
+        'unsupported', () {
       final String line = RegExp(
         '<c:lineChart>.*</c:lineChart>',
       ).firstMatch(excelLineChart)![0]!;

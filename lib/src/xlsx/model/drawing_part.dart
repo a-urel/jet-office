@@ -7,16 +7,19 @@
 /// ([OpaqueXml]), so a chart, a shape, a group or a picture nobody edits is
 /// written back character for character. A `oneCellAnchor` or `twoCellAnchor`
 /// that directly holds a picture showing embedded media also keeps its typed
-/// [XlsxAnchor] and [DrawingPic]; every other child of the root is an entry
-/// without a value. An edit changes [DrawingPart.entries], a mutable list, and
-/// [DrawingPart.encode] writes the part from it; each entry knows the `cNvPr`
-/// ids it uses, so a new picture takes a free one ([DrawingPart.nextId]). A
-/// new entry is the writer's anchor ([DrawingEntry.rendered]); a moved one
-/// keeps all but its place ([DrawingEntry.movedTo]).
+/// [XlsxAnchor] and [DrawingPic], and one that directly holds a chart's
+/// graphic frame its [XlsxAnchor] and [DrawingChartFrame]; every other child
+/// of the root is an entry without a value. An edit changes
+/// [DrawingPart.entries], a mutable list, and [DrawingPart.encode] writes the
+/// part from it; each entry knows the `cNvPr` ids it uses, so a new picture
+/// takes a free one ([DrawingPart.nextId]). A new entry is the writer's
+/// anchor ([DrawingEntry.rendered]); a moved one keeps all but its place
+/// ([DrawingEntry.movedTo]).
 library;
 
 import 'dart:typed_data';
 
+import '../../drawingml/chart/chart_space.dart' show drawingChartNamespace;
 import '../../drawingml/picture.dart';
 import '../../opc/ooxml.dart';
 import '../../opc/opaque_xml.dart';
@@ -33,18 +36,31 @@ import 'item_group.dart'
     show checkListRoom, readerOf, renderElements, rewrittenElement;
 import 'reference_holders.dart' show SpliceEdit, spliceElement;
 
+/// The identity of a chart's graphic frame: its `cNvPr` `id`, `name` and
+/// `description` (`descr`), and the relationship id `chartId` its `c:chart`
+/// names.
+typedef DrawingChartFrame = ({
+  int id,
+  String name,
+  String? description,
+  String chartId,
+});
+
 /// One child of a drawing's root: the element as written and, for a picture
-/// the model lists, where it sits and what it is.
+/// or a chart the model lists, where it sits and what it is.
 ///
 /// Immutable: an edit replaces the entry.
 final class DrawingEntry {
   /// An entry kept as [source], which holds the `cNvPr` ids [ids]; [anchor]
-  /// and [pic] are `null` for an element that is no picture the model reads.
+  /// is `null` for an element that is no picture or chart the model reads,
+  /// [pic] for one that is no picture and [chartFrame] for one that is no
+  /// chart.
   DrawingEntry({
     required this.source,
     this.ids = const <int>[],
     this.anchor,
     this.pic,
+    this.chartFrame,
   });
 
   /// The entry of [picture] as the writer renders it, with the `cNvPr` id
@@ -68,6 +84,33 @@ final class DrawingEntry {
     _noWarning,
   );
 
+  /// The entry of a chart frame as [writeChartFrame] renders it: at
+  /// [anchor] (one-cell sizes [extent]), with the `cNvPr` [id], [name] and
+  /// [description], showing the chart part of the relationship [chartId].
+  factory DrawingEntry.renderedChart(
+    XlsxAnchor anchor, {
+    required ({int cx, int cy})? extent,
+    required int id,
+    required String name,
+    required String? description,
+    required String chartId,
+  }) => _entry(
+    renderElements(
+      (XmlWriter w) => writeChartFrame(
+        w,
+        anchor,
+        extent: extent,
+        id: id,
+        name: name,
+        description: description,
+        chartId: chartId,
+      ),
+      namespaces: const <String, String>{'xdr': Ns.xdr, 'a': Ns.drawingMain},
+    ).single,
+    <int>[id],
+    _noWarning,
+  );
+
   /// The element as written.
   final OpaqueXml source;
 
@@ -78,11 +121,19 @@ final class DrawingEntry {
   /// first use. Throws XML errors as a reader does.
   late final Set<String> relationshipIds = relationshipIdsIn(source);
 
+  /// The `name` of every `cNvPr` the element holds, read on first use.
+  /// Throws XML errors as a reader does.
+  late final Set<String> names = _namesIn(source);
+
   /// Where the picture sits, or `null`.
   final XlsxAnchor? anchor;
 
   /// The picture's identity and the relationship of its media, or `null`.
   final DrawingPic? pic;
+
+  /// The chart frame's identity and the relationship of its chart part, or
+  /// `null`.
+  final DrawingChartFrame? chartFrame;
 
   /// This picture at [place], whose size in EMU is [extent] for a one-cell
   /// anchor: the element takes the kind of [place] and its markers, `ext` and
@@ -438,6 +489,21 @@ Set<String> relationshipIdsIn(OpaqueXml element) {
   return ids;
 }
 
+/// The `name` of every `cNvPr` [element] holds, at any depth. Throws XML
+/// errors as a reader does on what a file holds.
+Set<String> _namesIn(OpaqueXml element) {
+  final Set<String> names = <String>{};
+  final XmlPullReader r = readerOf(element);
+  do {
+    if (r.eventType != XmlEventType.startElement || r.localName != 'cNvPr') {
+      continue;
+    }
+    final String? name = r.getAttribute('name');
+    if (name != null) names.add(name);
+  } while (r.next());
+  return names;
+}
+
 /// A drawing part with its anchors kept as written and its pictures typed.
 final class DrawingPart implements PartContent {
   DrawingPart._(this.root, this.entries);
@@ -461,8 +527,12 @@ final class DrawingPart implements PartContent {
   /// warning, as is every other element. A `pic` that cannot be read (no
   /// numeric `cNvPr` id, neither `r:embed` nor `r:link`, a marker or an
   /// `ext` that is not a number, a missing marker) is kept without a value
-  /// and reported to [warn] as `pic`. Each entry keeps the `id` of every
-  /// `cNvPr` it holds.
+  /// and reported to [warn] as `pic`. One holding, with no `pic`, a
+  /// `graphicFrame` whose `a:graphicData` shows a chart is typed with its
+  /// [DrawingChartFrame]; a chart frame without a numeric `cNvPr` id or a
+  /// `c:chart` `r:id`, or with a marker or `ext` as a broken picture's, is
+  /// kept without a value and reported as `chart`. Each entry keeps the `id`
+  /// of every `cNvPr` it holds.
   ///
   /// Throws an `XlsxReadException` (`limitExceeded`, naming `maxMerges` and
   /// [part]) when the part holds more children than [limits] allows, and XML
@@ -539,18 +609,33 @@ DrawingEntry _entry(OpaqueXml source, List<int> ids, WarnFn warn) {
           source.localName != 'twoCellAnchor')) {
     return DrawingEntry(source: source, ids: ids);
   }
-  final ({XlsxAnchor anchor, DrawingPic pic})? typed = _typed(source, warn);
+  final _Typed? typed = _typed(source, warn);
   return DrawingEntry(
     source: source,
     ids: ids,
     anchor: typed?.anchor,
     pic: typed?.pic,
+    chartFrame: typed?.chartFrame,
   );
 }
 
-/// The anchor and picture of [source], an anchor element, or `null` when it
-/// holds no picture the model reads; a picture that is broken is reported.
-({XlsxAnchor anchor, DrawingPic pic})? _typed(OpaqueXml source, WarnFn warn) {
+/// What [_typed] reads of an anchor: where it sits and either its picture or
+/// its chart frame.
+typedef _Typed = ({
+  XlsxAnchor anchor,
+  DrawingPic? pic,
+  DrawingChartFrame? chartFrame,
+});
+
+/// The anchor and the picture or chart frame of [source], an anchor element,
+/// or `null` when it holds neither one the model reads; a broken picture is
+/// reported as `pic`, a broken chart frame as `chart`.
+///
+/// The first `pic` child is the anchor's object, else its first
+/// `graphicFrame`, which is a chart frame when its `a:graphicData` has the
+/// chart namespace as its `uri` (any other graphic is no chart, and no
+/// problem).
+_Typed? _typed(OpaqueXml source, WarnFn warn) {
   final XmlPullReader r = readerOf(source);
   final bool two = source.localName == 'twoCellAnchor';
   final String? editAs = r.getAttribute('editAs');
@@ -558,7 +643,9 @@ DrawingEntry _entry(OpaqueXml source, List<int> ids, WarnFn warn) {
   XlsxAnchorPoint? to;
   ({int cx, int cy})? ext;
   DrawingPic? pic;
+  _FrameRead? frame;
   bool hasPic = false;
+  bool sawFrame = false;
   bool broken = false;
   final int depth = r.depth;
   if (r.isEmptyElement) return null;
@@ -593,27 +680,22 @@ DrawingEntry _entry(OpaqueXml source, List<int> ids, WarnFn warn) {
         hasPic = true;
         pic = readDrawingPic(r);
         if (pic == null) broken = true;
+      case 'graphicFrame':
+        if (hasPic || sawFrame) {
+          r.skip();
+          continue;
+        }
+        sawFrame = true;
+        frame = _readFrame(r);
       default:
         r.skip();
     }
   }
-  if (!hasPic) return null;
-  final DrawingPic? found = pic;
-  if (found != null && found.embedId == null) {
-    // A linked picture is not an error; a picture of nothing is.
-    if (found.linkId != null) return null;
-    broken = true;
-  }
-  if (found == null ||
-      broken ||
-      from == null ||
-      (two ? to == null : ext == null)) {
-    warn('pic');
-    return null;
-  }
-  final XlsxAnchor anchor = two
+  final bool placed =
+      !broken && from != null && (two ? to != null : ext != null);
+  XlsxAnchor anchor() => two
       ? XlsxTwoCellAnchor(
-          from,
+          from!,
           to!,
           resize: switch (editAs) {
             'oneCell' => XlsxPictureResize.move,
@@ -622,11 +704,112 @@ DrawingEntry _entry(OpaqueXml source, List<int> ids, WarnFn warn) {
           },
         )
       : XlsxOneCellAnchor(
-          from,
+          from!,
           width: ext!.cx / emuPerPixel,
           height: ext.cy / emuPerPixel,
         );
-  return (anchor: anchor, pic: found);
+  final _FrameRead? chart = frame;
+  if (!hasPic && chart != null) {
+    final int? id = chart.id;
+    final String? chartId = chart.chartId;
+    if (!placed || id == null || chartId == null) {
+      warn('chart');
+      return null;
+    }
+    return (
+      anchor: anchor(),
+      pic: null,
+      chartFrame: (
+        id: id,
+        name: chart.name,
+        description: chart.description,
+        chartId: chartId,
+      ),
+    );
+  }
+  if (!hasPic) return null;
+  final DrawingPic? found = pic;
+  if (found != null && found.embedId == null) {
+    // A linked picture is not an error; a picture of nothing is.
+    if (found.linkId != null) return null;
+    broken = true;
+  }
+  if (found == null || broken || !placed) {
+    warn('pic');
+    return null;
+  }
+  return (anchor: anchor(), pic: found, chartFrame: null);
+}
+
+/// What [_readFrame] reads of a chart's graphic frame: the `cNvPr` id (`null`
+/// when it is missing or not a whole number), name and description, and the
+/// `r:id` of the `c:chart` (`null` when it has none).
+typedef _FrameRead = ({
+  int? id,
+  String name,
+  String? description,
+  String? chartId,
+});
+
+/// Reads the `graphicFrame` [r] is on and consumes it; `null` when it shows
+/// no chart (its `a:graphicData` `uri` is not the chart namespace). The first
+/// `cNvPr` of the first `nvGraphicFramePr` and the first `c:chart` of the
+/// first `a:graphic` are read.
+_FrameRead? _readFrame(XmlPullReader r) {
+  if (r.isEmptyElement) {
+    r.skip();
+    return null;
+  }
+  int? id;
+  String name = '';
+  String? description;
+  bool named = false;
+  bool chart = false;
+  bool graphic = false;
+  String? chartId;
+  final int depth = r.depth;
+  while (r.next()) {
+    if (r.eventType == XmlEventType.endElement && r.depth < depth) break;
+    if (r.eventType != XmlEventType.startElement) continue;
+    final int level = r.depth - depth;
+    final String ns = r.namespaceUri;
+    final String local = r.localName;
+    if (level == 1) {
+      if (ns == Ns.xdr && local == 'nvGraphicFramePr' && !named) continue;
+      if (ns == Ns.drawingMain && local == 'graphic' && !graphic) {
+        graphic = true;
+        continue;
+      }
+      r.skip();
+    } else if (level == 2 && ns == Ns.xdr && local == 'cNvPr' && !named) {
+      named = true;
+      id = int.tryParse(r.getAttribute('id') ?? '');
+      name = r.getAttribute('name') ?? '';
+      description = r.getAttribute('descr');
+      r.skip();
+    } else if (level == 2 &&
+        ns == Ns.drawingMain &&
+        local == 'graphicData' &&
+        !chart) {
+      chart = r.getAttribute('uri') == drawingChartNamespace;
+      if (!chart) r.skip();
+    } else if (level == 3 &&
+        ns == drawingChartNamespace &&
+        local == 'chart' &&
+        chartId == null) {
+      for (int i = 0; i < r.attributeCount; i++) {
+        if (r.attributeNamespace(i) == Ns.rel &&
+            r.attributeLocalName(i) == 'id') {
+          chartId = r.attributeValue(i);
+        }
+      }
+      r.skip();
+    } else {
+      r.skip();
+    }
+  }
+  if (!chart) return null;
+  return (id: id, name: name, description: description, chartId: chartId);
 }
 
 /// Reads the marker [r] is on (`from` or `to`) and consumes it; `null` when

@@ -32,6 +32,18 @@ String formatWarning(XlsxWarning w, OfficeLocale locale) {
   // A feature of the workbook has no sheet.
   final bool book = sheet.isEmpty;
   return switch ((w.code, locale)) {
+    (XlsxWarningCode.invalidCharactersRemoved, OfficeLocale.en)
+        when w.cells.isEmpty && w.detail != null =>
+      'Characters that XML does not allow were removed from the text of chart '
+          "'$id' on sheet '$sheet'.",
+    (XlsxWarningCode.invalidCharactersRemoved, OfficeLocale.de)
+        when w.cells.isEmpty && w.detail != null =>
+      'Zeichen, die XML nicht erlaubt, wurden aus dem Text des Diagramms '
+          '„$id“ im Blatt „$sheet“ entfernt.',
+    (XlsxWarningCode.invalidCharactersRemoved, OfficeLocale.tr)
+        when w.cells.isEmpty && w.detail != null =>
+      "“$sheet” sayfasındaki “$id” grafiğinin metninden XML'in izin "
+          'vermediği karakterler çıkarıldı.',
     (XlsxWarningCode.invalidCharactersRemoved, OfficeLocale.en) =>
       "$count cell(s) on sheet '$sheet' had characters removed that XML does "
           'not allow$cells.',
@@ -468,5 +480,14 @@ String formatWarning(XlsxWarning w, OfficeLocale locale) {
       '${book ? 'Çalışma kitabındaki' : '“$sheet” sayfasındaki'} bir özellik '
           'girdisi okunamıyor ($id); olduğu gibi korunuyor ve listeye '
           'alınmıyor.',
+    (XlsxWarningCode.chartValueOmitted, OfficeLocale.en) =>
+      "A value that is not a finite number was left out of chart '$id' on "
+          "sheet '$sheet'; the chart shows a gap there.",
+    (XlsxWarningCode.chartValueOmitted, OfficeLocale.de) =>
+      'Ein Wert, der keine endliche Zahl ist, wurde im Diagramm „$id“ im '
+          'Blatt „$sheet“ ausgelassen; das Diagramm zeigt dort eine Lücke.',
+    (XlsxWarningCode.chartValueOmitted, OfficeLocale.tr) =>
+      '“$sheet” sayfasındaki “$id” grafiğinde sonlu sayı olmayan bir değer '
+          'dışarıda bırakıldı; grafik orada boşluk gösteriyor.',
   };
 }

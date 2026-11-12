@@ -6,6 +6,7 @@
 library;
 
 import 'c1_fixtures.dart';
+import 'c2_fixtures.dart';
 import 'fixture.dart';
 import 'm1_fixtures.dart';
 import 'm2_fixtures.dart';
@@ -24,4 +25,5 @@ List<Fixture> allFixtures() => <Fixture>[
   ...m4Fixtures(),
   ...m5Fixtures(),
   ...c1Fixtures(),
+  ...c2Fixtures(),
 ];

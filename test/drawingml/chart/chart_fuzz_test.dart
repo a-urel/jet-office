@@ -16,9 +16,10 @@ const int _cases = 100;
 /// Adler-32 of the first [_cases] cases of each of [_seeds]: their
 /// descriptions and the Adler-32 of their bytes, computed once on the VM. The
 /// Chrome leg compares it, which proves a seed gives the same cases in a
-/// browser. A change to the writer, to the C1 fixtures' charts or to the
-/// mutations changes it.
-const int _casesDigest = 1119311443;
+/// browser. A change to the writer, to the C1 or C2 fixtures' charts, to the
+/// corpus or to the mutations changes it (C2 added the J4 Excel parts and
+/// `c2_kinds`).
+const int _casesDigest = 3693962540;
 
 /// Adler-32 of [data], in arithmetic that stays exact in a browser.
 int _adler32(List<int> data) {
@@ -32,7 +33,7 @@ int _adler32(List<int> data) {
 }
 
 void main() {
-  test('the corpus holds the Excel charts and every C1 chart', () {
+  test('the corpus holds the Excel charts and every C1 and C2 chart', () {
     final List<String> names = <String>[
       for (final ({String name, Uint8List bytes}) e in chartFuzzCorpus())
         e.name,
@@ -40,18 +41,28 @@ void main() {
     expect(names, <String>[
       'excel_column',
       'excel_line',
+      for (int i = 1; i <= 7; i++) 'excel_j4_chart$i',
       for (int i = 1; i <= 12; i++) 'c1_kinds_chart$i',
       for (int i = 1; i <= 6; i++) 'c1_options_chart$i',
+      for (int i = 1; i <= 7; i++) 'c2_kinds_chart$i',
     ]);
   });
 
-  test('every corpus entry reads typed in its theme and exercises cleanly', () {
+  test('every corpus entry reads typed in its theme, but for the J4 '
+      'combination, and exercises cleanly', () {
     for (final ({String name, Uint8List bytes}) entry in chartFuzzCorpus()) {
       final DrawingChartRead read = readDrawingChartSpace(
         entry.bytes,
         theme: chartFuzzTheme(entry.name),
       );
-      expect(read.typed, isNotNull, reason: entry.name);
+      expect(read.chart, isNotNull, reason: entry.name);
+      // Excel writes its category labels `nextTo` under a negative value,
+      // where the writer writes `low` (`excel_reference_j4_test.dart`).
+      expect(
+        read.typed,
+        entry.name == 'excel_j4_chart5' ? isNull : isNotNull,
+        reason: entry.name,
+      );
       expect(() => exerciseChart(entry.bytes, entry.name), returnsNormally);
     }
   });

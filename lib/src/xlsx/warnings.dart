@@ -23,7 +23,10 @@ import 'warning_messages.dart';
 /// What kind of data problem an [XlsxWarning] reports.
 enum XlsxWarningCode {
   /// Characters XML does not allow (control characters, lone surrogates) were
-  /// removed from the text of a cell or a note.
+  /// removed from the text of a cell or a note, or from the text of a chart
+  /// the workbook model wrote (`XlsxSheet.addChart`,
+  /// `XlsxSheet.replaceChartAt`): such a warning names no cell, and its
+  /// [XlsxWarning.detail] is the chart's name.
   invalidCharactersRemoved,
 
   /// The text of a cell or a note was cut to Excel's limit of 32,767
@@ -222,13 +225,24 @@ enum XlsxWarningCode {
   layoutInvalid,
 
   /// Editing an opened workbook: an entry of a sheet or workbook feature (a
-  /// link, a validation, a rule, a note, a picture, a table, a defined name,
-  /// a document property and the like) could not be read; it is kept as
-  /// written and left out of the typed list. The detail names the
+  /// link, a validation, a rule, a note, a picture, a chart, a table, a
+  /// defined name, a document property and the like) could not be read; it
+  /// is kept as written and left out of the typed list. The detail names the
   /// element, and the problem, in English; after ten, one warning without a
-  /// detail counts the rest. A workbook's entry has an empty
+  /// detail counts the rest. A chart (detail `chart`, once per sheet) is a
+  /// frame whose relationship dangles or is not a chart's, a part that is not
+  /// a chart or is larger than `XlsxReadLimits.maxChartPartBytes`, which
+  /// lists with no view, or a part with a number that cannot be read, which
+  /// lists. A workbook's entry has an empty
   /// [XlsxWarning.sheet]. It names no cell.
   featureEntryInvalid,
+
+  /// Editing an opened workbook: a value of a chart the model wrote
+  /// (`XlsxSheet.addChart`, `XlsxSheet.replaceChartAt`) was `NaN` or
+  /// infinite, which a chart part cannot hold, and was left out: the chart
+  /// shows a gap there. Reported once per chart written; [XlsxWarning.detail]
+  /// is the chart's name. It names no cell.
+  chartValueOmitted,
 }
 
 /// Something the writer or the workbook model changed or could not store

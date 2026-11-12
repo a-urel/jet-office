@@ -22,22 +22,30 @@
 /// @docImport 'xlsx_workbook.dart';
 library;
 
+import 'dart:typed_data';
+
+import 'package:jet_charts_core/jet_charts_core.dart'
+    show Chart, ChartKind, ChartSeries, ChartTheme;
 import 'package:jet_core/jet_core.dart' show FormatKind;
 
 import '../../common/image.dart'
     show OfficeImage, OfficeImageFormat, checkImage;
+import '../../common/theme_colors.dart';
+import '../../drawingml/chart/chart_part.dart';
+import '../../drawingml/chart/chart_space.dart';
 import '../../drawingml/media.dart';
 import '../../drawingml/picture.dart' show DrawingPic, emuPerPixel;
 import '../../opc/change_log.dart';
 import '../../opc/ooxml.dart';
 import '../../opc/opaque_xml.dart';
-import '../../opc/package.dart' show OpcPackage, OpcRelationship;
+import '../../opc/package.dart' show OpcPackage, OpcRelationship, PartContent;
 import '../../xml/xml_escape.dart';
 import '../../xml/xml_number.dart';
 import '../../xml/xml_pull_reader.dart';
 import '../../xml/xml_writer.dart';
 import '../cell_encoder.dart';
 import '../cell_ref.dart';
+import '../chart.dart';
 import '../color.dart';
 import '../column.dart';
 import '../conditional_format.dart';
@@ -53,7 +61,9 @@ import '../drawing.dart'
         XlsxOneCellAnchor,
         XlsxPicture,
         checkAnchor,
+        checkChartFrame,
         checkPicture;
+import '../formula/formula_reference.dart' show renderSheetPrefix;
 import '../formula/formula_rewrite.dart';
 import '../formula/reference_shift.dart';
 import '../formula/structured_reference.dart';
@@ -124,6 +134,7 @@ import 'vml_part.dart';
 import 'workbook_part.dart';
 import 'worksheet_part.dart';
 
+part 'xlsx_sheet_charts.dart';
 part 'xlsx_sheet_layout.dart';
 part 'xlsx_sheet_links.dart';
 part 'xlsx_sheet_merges.dart';
@@ -145,6 +156,10 @@ abstract interface class SheetHost {
 
   /// Whether the workbook counts dates from 1904.
   bool get date1904;
+
+  /// The colours of the workbook's theme, read once; `null` for no theme or
+  /// one that cannot be read.
+  ThemeColors? get themeColors;
 
   /// The workbook part, which holds the defined names.
   WorkbookPart get workbookPart;
@@ -372,6 +387,7 @@ T _recordSheetEdit<T>(
 /// `A`.
 final class XlsxSheet
     with
+        _SheetCharts,
         _SheetLayout,
         _SheetLinks,
         _SheetMerges,

@@ -9,8 +9,8 @@
 ///
 /// A seed gives the same cases on the VM and in a browser: [Xorshift32]
 /// stays within 32 bits, and the corpus is text (the Excel parts as
-/// committed, the C1 parts as the writer writes them), never a ZIP, so no
-/// deflater is involved (decision 0006).
+/// committed, the C1 and C2 parts as the writer writes them), never a ZIP,
+/// so no deflater is involved (decision 0006).
 ///
 /// Not ported from Quds; written for jet_office.
 library;
@@ -25,8 +25,10 @@ import 'package:jet_office/src/drawingml/chart/chart_space.dart';
 import 'package:jet_office/src/drawingml/chart/chart_writer.dart';
 
 import '../../../fixtures/c1_fixtures.dart';
+import '../../../fixtures/c2_fixtures.dart';
 import '../../../support/fuzz_mutations.dart';
 import 'excel_charts.dart';
+import 'excel_charts_j4.dart';
 
 export '../../../support/fuzz_mutations.dart' show FuzzCase, Xorshift32;
 
@@ -36,8 +38,11 @@ typedef _Entry = ({String name, Uint8List bytes, ChartTheme theme});
 /// The C1 fixtures whose charts join the corpus.
 const List<String> _fixtures = <String>['c1_kinds', 'c1_options'];
 
+/// The C2 fixtures whose charts join the corpus.
+const List<String> _c2Fixtures = <String>['c2_kinds'];
+
 /// The corpus with the themes, built once: the corpus is the same every
-/// time, and the C1 charts take a moment to write.
+/// time, and the C1 and C2 charts take a moment to write.
 final List<_Entry> _corpus = <_Entry>[
   (
     name: 'excel_column',
@@ -49,8 +54,18 @@ final List<_Entry> _corpus = <_Entry>[
     bytes: utf8.encode(excelLineChart),
     theme: ChartTheme.office,
   ),
-  for (final String fixture in _fixtures)
-    for (final (int i, C1Chart chart) in c1Charts(fixture).indexed)
+  for (final (int i, String part) in excelJ4Charts.indexed)
+    (
+      name: 'excel_j4_chart${i + 1}',
+      bytes: utf8.encode(part),
+      theme: ChartTheme.office,
+    ),
+  for (final (String fixture, List<C1Chart> charts)
+      in <(String, List<C1Chart>)>[
+        for (final String fixture in _fixtures) (fixture, c1Charts(fixture)),
+        for (final String fixture in _c2Fixtures) (fixture, c2Charts(fixture)),
+      ])
+    for (final (int i, C1Chart chart) in charts.indexed)
       (
         name: '${fixture}_chart${i + 1}',
         bytes: writeDrawingChartSpace(chart.space, chart.theme).bytes,
@@ -61,17 +76,20 @@ final List<_Entry> _corpus = <_Entry>[
 /// The valid chart parts the fuzzer mutates, in a fixed order.
 ///
 /// The two parts of the owner's `chart_defaults.xlsx` as `excel_column` and
-/// `excel_line` (`excel_charts.dart`), then every chart of `c1_kinds` and of
-/// `c1_options`, written by `writeDrawingChartSpace` in its own theme, as
-/// `<fixture>_chart<n>` (`n` from 1, in part order). Each reads typed in the
-/// theme [chartFuzzTheme] gives it.
+/// `excel_line` (`excel_charts.dart`), the seven of the owner's
+/// `chart_reference_j4.xlsx` as `excel_j4_chart<n>` (`excel_charts_j4.dart`),
+/// then every chart of `c1_kinds`, of `c1_options` and of `c2_kinds`, written
+/// by `writeDrawingChartSpace` in its own theme, as `<fixture>_chart<n>` (`n`
+/// from 1, in part order). Each reads typed in the theme [chartFuzzTheme]
+/// gives it, but `excel_j4_chart5`, a combination whose category labels Excel
+/// writes `nextTo` where the writer writes `low`, which reads as a view only.
 List<({String name, Uint8List bytes})> chartFuzzCorpus() =>
     <({String name, Uint8List bytes})>[
       for (final _Entry e in _corpus) (name: e.name, bytes: e.bytes),
     ];
 
 /// The theme the corpus entry [name] is written and read in: the Office
-/// theme for the Excel parts, the fixture's theme for a C1 chart.
+/// theme for the Excel parts, the fixture's theme for a C1 or C2 chart.
 ///
 /// Throws an [ArgumentError] when [name] is not a corpus entry.
 ChartTheme chartFuzzTheme(String name) {

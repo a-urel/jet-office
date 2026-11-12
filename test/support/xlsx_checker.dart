@@ -116,7 +116,9 @@
 ///     (`col` within 0..16383, `row` within 0..1048575), and its `to` is
 ///     not before its `from` on either axis, by cell and then by offset;
 ///     every `xdr:ext`
-///     and `a:ext` has a positive integer `cx` and `cy`; the `cNvPr` ids
+///     and `a:ext` has a positive integer `cx` and `cy` (a graphic frame's
+///     `xfrm` a non-negative one: Excel writes a chart's as zeros); the
+///     `cNvPr` ids
 ///     are unique in the part; and every `a:blip/@r:embed` names an image
 ///     relationship of the drawing whose target exists and whose content
 ///     type is `image/png` or `image/jpeg`; and every `c:chart/@r:id` names
@@ -1918,13 +1920,19 @@ void _checkDrawings(
       ..._elementsIn(doc, _xdr, 'ext'),
       ..._elementsIn(doc, _drawingMain, 'ext'),
     ]) {
+      // A graphic frame's xfrm may be zeros, as Excel writes a chart's.
+      final XmlElement? xfrm = ext.parentElement;
+      final bool frame =
+          xfrm != null &&
+          xfrm.name.local == 'xfrm' &&
+          xfrm.parentElement?.name.local == 'graphicFrame';
       for (final String axis in <String>['cx', 'cy']) {
         final String text = ext.getAttribute(axis) ?? '';
         final int? size = int.tryParse(text);
-        if (size == null || size <= 0) {
+        if (size == null || size < 0 || (size == 0 && !frame)) {
           violations.add(
             '$where: <${ext.name.qualified}> $axis "$text" is not a '
-            'positive integer',
+            '${frame ? 'non-negative' : 'positive'} integer',
           );
         }
       }

@@ -37,23 +37,30 @@ final class DrawingChart implements PartContent {
     Uint8List bytes, {
     ChartTheme? theme,
     ThemeColors? themeColors,
+    bool date1904 = false,
   }) : _bytes = bytes,
        _theme = theme,
-       _themeColors = themeColors;
+       _themeColors = themeColors,
+       _date1904 = date1904;
 
   /// A new chart part of [space], written with [theme] now.
   ///
   /// Throws an [ArgumentError] when the writer cannot express the chart
   /// ([writeDrawingChartSpace]).
-  DrawingChart.created(DrawingChartSpace space, ChartTheme theme)
-    : _theme = null,
-      _themeColors = null {
-    replace(space, theme);
+  DrawingChart.created(
+    DrawingChartSpace space,
+    ChartTheme theme, {
+    bool date1904 = false,
+  }) : _theme = null,
+       _themeColors = null,
+       _date1904 = date1904 {
+    replace(space, theme, date1904: date1904);
   }
 
   Uint8List? _bytes;
   final ChartTheme? _theme;
   final ThemeColors? _themeColors;
+  bool _date1904;
   DrawingChartRead? _read;
   DrawingChartSpace? _space;
   List<DrawingChartIssue>? _writtenIssues;
@@ -63,6 +70,7 @@ final class DrawingChart implements PartContent {
     _bytes!,
     theme: _theme,
     themeColors: _themeColors,
+    date1904: _date1904,
   );
 
   /// What the part shows, or `null` when an opened part could not be read as
@@ -94,10 +102,22 @@ final class DrawingChart implements PartContent {
   /// [theme] is the one the part is written with; the theme given to
   /// [DrawingChart.opened], if any, is ignored here.
   ///
+  /// [date1904] is the date system the part is written in (and declares); it
+  /// is not inherited from [DrawingChart.opened].
+  ///
   /// Throws an [ArgumentError] when the writer cannot express the chart, and
   /// then the part is as it was.
-  void replace(DrawingChartSpace space, ChartTheme theme) {
-    final DrawingChartWritten written = writeDrawingChartSpace(space, theme);
+  void replace(
+    DrawingChartSpace space,
+    ChartTheme theme, {
+    bool date1904 = false,
+  }) {
+    final DrawingChartWritten written = writeDrawingChartSpace(
+      space,
+      theme,
+      date1904: date1904,
+    );
+    _date1904 = date1904;
     _bytes = written.bytes;
     _writtenIssues = written.issues;
     _space = space;

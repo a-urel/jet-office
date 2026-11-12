@@ -410,6 +410,18 @@ _expected = <(XlsxWarningCode, OfficeLocale), String>{
     XlsxWarningCode.featureEntryInvalid,
     OfficeLocale.tr,
   ): '“S” sayfasındaki bir özellik girdisi okunamıyor (27); olduğu gibi korunuyor ve listeye alınmıyor.',
+  (
+    XlsxWarningCode.chartValueOmitted,
+    OfficeLocale.en,
+  ): "A value that is not a finite number was left out of chart '27' on sheet 'S'; the chart shows a gap there.",
+  (
+    XlsxWarningCode.chartValueOmitted,
+    OfficeLocale.de,
+  ): 'Ein Wert, der keine endliche Zahl ist, wurde im Diagramm „27“ im Blatt „S“ ausgelassen; das Diagramm zeigt dort eine Lücke.',
+  (
+    XlsxWarningCode.chartValueOmitted,
+    OfficeLocale.tr,
+  ): '“S” sayfasındaki “27” grafiğinde sonlu sayı olmayan bir değer dışarıda bırakıldı; grafik orada boşluk gösteriyor.',
 };
 
 void main() {
@@ -491,14 +503,14 @@ void main() {
     );
   });
 
-  test('all 105 messages are worded exactly as specified', () {
+  test('all 108 messages are worded exactly as specified', () {
     final List<(XlsxWarningCode, OfficeLocale)> keys =
         <(XlsxWarningCode, OfficeLocale)>[
           for (final XlsxWarningCode code in XlsxWarningCode.values)
             for (final OfficeLocale locale in OfficeLocale.values)
               (code, locale),
         ];
-    expect(keys, hasLength(105));
+    expect(keys, hasLength(108));
     expect(_expected.keys, unorderedEquals(keys));
     for (final (XlsxWarningCode, OfficeLocale) key in keys) {
       final XlsxWarning w =
@@ -541,6 +553,32 @@ void main() {
       'kaydediliyor.',
     );
     expect(c.warnings.first.message(), contains('(font 0)'));
+  });
+
+  test("invalidCharactersRemoved of a chart's text names the chart", () {
+    final XlsxWarning w =
+        (WarningCollector()..add(
+              XlsxWarningCode.invalidCharactersRemoved,
+              sheet: 'S',
+              detail: 'Chart 1',
+            ))
+            .warnings
+            .single;
+    expect(
+      w.message(OfficeLocale.en),
+      'Characters that XML does not allow were removed from the text of '
+      "chart 'Chart 1' on sheet 'S'.",
+    );
+    expect(
+      w.message(OfficeLocale.de),
+      'Zeichen, die XML nicht erlaubt, wurden aus dem Text des Diagramms '
+      '„Chart 1“ im Blatt „S“ entfernt.',
+    );
+    expect(
+      w.message(OfficeLocale.tr),
+      "“S” sayfasındaki “Chart 1” grafiğinin metninden XML'in izin "
+      'vermediği karakterler çıkarıldı.',
+    );
   });
 
   test('featureEntryInvalid without a detail counts the entries', () {

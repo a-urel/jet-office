@@ -1483,6 +1483,55 @@ theme with fixed colours) in Excel for Mac and record the result under
 workbook, `test/fixtures/owner/charts/chart_reference.xlsx`, is checked by
 `test/drawingml/chart/excel_reference_test.dart`, not here.
 
+## C2
+
+The XLSX chart host (`docs/xlsx-model.md`, "What C2 adds"): charts added,
+replaced, moved and removed by the model, their data written to cells, and
+the J4 kinds (pie, donut, scatter, combination, secondary axis) written by
+the DrawingML layer. Open each file in Excel for Mac and record the result
+under "Results". A repair prompt is a model or writer bug. The owner's step
+list, in Turkish, is `test/fixtures/owner/charts/TALIMATLAR_C2.md`; it holds
+the E3 steps (`TALIMATLAR_E3.md`), a chart title typed in Excel (the
+language question of chart 13) and, optional, a series bound to a workbook
+name (`[0]!Name`). Run this first:
+
+```bash
+dart run tool/write_c2_check.dart build/c2
+dotnet run --project tool/ooxml_validate -- build/c2
+dotnet run --project tool/ooxml_validate -- build/c2/c2_edited
+```
+
+The files, all in `build/c2/`:
+
+- `c2_kinds.xlsx`, `c2_data.xlsx`, `c1_kinds.xlsx`, `c1_options.xlsx`: the
+  chart fixtures, every chart added by `addChart` (the C1 ones unchanged
+  since the C1 check).
+- `c2_dashboard.xlsx`: `Veri` holds the data of eight charts written by
+  `writeChartData`; `Pano` holds the charts bound to it, each named after the
+  gallery app's chart whose data it shows (`bar_stacked` is `bar_clustered`
+  stacked), compared side by side with the app; `line_smooth` is in the app's
+  Monépro light theme with fixed colours. Editing `Veri!B2` and `Veri!C58`
+  must move `column_clustered` and `combo_column_line`.
+- `c2_edited/chart_reference.xlsx`, `c2_edited/chart_reference_j4.xlsx`: the
+  owner's files with chart 1 replaced by a pie (`Pasta`), chart 2 moved 10
+  rows down, chart 3 removed, two rows inserted at row 2, the sheet renamed
+  `Veri 2026` and the chart `Eklenen grafik` added; the series must read
+  `'Veri 2026'!$B$4:$B$7`. Their `_undone` twins must look as the owner's
+  files.
+
+The estimates this check decides: the secondary value axis, numeric scatter
+x values, an area group in a combination (`Üç tür` in `c2_kinds`), a
+scatter chart's x axis without a number format, and the spacing values of
+the Office theme still unconfirmed (`docs/excel-checks.md` of
+`jet_charts_core`), as far as the eye can compare them on
+`c2_dashboard.xlsx`.
+
+The owner's result, filled by the owner only (and a row per file under
+"Results"):
+
+| Date | Excel version | File or step | Result | Notes |
+|---|---|---|---|---|
+
 ## Open issues
 
 Problems a check found that the owner deferred. Each names the milestone that

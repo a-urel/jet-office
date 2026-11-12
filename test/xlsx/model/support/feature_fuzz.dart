@@ -3,13 +3,15 @@
 ///
 /// [featureCorpus] is its own corpus, so the reader's pinned one and its
 /// cases do not change: the `m3_*` and `m4_*` fixtures, `c1_kinds` (a
-/// drawing of chart parts, C1), [excelFeatureFile], a sheet as Excel writes
+/// drawing of chart parts, C1), `c2_kinds` (charts the model added over
+/// data it wrote, C2), [excelFeatureFile], a sheet as Excel writes
 /// it, with Excel 2010 rules, and [excelObjectsFile], with more objects than
 /// the model types. [featureFuzzCases] derives
 /// mutated copies with the machinery of `test/support/fuzz_mutations.dart`,
 /// and with mutations that keep the XML well formed, so most cases reach the
 /// features' own parsers instead of stopping at the XML reader.
-/// [exerciseFeatures] reads, sets, undoes and saves every W3 and W4 member.
+/// [exerciseFeatures] reads, sets, undoes and saves every W3 and W4 member,
+/// and the C2 chart members.
 /// `feature_fuzz_test.dart` runs a fixed range of seeds in the quality gate;
 /// `tool/fuzz_reader.dart --features` runs any range by hand.
 ///
@@ -28,6 +30,7 @@ import 'package:jet_office/src/xlsx/model/xlsx_workbook.dart';
 
 import '../../../../tool/src/part_compare.dart';
 import '../../../fixtures/c1_fixtures.dart';
+import '../../../fixtures/c2_fixtures.dart';
 import '../../../fixtures/fixture.dart';
 import '../../../fixtures/m3_fixtures.dart';
 import '../../../fixtures/m4_fixtures.dart';
@@ -180,17 +183,39 @@ Uint8List excelFeatureFile() {
   ], store: true);
 }
 
+/// The chart [exerciseFeatures] writes the data of and adds to each sheet:
+/// a column chart of two series over three categories.
+final Chart _fuzzChart = Chart(
+  kind: ChartKind.column,
+  title: const ChartTitle(text: 'Fuzz'),
+  series: <ChartSeries>[
+    for (final String name in <String>['One', 'Two'])
+      ChartSeries(
+        name: ChartData<String>(values: <String?>[name]),
+        categories: ChartData<Object>(values: const <Object?>['A', 'B', 'C']),
+        values: ChartData<double>(values: const <double?>[1, 2.5, 3]),
+      ),
+  ],
+);
+
+/// Where [exerciseFeatures] moves a sheet's first chart.
+const XlsxTwoCellAnchor _fuzzChartAnchor = XlsxTwoCellAnchor(
+  XlsxAnchorPoint(1220, 40),
+  XlsxAnchorPoint(1235, 48),
+);
+
 /// The packages the fuzzer mutates, in a fixed order, entries stored: every
 /// fixture of `m3Fixtures()` and `m4Fixtures()`, then `c1_kinds`, a drawing of
-/// twelve chart parts that the model keeps as they are (C1), then
-/// [excelFeatureFile] as `excel_features` and [excelObjectsFile] as
-/// `excel_objects`.
+/// twelve chart parts (C1), and `c2_kinds`, seven charts of the kinds C2 adds
+/// bound to the data they were written from, then [excelFeatureFile] as
+/// `excel_features` and [excelObjectsFile] as `excel_objects`.
 List<({String name, Uint8List bytes})> featureCorpus() =>
     <({String name, Uint8List bytes})>[
       for (final Fixture f in <Fixture>[
         ...m3Fixtures(),
         ...m4Fixtures(),
         ...c1Fixtures().where((Fixture f) => f.name == 'c1_kinds'),
+        ...c2Fixtures().where((Fixture f) => f.name == 'c2_kinds'),
       ])
         (name: f.name, bytes: _stored(f.build())),
       (name: 'excel_features', bytes: excelFeatureFile()),
@@ -301,6 +326,7 @@ bool _holdsFeatures(String name) =>
     name.startsWith('xl/comments') ||
     name.startsWith('xl/drawings/') ||
     name.startsWith('xl/tables/') ||
+    name.startsWith('xl/charts/') ||
     name.startsWith('docProps/');
 
 /// The offset in [text] where the features start, past the cells of a sheet.
@@ -469,8 +495,14 @@ int _elementEnd(String text, RegExpMatch tag) {
 /// whatever the writer's rules, and a twin of what was removed may remain.
 /// The objects take the same steps: every rich text, note, picture's anchor
 /// and table's style is set back; the first note, picture and table are
-/// removed and added back; and a rich text, a note, a picture and a table
-/// are set, changed, removed and set again on free cells.
+/// removed and added back (a picture or chart read with an anchor, size,
+/// name or description the writer refuses may be refused); and a rich text,
+/// a note, a picture and a table are set, changed, removed and set again on
+/// free cells. The charts (C2) take the same steps: each chart's anchor and
+/// typed chart are set back; the first typed chart takes a title; the first
+/// chart is moved, removed and, when typed, added back; and a chart's data
+/// is written on free cells and the chart added over it, moved, removed and
+/// added again.
 ///
 /// It renders the warnings, undoes every edit in reverse order and saves,
 /// redoes them, saves, reopens and reads the saved file, undoes them again
@@ -600,11 +632,16 @@ List<String> undoDifferences(
         partOf(line) == mutated &&
         line.contains('the expected part is not well-formed'),
   );
+  // Judged on the part as saved before, not as normalized: a character
+  // reference XML forbids, which the text compared drops, spoils a value the
+  // parse reads (`Exte&#1;rnal` is no mode).
+  final Uint8List? raw = mutated != null && mutated.endsWith('.rels')
+      ? readXlsxBytes(before)[mutated] ?? a[mutated]
+      : null;
   final bool lossy =
-      mutated != null &&
-      mutated.endsWith('.rels') &&
+      raw != null &&
       a.containsKey(mutated) &&
-      _lossyRelationships(utf8.decode(a[mutated]!));
+      _lossyRelationships(utf8.decode(raw, allowMalformed: true));
   final bool blind = refused || lossy;
   final String? source = blind && mutated!.endsWith('.rels')
       ? mutated.replaceFirst('_rels/', '').replaceFirst(RegExp(r'\.rels$'), '')
@@ -763,6 +800,11 @@ void _readSheet(XlsxSheet sheet) {
   sheet.hyperlinkAt(0, 0).toString();
   sheet.dataValidations.toString();
   sheet.conditionalFormats.toString();
+  for (final XlsxSheetChart chart in sheet.charts) {
+    chart.toString();
+    chart.view?.series.toString();
+    chart.typed?.chart.series.toString();
+  }
 }
 
 /// The [StateError]s the API documents for an edit: a part it cannot edit, or
@@ -781,7 +823,8 @@ final RegExp _refusedStates = RegExp(
 /// The fields an [ArgumentError] of an edit names.
 final RegExp _refusedFields = RegExp(
   r'^(name|formula\d?|comment|cell|validation|format|ranges?(\[\d+\].*)?|'
-  r'runs.*|author|style|columns.*|values.*|newName)$',
+  r'runs.*|author|style|columns.*|values.*|newName|anchor|description|'
+  r'width|height)$',
 );
 
 /// The [StateError]s a structural edit documents for what it refuses
@@ -943,6 +986,74 @@ final class _Run {
     _setObjectsBack(s);
     _removeFirstObjects(s);
     _setNewObjects(s);
+    _editCharts(s);
+  }
+
+  /// Sets every chart's anchor and typed chart back, which records nothing;
+  /// gives the first typed chart a title; moves the first chart, removes it
+  /// and adds it back when it was typed; and writes a chart's data on free
+  /// cells, adds the chart over it, moves it, removes it and adds it again.
+  void _editCharts(XlsxSheet s) {
+    read('charts', () {
+      final List<XlsxSheetChart> charts = s.charts;
+      for (int i = 0; i < charts.length; i++) {
+        final XlsxSheetChart c = charts[i];
+        back('moveChartAt', () => s.moveChartAt(i, c.anchor));
+        final XlsxChart? typed = c.typed;
+        if (typed == null) continue;
+        back('replaceChartAt', () {
+          s.replaceChartAt(i, typed.chart, theme: typed.theme);
+        });
+      }
+      final int at = charts.indexWhere((XlsxSheetChart c) => c.typed != null);
+      if (at >= 0) {
+        final XlsxChart typed = charts[at].typed!;
+        change('replaceChartAt', () {
+          s.replaceChartAt(
+            at,
+            typed.chart.copyWith(title: const ChartTitle(text: 'Fuzz chart')),
+            theme: typed.theme,
+          );
+        });
+      }
+      if (charts.isNotEmpty) {
+        final XlsxChart? first = charts.first.typed;
+        change('moveChartAt', () => s.moveChartAt(0, _fuzzChartAnchor));
+        remove('removeChartAt', () => s.removeChartAt(0));
+        if (first != null) change('addChart', () => s.addChart(first));
+      }
+    });
+    Chart? bound;
+    change('writeChartData', () {
+      bound = s.writeChartData(_fuzzChart, 1200, 50);
+    });
+    final Chart? data = bound;
+    if (data == null) return;
+    final XlsxChart added = XlsxChart(
+      data,
+      const XlsxTwoCellAnchor(
+        XlsxAnchorPoint(1200, 54),
+        XlsxAnchorPoint(1215, 62),
+      ),
+      name: 'Fuzz chart',
+    );
+    change('addChart', () => s.addChart(added));
+    read('new chart', () {
+      final int last = s.charts.length - 1;
+      if (last < 0) return;
+      change('moveChartAt', () {
+        s.moveChartAt(
+          last,
+          const XlsxOneCellAnchor(
+            XlsxAnchorPoint(1201, 54),
+            width: 480,
+            height: 288,
+          ),
+        );
+      });
+      change('removeChartAt', () => s.removeChartAt(last));
+    });
+    change('addChart', () => s.addChart(added));
   }
 
   void _setObjectsBack(XlsxSheet s) {

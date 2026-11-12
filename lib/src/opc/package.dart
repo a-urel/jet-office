@@ -216,6 +216,20 @@ final class OpcPackage {
   /// False for an unknown name and for package metadata.
   bool isLoaded(String name) => _parts[_key(name)]?.content != null;
 
+  /// The content a model gave the part ([setContent] or [addPart]), or
+  /// `null` for a part saved from its original bytes or an unknown name. A
+  /// reader that caches what it read of a part can compare it by identity
+  /// to see whether the part changed since.
+  PartContent? contentOf(String name) => _parts[_key(name)]?.content;
+
+  /// The uncompressed size the file declares for the part's original bytes,
+  /// or `null` for an unknown part or one that was added. Reading nothing,
+  /// it tells the size [originalBytes] would give (never more).
+  int? declaredSize(String name) {
+    final String? zipName = _parts[_key(name)]?.zipName;
+    return zipName == null ? null : _zip!.declaredSize(zipName);
+  }
+
   /// The part's original bytes from the file: inflated, CRC-checked and not
   /// cached, so each call inflates again.
   ///
@@ -239,20 +253,25 @@ final class OpcPackage {
   /// XML that cannot start. XML errors that only surface while reading are
   /// [XmlParseException]s from the returned reader.
   XmlPullReader openXml(String name) {
+    final Uint8List bytes = bytesOf(name);
+    return _parseXml(_plain(name), () => _pull(bytes, _maxDepth));
+  }
+
+  /// The bytes of the part [name] as the package would write it now: its
+  /// content encoded when a model set it, else its original bytes, inflated
+  /// and not cached.
+  ///
+  /// Throws an [OpcFormatException] for an unknown part or a corrupt entry.
+  Uint8List bytesOf(String name) {
     final _Part? part = _parts[_key(name)];
     if (part == null) {
       throw OpcFormatException(OpcFormatKind.missingPart, part: _plain(name));
     }
     final PartContent? content = part.content;
-    final Uint8List bytes;
-    if (content == null) {
-      bytes = _readEntry(_zip!, part.zipName!);
-    } else {
-      final BytesBuilder builder = BytesBuilder(copy: false);
-      content.encode().forEach(builder.add);
-      bytes = builder.takeBytes();
-    }
-    return _parseXml(_plain(name), () => _pull(bytes, _maxDepth));
+    if (content == null) return _readEntry(_zip!, part.zipName!);
+    final BytesBuilder builder = BytesBuilder(copy: false);
+    content.encode().forEach(builder.add);
+    return builder.takeBytes();
   }
 
   /// The relationships of [source], in file order, external ones included.

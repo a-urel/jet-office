@@ -18,8 +18,9 @@ const int _cases = 100;
 /// Adler-32 of the first [_cases] cases of each of [_seeds]: their
 /// descriptions and bytes' lengths, computed once on the VM. The Chrome leg
 /// compares it, which proves a seed gives the same cases in a browser. A
-/// changed `m3_*`, `m4_*` or `c1_kinds` fixture changes it.
-const int _casesDigest = 1795111468;
+/// changed `m3_*`, `m4_*`, `c1_kinds` or `c2_kinds` fixture changes it, and
+/// so did C2's adding `c2_kinds` and aiming the mutations at chart parts.
+const int _casesDigest = 213320251;
 
 /// Adler-32 of [data], in arithmetic that stays exact in a browser.
 int _adler32(List<int> data) {
@@ -65,8 +66,15 @@ void main() {
         'xl/drawings/vmlDrawing1.vml',
         'xl/drawings/_rels/drawing1.xml.rels',
         'xl/tables/table1.xml',
+        'xl/charts/chart1.xml',
       ]),
     );
+  });
+
+  test('the corpus holds the C1 and C2 chart fixtures', () {
+    expect(<String>[
+      for (final ({String name, Uint8List bytes}) e in featureCorpus()) e.name,
+    ], containsAll(<String>['c1_kinds', 'c2_kinds']));
   });
 
   test('every corpus entry exercises cleanly', () {
@@ -164,18 +172,74 @@ void main() {
     });
   });
 
+  /// The case of [seed] and [index] that mutated [part] of the corpus entry
+  /// [entry] by [edit] of its text, described as [what], built here: the
+  /// cases of a seed change whenever the corpus does (C2 added `c2_kinds`).
+  FuzzCase rebuilt(
+    int seed,
+    int index,
+    String entry,
+    String part,
+    String what,
+    String Function(String text) edit,
+  ) {
+    final Map<String, Uint8List> parts = readXlsxBytes(
+      featureCorpus()
+          .firstWhere((({String name, Uint8List bytes}) e) => e.name == entry)
+          .bytes,
+    );
+    final String before = utf8.decode(parts[part]!);
+    final String after = edit(before);
+    expect(after, isNot(before), reason: what);
+    return (
+      seed: seed,
+      index: index,
+      mutation: '$entry $part: $what',
+      bytes: buildZipOrdered(<(String, List<int>)>[
+        for (final MapEntry<String, Uint8List> e in parts.entries)
+          (e.key, e.key == part ? utf8.encode(after) : e.value),
+      ], store: true),
+    );
+  }
+
   test('removing a table whose users name a column it lacks is a refusal', () {
     // Seed 7 case 328 of the long run: a mutated tableColumn name leaves
     // `Stock[[#This Row],[Qty]]` naming no column, so removeTable refuses.
-    final FuzzCase c = featureFuzzCases(7, 329).last;
-    expect(c.mutation, contains('xl/tables/table1.xml'));
+    final FuzzCase c = rebuilt(
+      7,
+      328,
+      'excel_objects',
+      'xl/tables/table1.xml',
+      'set name to "NaN"',
+      (String t) => t.replaceFirst('name="Qty"', 'name="NaN"'),
+    );
     expect(() => exerciseFeatureCase(c), returnsNormally);
   });
 
   test('a comments author XML forbids does not crash a table removal', () {
     // Seed 39 case 267 of the long run (and seed 30 case 354).
-    for (final (int seed, int index) in <(int, int)>[(39, 267), (30, 354)]) {
-      final FuzzCase c = featureFuzzCases(seed, index + 1).last;
+    for (final FuzzCase c in <FuzzCase>[
+      rebuilt(
+        39,
+        267,
+        'm4_notes',
+        'xl/comments1.xml',
+        'insert "&#1;" at 151',
+        (String t) => t.replaceFirst(
+          '<author>Ahmet</author>',
+          '<author>Ahm&#1;et</author>',
+        ),
+      ),
+      rebuilt(
+        30,
+        354,
+        'excel_objects',
+        'xl/comments1.xml',
+        r'insert " xmlns:o=\"urn:&#1;o\"" at 338',
+        (String t) =>
+            t.replaceFirst('<author>tc={', '<author>tc xmlns:o="urn:&#1;o"={'),
+      ),
+    ]) {
       expect(
         () => exerciseFeatureCase(c),
         anyOf(returnsNormally, throwsA(isA<XlsxReadException>())),
@@ -184,12 +248,60 @@ void main() {
     }
   });
 
+  test('a TargetMode spoilt by a character reference XML forbids is a loss '
+      'of the mutated relationships part', () {
+    // Seed 3 case 299 of the long run (C2): `Exte&#1;rnal` reads as no
+    // mode, so undo writes the relationship internal; only the text
+    // compared drops the reference and reads `External`.
+    final FuzzCase c = rebuilt(
+      3,
+      299,
+      'm3_hyperlinks',
+      'xl/worksheets/_rels/sheet1.xml.rels',
+      'insert "&#1;" at 488',
+      (String t) => t.replaceFirst(
+        '%C3%A7" TargetMode="External"',
+        '%C3%A7" TargetMode="Exte&#1;rnal"',
+      ),
+    );
+    expect(() => exerciseFeatureCase(c), returnsNormally);
+  });
+
+  test('a picture read with a size the writer refuses may be refused when '
+      'added back', () {
+    // Seed 10 case 425 of the long run (C2): a one-cell anchor of height 0.
+    final FuzzCase c = rebuilt(
+      10,
+      425,
+      'm4_images',
+      'xl/drawings/drawing1.xml',
+      'set cy to "0"',
+      (String t) => t.replaceFirst('cy="19050"', 'cy="0"'),
+    );
+    expect(() => exerciseFeatureCase(c), returnsNormally);
+  });
+
   test('a part name whose case a mutation flipped compares as the same', () {
     // Seed 36 case 204 of the long run: `xl/worksheets/Sheet1.xml` beside
     // `xl/worksheets/_rels/sheet1.xml.rels`; undo writes the relationships
     // part after the source's spelling, which OPC takes as the same name.
-    final FuzzCase c = featureFuzzCases(36, 205).last;
-    expect(c.mutation, contains('(archive)'));
+    // Built here, as C2's rebuilt `c1_kinds` changed the seed's cases.
+    const int bit = 55077;
+    final Uint8List bytes = Uint8List.fromList(
+      featureCorpus()
+          .firstWhere(
+            (({String name, Uint8List bytes}) e) => e.name == 'excel_features',
+          )
+          .bytes,
+    );
+    bytes[bit >> 3] ^= 1 << (bit & 7);
+    expect(latin1.decode(bytes), contains('xl/worksheets/Sheet1.xml'));
+    final FuzzCase c = (
+      seed: 36,
+      index: 204,
+      mutation: 'excel_features (archive): flip bits [$bit]',
+      bytes: bytes,
+    );
     expect(() => exerciseFeatureCase(c), returnsNormally);
   });
 

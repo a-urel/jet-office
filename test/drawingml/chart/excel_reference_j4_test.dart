@@ -5,9 +5,12 @@
 /// The sheet `Veri` and its seven charts follow
 /// `test/fixtures/owner/charts/TALIMATLAR_J4.md`, but for two charts the
 /// README there names (chart 4 took text x values, chart 5 has no secondary
-/// axis). The reader does not type pies, doughnuts, scatter or combination
-/// charts yet (C2 and C3), so this test pins Excel's values in the XML, and
-/// how the reader reads each part today.
+/// axis). This test pins Excel's values in the XML, and how the reader reads
+/// each part: the pies and doughnuts (charts 1, 2, 3 and 7) read typed and
+/// write the part again (C2), as do the scatter chart (chart 4) and the
+/// combination (chart 5), whose category labels the writer writes `low`
+/// under its negative value where Excel writes `nextTo` (the owner's
+/// choice).
 @TestOn('vm')
 library;
 
@@ -16,11 +19,15 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:jet_charts_core/jet_charts_core.dart';
+import 'package:jet_office/src/common/theme_colors.dart';
 import 'package:jet_office/src/drawingml/chart/chart_reader.dart';
 import 'package:jet_office/src/drawingml/chart/chart_space.dart';
+import 'package:jet_office/src/drawingml/chart/chart_writer.dart';
+import 'package:jet_office/src/xml/xml_equivalence.dart';
 import 'package:test/test.dart';
 
 import '../../support/read_xlsx.dart';
+import 'support/excel_files.dart';
 
 const String _path = 'test/fixtures/owner/charts/chart_reference_j4.xlsx';
 
@@ -176,23 +183,191 @@ void main() {
     }
   });
 
-  test('the reader types the smooth line and leaves the other kinds to C2 '
-      'and C3', () {
-    for (int n = 1; n <= 7; n++) {
-      final DrawingChartRead read = readDrawingChartSpace(
-        parts['xl/charts/chart$n.xml']!,
-      );
-      if (n == 6) {
+  group('pies and doughnuts read typed, and write the part again', () {
+    late final ThemeColors theme;
+    setUpAll(() => theme = themeColorsOf(_path));
+
+    for (final int n in <int>[1, 2, 3, 7]) {
+      test('chart $n', () {
+        final Uint8List part = chartPartOf(_path, n);
+        final DrawingChartRead read = readDrawingChartSpace(
+          part,
+          themeColors: theme,
+        );
         expect(read.issues, isEmpty);
-        expect(read.typed, isNotNull);
-        expect(read.chart!.kind, ChartKind.line);
-        expect(read.chart!.series.single.smooth, isTrue);
-      } else {
-        expect(read.typed, isNull, reason: '$n');
-        expect(read.issues, <DrawingChartIssue>[
-          DrawingChartIssue.unsupportedKind,
-        ], reason: '$n');
-      }
+        final DrawingChartSpace? typed = read.typed;
+        expect(typed, isNotNull);
+        expect(
+          xmlDifference(
+            writeDrawingChartSpace(typed!, ChartTheme.office).bytes,
+            part,
+          ),
+          isNull,
+        );
+        expect(typed.language, 'tr-TR');
+        expect(typed.autoTitle, isTrue);
+        final Chart chart = typed.chart;
+        expect(chart.legend.position, ChartLegendPosition.bottom);
+        // Every slice is the Office theme's accent of its index, so none
+        // reads as a colour of its own.
+        for (final ChartSeries series in chart.series) {
+          expect(series.pointColors, isEmpty);
+          expect(series.values.values, hasLength(4));
+        }
+      });
     }
+
+    test('chart 1 is a pie of one series', () {
+      final Chart chart = readDrawingChartSpace(
+        chartPartOf(_path, 1),
+        themeColors: theme,
+      ).typed!.chart;
+      expect(chart.kind, ChartKind.pie);
+      expect(chart.series.single.values.values, <double?>[12, 18, -4, 9]);
+      expect(chart.series.single.name.values, <String?>['Satış']);
+      expect(chart.dataLabels.visible, isFalse);
+    });
+
+    test('charts 2 and 3 are doughnuts of one and two series, hole 75', () {
+      for (final (int n, int count) in <(int, int)>[(2, 1), (3, 2)]) {
+        final Chart chart = readDrawingChartSpace(
+          chartPartOf(_path, n),
+          themeColors: theme,
+        ).typed!.chart;
+        expect(chart.kind, ChartKind.donut, reason: '$n');
+        expect(chart.series, hasLength(count), reason: '$n');
+        expect(chart.holeSizePercent, 75, reason: '$n');
+      }
+    });
+
+    test('chart 7 is a pie with value labels', () {
+      final Chart chart = readDrawingChartSpace(
+        chartPartOf(_path, 7),
+        themeColors: theme,
+      ).typed!.chart;
+      expect(chart.kind, ChartKind.pie);
+      expect(chart.dataLabels.visible, isTrue);
+      expect(chart.dataLabels.showValue, isTrue);
+      expect(chart.dataLabels.showPercent, isFalse);
+    });
+  });
+
+  test('the scatter chart reads typed, and writes the part again', () {
+    final Uint8List part = chartPartOf(_path, 4);
+    final DrawingChartRead read = readDrawingChartSpace(
+      part,
+      themeColors: themeColorsOf(_path),
+    );
+    expect(read.issues, isEmpty);
+    final DrawingChartSpace? typed = read.typed;
+    expect(typed, isNotNull);
+    expect(
+      xmlDifference(
+        writeDrawingChartSpace(typed!, ChartTheme.office).bytes,
+        part,
+      ),
+      isNull,
+    );
+    expect(typed.ids.categoryAxis, 1468516991);
+    expect(typed.ids.valueAxis, 1468528639);
+    expect(typed.autoTitle, isTrue);
+    final Chart chart = typed.chart;
+    expect(chart.kind, ChartKind.scatter);
+    expect(chart.categoryAxis.gridLines, isTrue);
+    expect(chart.valueAxis.gridLines, isTrue);
+    expect(chart.series, hasLength(2));
+    expect(chart.series.first.categories.values, <Object?>[
+      'Kuzey',
+      'Güney',
+      'Doğu',
+      'Batı',
+    ]);
+    expect(chart.series.first.categories.reference, r'Veri!$A$2:$A$5');
+    expect(chart.series.first.values.values, <double?>[12, 18, -4, 9]);
+    expect(chart.series.last.name.values, <String?>['Adet']);
+    for (final ChartSeries series in chart.series) {
+      expect(series.color, isNull);
+      expect(series.pointColors, isEmpty);
+    }
+  });
+
+  test('the reader types the smooth line', () {
+    final DrawingChartRead line = readDrawingChartSpace(
+      parts['xl/charts/chart6.xml']!,
+    );
+    expect(line.issues, isEmpty);
+    expect(line.typed, isNotNull);
+    expect(line.chart!.kind, ChartKind.line);
+    expect(line.chart!.series.single.smooth, isTrue);
+  });
+
+  group('the combination (chart 5)', () {
+    late final ThemeColors theme;
+    setUpAll(() => theme = themeColorsOf(_path));
+
+    test('reads as a column and a line series on one axis', () {
+      final DrawingChartRead read = readDrawingChartSpace(
+        chartPartOf(_path, 5),
+        themeColors: theme,
+      );
+      expect(read.issues, isEmpty);
+      final Chart chart = read.chart!;
+      expect(chart.kind, ChartKind.combination);
+      expect(chart.grouping, ChartGrouping.clustered);
+      expect(chart.secondaryValueAxis, isNull);
+      expect(chart.legend.position, ChartLegendPosition.bottom);
+      expect(chart.series, hasLength(2));
+      expect(chart.series.first.kind, ChartKind.column);
+      expect(chart.series.last.kind, ChartKind.line);
+      expect(chart.series.first.name.values, <String?>['Satış']);
+      expect(chart.series.last.name.values, <String?>['Adet']);
+      expect(chart.series.first.values.values, <double?>[12, 18, -4, 9]);
+      expect(chart.series.last.values.values, <double?>[120, 95, 140, 80]);
+      for (final ChartSeries series in chart.series) {
+        expect(series.axis, ChartAxisBinding.primary);
+        expect(series.color, isNull);
+      }
+    });
+
+    test('reads typed and writes the part again but for its category '
+        "labels, which the owner's choice writes low under a negative "
+        'value', () {
+      final String excel = utf8.decode(chartPartOf(_path, 5));
+      // Excel writes `nextTo` though the column series has -4; the writer
+      // writes `low` (`docs/drawingml-charts.md`, "A category axis that
+      // crosses inside the plot"), so Excel's own part is not typed.
+      expect(
+        readDrawingChartSpace(utf8.encode(excel), themeColors: theme).typed,
+        isNull,
+      );
+      final Uint8List part = utf8.encode(
+        excel.replaceFirst(
+          '<c:tickLblPos val="nextTo"/>',
+          '<c:tickLblPos val="low"/>',
+        ),
+      );
+      final DrawingChartRead read = readDrawingChartSpace(
+        part,
+        themeColors: theme,
+      );
+      expect(read.issues, isEmpty);
+      final DrawingChartSpace? typed = read.typed;
+      expect(typed, isNotNull);
+      expect(
+        xmlDifference(
+          writeDrawingChartSpace(typed!, ChartTheme.office).bytes,
+          part,
+        ),
+        isNull,
+      );
+      expect(typed.ids.categoryAxis, 1468918719);
+      expect(typed.ids.valueAxis, 1542261375);
+      expect(typed.ids.series, <String>[
+        '{00000000-FF83-4D44-AD47-0FB7785B109C}',
+        '{00000001-FF83-4D44-AD47-0FB7785B109C}',
+      ]);
+      expect(typed.language, 'tr-TR');
+      expect(typed.autoTitle, isTrue);
+    });
   });
 }

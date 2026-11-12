@@ -99,6 +99,35 @@ void main() {
       expect(p.isLoaded('/b.xml'), isFalse);
     });
 
+    test('bytesOf gives the original bytes, then the content set', () {
+      final OpcPackage p = _package(<(String, String)>[('a.xml', '<a/>')]);
+      expect(p.bytesOf('/A.xml'), _utf8('<a/>'));
+      p.setContent('/a.xml', _Text('<z/>'));
+      expect(p.bytesOf('a.xml'), _utf8('<z/>'));
+      expect(p.originalBytes('a.xml'), _utf8('<a/>'));
+      expect(
+        () => p.bytesOf('/gone.xml'),
+        throwsA(
+          isA<OpcFormatException>().having(
+            (OpcFormatException e) => e.kind,
+            'kind',
+            OpcFormatKind.missingPart,
+          ),
+        ),
+      );
+    });
+
+    test('contentOf and declaredSize', () {
+      final OpcPackage p = _package(<(String, String)>[('a.xml', '<abc/>')]);
+      expect(p.declaredSize('/A.xml'), 6);
+      expect(p.declaredSize('/gone.xml'), isNull);
+      expect(p.contentOf('a.xml'), isNull);
+      final _Text text = _Text('<z/>');
+      p.setContent('/a.xml', text);
+      expect(identical(p.contentOf('a.xml'), text), isTrue);
+      expect(p.contentOf('/gone.xml'), isNull);
+    });
+
     test('originalBytes of an unknown part is a missingPart failure', () {
       final OpcPackage p = _package(<(String, String)>[('a.xml', '<a/>')]);
       expect(

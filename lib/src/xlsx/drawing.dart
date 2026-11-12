@@ -25,6 +25,7 @@
 library;
 
 import '../common/image.dart';
+import '../drawingml/chart/chart_space.dart' show drawingChartNamespace;
 import '../drawingml/picture.dart';
 import '../opc/ooxml.dart';
 import '../opc/relationships.dart';
@@ -527,6 +528,86 @@ void writeAnchor(
   );
   w.empty('xdr:clientData');
   w.end();
+}
+
+/// Checks the frame of a chart, [which] (such as `Chart 2 on sheet "S"`),
+/// placed at [anchor], named [name] and described by [description], and
+/// returns the size in EMU of a one-cell anchor, `null` for a two-cell one.
+///
+/// The anchor is checked as [checkAnchor] checks a picture's, except that a
+/// chart has no size of its own: a one-cell anchor must give both its width
+/// and its height. Throws [ArgumentError] named as [checkPicture] says, and
+/// named `anchor` for a one-cell anchor that leaves out a size.
+({int cx, int cy})? checkChartFrame(
+  XlsxAnchor anchor, {
+  required String which,
+  String? name,
+  String? description,
+}) {
+  if (anchor is XlsxOneCellAnchor &&
+      (anchor.width == null || anchor.height == null)) {
+    throw ArgumentError.value(
+      anchor,
+      'anchor',
+      '$which: a chart has no size of its own; a one-cell anchor must give '
+          'both the width and the height.',
+    );
+  }
+  final ({int cx, int cy})? extent = checkAnchor(anchor, null, which);
+  _checkText(name, 'name', which);
+  _checkText(description, 'description', which);
+  return extent;
+}
+
+/// Writes the anchor of a chart frame to [w], as Excel writes one: the
+/// anchor at [anchor] ([writeAnchorPlace], one-cell sizes [extent], and an
+/// `editAs` as [writeAnchor] writes a picture's), holding an
+/// `xdr:graphicFrame` (`macro=""`) with the `cNvPr` [id], [name] and
+/// [description] (`descr`), an `xdr:xfrm` of zeros, and an
+/// `a:graphicData` of the chart namespace whose `c:chart` names the
+/// relationship [chartId], declaring `c` and `r` on itself; then
+/// `xdr:clientData`. The prefixes `xdr` and `a` must be declared above.
+void writeChartFrame(
+  XmlWriter w,
+  XlsxAnchor anchor, {
+  required ({int cx, int cy})? extent,
+  required int id,
+  required String name,
+  required String? description,
+  required String chartId,
+}) {
+  w.start('xdr:${anchorElementName(anchor)}');
+  final String? editAs = anchorEditAs(anchor);
+  if (editAs != null) w.attribute('editAs', editAs);
+  writeAnchorPlace(w, anchor, extent: extent);
+  w
+    ..start('xdr:graphicFrame')
+    ..attribute('macro', '')
+    ..start('xdr:nvGraphicFramePr')
+    ..empty('xdr:cNvPr', <String, String>{
+      'id': '$id',
+      'name': name,
+      'descr': ?description,
+    })
+    ..empty('xdr:cNvGraphicFramePr')
+    ..end()
+    ..start('xdr:xfrm')
+    ..empty('a:off', const <String, String>{'x': '0', 'y': '0'})
+    ..empty('a:ext', const <String, String>{'cx': '0', 'cy': '0'})
+    ..end()
+    ..start('a:graphic')
+    ..start('a:graphicData')
+    ..attribute('uri', drawingChartNamespace)
+    ..empty('c:chart', <String, String>{
+      'xmlns:c': drawingChartNamespace,
+      'xmlns:r': Ns.rel,
+      'r:id': chartId,
+    })
+    ..end()
+    ..end()
+    ..end()
+    ..empty('xdr:clientData')
+    ..end();
 }
 
 /// The local name of the element of [anchor].

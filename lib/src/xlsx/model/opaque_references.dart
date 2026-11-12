@@ -240,6 +240,11 @@ final class OpaqueScan {
     final String name = package.canonicalPartName(part) ?? part;
     final String key = _key(name);
     PartContent? before = _written[key];
+    // What this scan wrote last is stale once another edit (a chart
+    // replaced, say) gave the part other content since.
+    if (before != null && !identical(before, package.contentOf(name))) {
+      before = null;
+    }
     if (before == null && package.isLoaded(name)) {
       final XmlPullReader r = package.openXml(name);
       before = _TextContent(r.sourceText(0, r.sourceLength));

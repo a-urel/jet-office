@@ -22,8 +22,18 @@
 /// the sheet's last row (row 1 when it has none) and one column at B, and
 /// renames the sheet `Model edit` (`Model edit 2` and so on when the name
 /// is taken); `XlsxReader` must find the probe two rows lower, the string in
-/// D and the formula pointing at its new cell. The new row is the one after
-/// the probe. It then adds a sheet named as the first one would be (so
+/// D and the formula pointing at its new cell. Between the probe and the
+/// structural edits it writes, with `writeChartData`, the data of a column
+/// chart of two series over three categories two rows below the probe from
+/// column N, and adds the chart over it (`Model column chart`, a two-cell
+/// anchor of 8 columns by 15 rows from column R), left out when a row from
+/// the one below the probe is taken. The model must list it typed after the
+/// save, moved by the structural edits with its cells and its series bound
+/// to them on the renamed sheet. After the structural edits, when the first
+/// sheet had a chart that listed typed, the first one takes the title
+/// `Model chart` (`replaceChartAt`) and moves one row down (`moveChartAt`),
+/// both read back through the model. The new row is the one after the
+/// probe. It then adds a sheet named as the first one would be (so
 /// `Model edit 2`, or the next free number) holding one string, saves, and writes the
 /// bytes to `<outDir>/<name>.xlsx`. The saved file is read back with
 /// `XlsxReader` (values, number formats, merges) and with `XlsxWorkbook`
@@ -184,11 +194,17 @@ List<String> _edit(File file, Directory output, String name) {
   final _Features features;
   final String? table;
   final _Structure structure;
+  final _Retitled? retitled;
   try {
     final XlsxWorkbook book = XlsxWorkbook.open(file.readAsBytesSync());
     final XlsxSheet sheet = book.sheets.first;
+    final int typed = sheet.charts.indexWhere(
+      (XlsxSheetChart c) => c.typed != null,
+    );
     structure = _editStructure(book, sheet);
-    row = _freeRow(sheet);
+    retitled = typed < 0 ? null : _retitleChart(sheet, typed);
+    // The row after the probe, which the chart's data skips.
+    row = structure.chartData == null ? _freeRow(sheet) : structure.row + 1;
     formatted = <int>{
       for (final int column in <int>[0, 1])
         if (showsNoDate(sheet.styleAt(row, column))) column,
@@ -210,19 +226,22 @@ List<String> _edit(File file, Directory output, String name) {
   File('${output.path}/$name').writeAsBytesSync(saved);
   return <String>[
     ..._checkStructure(saved, structure),
+    ..._checkCharts(saved, structure, retitled),
     ..._check(saved, row, added, formatted, features, table),
   ];
 }
 
-/// The probe's row after the structural edits, and the first sheet's new
-/// name.
-typedef _Structure = ({int row, String name});
+/// The probe's row after the structural edits, the first sheet's new name,
+/// and where the chart's data went before them (`null` when its cells were
+/// not free).
+typedef _Structure = ({int row, String name, XlsxAnchorPoint? chartData});
 
 /// The probe string and the structural edits' sheet name.
 const String _probeText = 'moved by the model';
 const String _renamed = 'Model edit';
 
-/// Sets the probe on [sheet], inserts two rows above its last row and a
+/// Sets the probe on [sheet], writes the chart's data two rows below it and
+/// adds the chart ([_addChart]), inserts two rows above its last row and a
 /// column at B, and renames it.
 _Structure _editStructure(XlsxWorkbook book, XlsxSheet sheet) {
   final int probe = _freeRow(sheet);
@@ -233,12 +252,171 @@ _Structure _editStructure(XlsxWorkbook book, XlsxSheet sheet) {
       probe,
       0,
       XlsxFormula('C${probe + 1}&"!"', cached: '$_probeText!'),
-    )
+    );
+  final XlsxAnchorPoint? chartData = _addChart(sheet, probe + 2);
+  sheet
     ..insertRows(rows.isEmpty || rows.last > probe ? 0 : rows.last, 2)
     ..insertColumns(1);
   final String name = _freeName(book, _renamed);
   book.renameSheet(sheet, name);
-  return (row: probe + 2, name: name);
+  return (row: probe + 2, name: name, chartData: chartData);
+}
+
+/// The column chart the tool adds: two series over three categories, its
+/// data written to the sheet.
+final Chart _chart = Chart(
+  kind: ChartKind.column,
+  title: const ChartTitle(text: 'Edited by the model'),
+  series: <ChartSeries>[
+    for (final (String name, List<double> values) in <(String, List<double>)>[
+      ('Plan', <double>[12, 18, 9.5]),
+      ('Actual', <double>[14, 16.25, 11]),
+    ])
+      ChartSeries(
+        name: ChartData<String>(values: <String?>[name]),
+        categories: ChartData<Object>(values: <Object?>['A', 'B', 'C']),
+        values: ChartData<double>(values: values),
+      ),
+  ],
+);
+
+/// The added chart frame's name, the first column of its data, and the
+/// title the tool gives a typed chart of the file.
+const String _chartName = 'Model column chart';
+const int _chartColumn = 13;
+const String _chartTitle = 'Model chart';
+
+/// Writes the data of [_chart] at [row] of [sheet] from column N, a block of
+/// four rows and three columns, and adds the chart over it, bound to the
+/// cells, as a two-cell anchor of 8 columns by 15 rows right of the block.
+/// Returns where the block starts, or `null`, adding nothing, unless every
+/// row from the one above it is free (so the row between the probe and the
+/// block stays the new row) and the chart fits on the sheet.
+XlsxAnchorPoint? _addChart(XlsxSheet sheet, int row) {
+  if (row + 15 >= XlsxLimits.maxRows) return null;
+  final int last = sheet.rows.isEmpty ? -1 : sheet.rows.last.index;
+  if (last >= row - 1) return null;
+  final Chart bound = sheet.writeChartData(_chart, row, _chartColumn);
+  const int right = _chartColumn + 4;
+  sheet.addChart(
+    XlsxChart(
+      bound,
+      XlsxTwoCellAnchor(
+        XlsxAnchorPoint(row, right),
+        XlsxAnchorPoint(row + 15, right + 8),
+      ),
+      name: _chartName,
+    ),
+  );
+  return XlsxAnchorPoint(row, _chartColumn);
+}
+
+/// Where [_retitleChart] moved the chart at `index`.
+typedef _Retitled = ({int index, XlsxAnchor anchor});
+
+/// Gives the typed chart at [index] of [sheet]'s charts the title
+/// [_chartTitle] and moves it one row down, and returns where it went, or
+/// `null` when it lists typed no more or one row down is off the sheet.
+_Retitled? _retitleChart(XlsxSheet sheet, int index) {
+  final XlsxSheetChart chart = sheet.charts[index];
+  final XlsxChart? typed = chart.typed;
+  if (typed == null) return null;
+  XlsxAnchorPoint down(XlsxAnchorPoint p) => XlsxAnchorPoint(
+    p.row + 1,
+    p.column,
+    offsetX: p.offsetX,
+    offsetY: p.offsetY,
+  );
+  final XlsxAnchor? moved = switch (chart.anchor) {
+    final XlsxTwoCellAnchor a when a.to.row + 1 < XlsxLimits.maxRows =>
+      XlsxTwoCellAnchor(down(a.from), down(a.to), resize: a.resize),
+    final XlsxOneCellAnchor a when a.from.row + 1 < XlsxLimits.maxRows =>
+      XlsxOneCellAnchor(down(a.from), width: a.width, height: a.height),
+    _ => null,
+  };
+  if (moved == null) return null;
+  sheet
+    ..replaceChartAt(
+      index,
+      typed.chart.copyWith(title: const ChartTitle(text: _chartTitle)),
+      theme: typed.theme,
+    )
+    ..moveChartAt(index, moved);
+  return (index: index, anchor: moved);
+}
+
+/// The chart edits [saved] lacks when read back with the model: the added
+/// chart typed and bound to its data where the structural edits moved it,
+/// on the renamed sheet, and the retitled chart's title and anchor.
+List<String> _checkCharts(
+  Uint8List saved,
+  _Structure structure,
+  _Retitled? retitled,
+) {
+  final List<String> problems = <String>[];
+  try {
+    final List<XlsxSheetChart> charts = XlsxWorkbook.open(
+      saved,
+    ).sheets.first.charts;
+    final XlsxAnchorPoint? data = structure.chartData;
+    if (data != null) {
+      // Two rows inserted above the block and a column at B.
+      final int row = data.row + 2;
+      final int column = data.column + 1;
+      final String sheet = "'${structure.name.replaceAll("'", "''")}'!";
+      String cell(int r, int c) => '\$${_letters(c)}\$${r + 1}';
+      String cells(int c) => '$sheet${cell(row + 1, c)}:${cell(row + 3, c)}';
+      final List<XlsxSheetChart> added = <XlsxSheetChart>[
+        for (final XlsxSheetChart c in charts)
+          if (c.name == _chartName) c,
+      ];
+      final List<ChartSeries>? series = added.length == 1
+          ? added.single.typed?.chart.series
+          : null;
+      if (series == null || series.length != 2) {
+        problems.add('the added chart is missing or not typed');
+      } else {
+        if (added.single.anchor.from != XlsxAnchorPoint(row, column + 4)) {
+          problems.add('the added chart did not move with its cells');
+        }
+        for (int i = 0; i < 2; i++) {
+          final ChartSeries s = series[i];
+          if (s.name.reference != '$sheet${cell(row, column + 1 + i)}' ||
+              s.categories.reference != cells(column) ||
+              s.values.reference != cells(column + 1 + i)) {
+            problems.add(
+              'series ${i + 1} of the added chart is bound to '
+              '${s.name.reference}, ${s.categories.reference} and '
+              '${s.values.reference}',
+            );
+          }
+        }
+      }
+    }
+    if (retitled != null) {
+      final XlsxSheetChart? chart = retitled.index < charts.length
+          ? charts[retitled.index]
+          : null;
+      if (chart?.view?.title?.text != _chartTitle) {
+        problems.add('the replaced chart lacks its title');
+      }
+      if (chart?.anchor != retitled.anchor) {
+        problems.add('the replaced chart did not move one row down');
+      }
+    }
+  } on Object catch (e) {
+    problems.add('reading the charts failed: $e');
+  }
+  return problems;
+}
+
+/// The column letters of the 0-based [column].
+String _letters(int column) {
+  String letters = '';
+  for (int c = column + 1; c > 0; c = (c - 1) ~/ 26) {
+    letters = String.fromCharCode(0x41 + (c - 1) % 26) + letters;
+  }
+  return letters;
 }
 
 /// The structural edits [saved] lacks when read back with `XlsxReader`.

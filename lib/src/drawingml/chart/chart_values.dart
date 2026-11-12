@@ -32,6 +32,9 @@ String drawingNumberText(double v) => formatXmlDouble(v).replaceFirst('e', 'E');
 /// from.
 final DateTime _epoch = DateTime.utc(1899, 12, 30);
 
+/// Midnight of 1904-01-01, serial 0 of the 1904 date system.
+final DateTime _epoch1904 = DateTime.utc(1904, 1, 1);
+
 /// The serial of the first real day after Excel's phantom 29 February 1900.
 const int _firstMarch1900 = 61;
 
@@ -53,13 +56,19 @@ const double _maxSerial = 9e7;
 /// zone are ignored), down to the microsecond. A date before 1900-01-01
 /// counts on down through 0 and the negative numbers, which Excel does not
 /// show as dates.
-double drawingSerialOf(DateTime d) {
-  final int days = DateTime.utc(
-    d.year,
-    d.month,
-    d.day,
-  ).difference(_epoch).inDays;
-  final int whole = days < _firstMarch1900 ? days - 1 : days;
+///
+/// With [date1904] the serial counts in the 1904 date system instead: 0 is
+/// 1904-01-01, there is no phantom day, and the serial is 1,462 lower than
+/// the 1900 one.
+double drawingSerialOf(DateTime d, {bool date1904 = false}) {
+  final DateTime day = DateTime.utc(d.year, d.month, d.day);
+  final int whole;
+  if (date1904) {
+    whole = day.difference(_epoch1904).inDays;
+  } else {
+    final int days = day.difference(_epoch).inDays;
+    whole = days < _firstMarch1900 ? days - 1 : days;
+  }
   final int micros =
       ((d.hour * 60 + d.minute) * 60 + d.second) * 1000000 +
       d.millisecond * 1000 +
@@ -75,9 +84,10 @@ double drawingSerialOf(DateTime d) {
 /// fields. Serial 59 is
 /// 1900-02-28 and 61 is 1900-03-01; Excel's phantom 29 February 1900 (60, and
 /// any time on it) reads as 1900-03-01, the day a [DateTime] makes of that
-/// date. Throws an [ArgumentError] when [serial] is not finite or beyond
-/// 90,000,000 either way.
-DateTime drawingDateOf(double serial) {
+/// date. With [date1904] the serial is in the 1904 date system (0 is
+/// 1904-01-01, no phantom day). Throws an [ArgumentError] when [serial] is not
+/// finite or beyond 90,000,000 either way.
+DateTime drawingDateOf(double serial, {bool date1904 = false}) {
   if (!serial.isFinite || serial.abs() > _maxSerial) {
     throw ArgumentError.value(serial, 'serial', 'is not a date serial');
   }
@@ -88,12 +98,15 @@ DateTime drawingDateOf(double serial) {
     whole += 1;
     ms -= _msPerDay;
   }
-  if (whole == _phantomDay) {
-    whole = _firstMarch1900;
+  final DateTime day;
+  if (date1904) {
+    day = _epoch1904.add(Duration(days: whole));
+  } else {
+    if (whole == _phantomDay) {
+      whole = _firstMarch1900;
+    }
+    day = _epoch.add(Duration(days: whole < _phantomDay ? whole + 1 : whole));
   }
-  final DateTime day = _epoch.add(
-    Duration(days: whole < _phantomDay ? whole + 1 : whole),
-  );
   // Every field given, so a day of a daylight saving change cannot move the
   // hour as adding milliseconds to midnight could.
   return DateTime(

@@ -163,7 +163,7 @@ extension _SeriesReading on _ChartReader {
         _report(DrawingChartIssue.badNumber);
         values.add(null);
       } else {
-        values.add(drawingDateOf(number));
+        values.add(drawingDateOf(number, date1904: date1904));
       }
     }
     return values;

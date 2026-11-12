@@ -40,8 +40,8 @@
 /// `w5_generated.xlsx` is made, then edited structurally. The sheet `Data`
 /// has a table `Sales` (A1:C6) whose `Tax` column is one shared formula
 /// group, a table `Extra` (F1:G3), the rate in J1, a column chart over
-/// `Sales` (drawn by the test host `withCharts`, as the model adds no chart
-/// yet, and the group shared by hand, as the model writes none), a validation
+/// `Sales` (added with `addChart` once the group is shared by hand, as the
+/// model writes no shared formula), a validation
 /// and a rule on the amounts, a note on A1 and a picture. The sheet `Summary`
 /// holds formulas into `Data`, the names `Rate` and `Amounts`, a 3D sum
 /// (`Data:Summary`) and a sum of `Extra[Qty]`. Then two rows are inserted
@@ -56,12 +56,8 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
-import 'package:jet_charts_core/jet_charts_core.dart';
 import 'package:jet_office/jet_office.dart';
-import 'package:jet_office/src/drawingml/chart/chart_space.dart';
-import 'package:jet_office/src/drawingml/chart/chart_writer.dart';
 
-import '../test/drawingml/chart/support/chart_host.dart';
 import '../test/fixtures/m4_fixtures.dart' show jpeg3x5, png4x2;
 import '../test/support/read_xlsx.dart';
 import '../test/xlsx/read/support/zip_builder.dart';
@@ -555,20 +551,27 @@ XlsxWorkbook structureBook() {
     ..setCell(4, 0, 'Extra')
     ..setCell(4, 1, const XlsxFormula('SUM(Extra[Qty])', cached: 100));
 
-  final XlsxWorkbook edited = XlsxWorkbook.open(
-    withCharts(_shareTax(book.save().bytes), 'Data', <Uint8List>[
-      writeDrawingChartSpace(_salesChart(), ChartTheme.office).bytes,
-    ]),
-  );
+  final XlsxWorkbook edited = XlsxWorkbook.open(_shareTax(book.save().bytes));
   final XlsxSheet sheet = edited.sheet('Data');
-  sheet.addPicture(
-    XlsxPicture(
-      OfficeImage(png4x2),
-      const XlsxOneCellAnchor(XlsxAnchorPoint(0, 11), width: 120, height: 60),
-      name: 'Picture',
-      description: 'A 4 by 2 pixel gradient right of the rate',
-    ),
-  );
+  sheet
+    ..addChart(
+      XlsxChart(
+        _salesChart(),
+        const XlsxTwoCellAnchor(
+          XlsxAnchorPoint(1, 0),
+          XlsxAnchorPoint(16, 8),
+          resize: XlsxPictureResize.move,
+        ),
+      ),
+    )
+    ..addPicture(
+      XlsxPicture(
+        OfficeImage(png4x2),
+        const XlsxOneCellAnchor(XlsxAnchorPoint(0, 11), width: 120, height: 60),
+        name: 'Picture',
+        description: 'A 4 by 2 pixel gradient right of the rate',
+      ),
+    );
   edited.transaction(() {
     sheet
       ..insertRows(3, 2)
@@ -606,30 +609,23 @@ Uint8List _shareTax(Uint8List xlsx) {
 }
 
 /// A column chart of the amounts of `Sales`, by month.
-DrawingChartSpace _salesChart() => DrawingChartSpace(
-  chart: Chart(
-    kind: ChartKind.column,
-    title: const ChartTitle(text: 'Sales'),
-    series: <ChartSeries>[
-      ChartSeries(
-        name: ChartData<String>(
-          values: <String?>['Amount'],
-          reference: r'Data!$B$1',
-        ),
-        categories: ChartData<Object>(
-          values: <Object>[for (final (String m, int _) in _sales) m],
-          reference: r'Data!$A$2:$A$6',
-        ),
-        values: ChartData<double>(
-          values: <double?>[for (final (String _, int a) in _sales) a * 1.0],
-          reference: r'Data!$B$2:$B$6',
-        ),
+Chart _salesChart() => Chart(
+  kind: ChartKind.column,
+  title: const ChartTitle(text: 'Sales'),
+  series: <ChartSeries>[
+    ChartSeries(
+      name: ChartData<String>(
+        values: <String?>['Amount'],
+        reference: r'Data!$B$1',
       ),
-    ],
-  ),
-  ids: const DrawingChartIds(
-    categoryAxis: 500001,
-    valueAxis: 500002,
-    series: <String>['{00000000-00C5-0000-0000-000000000001}'],
-  ),
+      categories: ChartData<Object>(
+        values: <Object>[for (final (String m, int _) in _sales) m],
+        reference: r'Data!$A$2:$A$6',
+      ),
+      values: ChartData<double>(
+        values: <double?>[for (final (String _, int a) in _sales) a * 1.0],
+        reference: r'Data!$B$2:$B$6',
+      ),
+    ),
+  ],
 );

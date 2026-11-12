@@ -9,9 +9,17 @@
 /// and [DrawingChartIssue.unreadable]. Anything else gives a view of what the
 /// part shows: the kind and grouping of its one group, the series with their
 /// names, categories, values, references and colours, the title, the legend,
-/// the two axes and the data labels. A part the model does not draw (another
-/// group, several groups, a third axis) is [ChartKind.unsupported], with the
-/// series of its first group.
+/// the two axes and the data labels, and of a pie or doughnut (a plot area of
+/// its one group and no axis) the slice colours and the hole size, and of a
+/// scatter chart (its one group on two value axes, the x axis the one of the
+/// group's first axis id)
+/// each series' x values as its categories, and of several bar, line and
+/// area groups on one or two axis pairs a combination, or a chart of one
+/// kind with a secondary value axis (`chart_reader_combination.dart`). A
+/// part the model does not draw (another group, a horizontal bar group
+/// beside another, a third axis pair, a pie beside axes, a scatter group
+/// beside a category axis) is [ChartKind.unsupported], with the series of
+/// its first group.
 ///
 /// The typed form ([DrawingChartSpace]) is offered only when writing it gives
 /// the part again by `xmlDifference` (ruling R2 of C1), so whatever the reader
@@ -39,6 +47,9 @@ import 'chart_space.dart';
 import 'chart_values.dart';
 import 'chart_writer.dart';
 
+part 'chart_reader_combination.dart';
+part 'chart_reader_pie.dart';
+part 'chart_reader_scatter.dart';
 part 'chart_reader_series.dart';
 
 /// What [readDrawingChartSpace] read from a chart part.
@@ -65,6 +76,8 @@ final class DrawingChartRead {
 /// theme's `exportColors`, reads as `null`, and the typed form is checked by
 /// writing it in [theme]. [themeColors] are the file theme's colours, which
 /// give a scheme colour its RGB value (the Office theme's when `null`).
+/// [date1904] reads date categories as serials of the 1904 date system, and
+/// checks the typed form by writing it in that system.
 ///
 /// Never throws, whatever [theme] holds: when the writer refuses it (a line
 /// width, marker size or text size the part cannot hold), the part is read
@@ -87,6 +100,7 @@ DrawingChartRead readDrawingChartSpace(
   Uint8List bytes, {
   ChartTheme? theme,
   ThemeColors? themeColors,
+  bool date1904 = false,
 }) {
   final _Node? root;
   try {
@@ -108,6 +122,7 @@ DrawingChartRead readDrawingChartSpace(
     chart,
     theme ?? ChartTheme.office,
     _maxPoints + bytes.length,
+    date1904,
   ).read(bytes);
 }
 
@@ -251,7 +266,13 @@ bool _flag(_Node? node, {required bool absent}) {
 }
 
 final class _ChartReader {
-  _ChartReader(this.root, this.chartNode, this.theme, this.pointBudget);
+  _ChartReader(
+    this.root,
+    this.chartNode,
+    this.theme,
+    this.pointBudget,
+    this.date1904,
+  );
 
   final _Node root;
   final _Node chartNode;
@@ -261,6 +282,9 @@ final class _ChartReader {
   /// The entries the caches of the part may still fill, points they lack
   /// included: 1,048,576 plus the size of the part in bytes at the start.
   int pointBudget;
+
+  /// Whether date categories count in the 1904 date system.
+  final bool date1904;
 
   void _report(DrawingChartIssue issue) {
     if (!issues.contains(issue)) {
@@ -287,15 +311,40 @@ final class _ChartReader {
         axes.add(node);
       }
     }
-    final _Node? categoryAxis = axes
-        .where((_Node a) => a.name == 'catAx' || a.name == 'dateAx')
-        .firstOrNull;
-    final _Node? valueAxis = axes
-        .where((_Node a) => a.name == 'valAx')
-        .firstOrNull;
     final _Node? group = groups.firstOrNull;
+    // A scatter chart's x axis is the value axis whose id is the group's
+    // first `c:axId`, else the first of the two (Excel writes x first, chart
+    // 4 of `chart_reference_j4.xlsx`).
+    final bool scatter =
+        group != null &&
+        group.name == 'scatterChart' &&
+        groups.length == 1 &&
+        axes.length == 2 &&
+        axes.every((_Node a) => a.name == 'valAx');
+    if (!scatter && (groups.length > 1 || axes.length == 4)) {
+      final DrawingChartRead? read = _readGroups(bytes, groups, axes);
+      if (read != null) {
+        return read;
+      }
+    }
+    final _Node? categoryAxis = scatter
+        ? _scatterXAxis(group, axes)
+        : axes
+              .where((_Node a) => a.name == 'catAx' || a.name == 'dateAx')
+              .firstOrNull;
+    final _Node? valueAxis = scatter
+        ? axes.firstWhere((_Node a) => !identical(a, categoryAxis))
+        : axes.where((_Node a) => a.name == 'valAx').firstOrNull;
     ChartKind kind = ChartKind.unsupported;
-    if (group != null &&
+    if (scatter) {
+      kind = ChartKind.scatter;
+    } else if (group != null && groups.length == 1 && axes.isEmpty) {
+      kind = switch (group.name) {
+        'pieChart' => ChartKind.pie,
+        'doughnutChart' => ChartKind.donut,
+        _ => ChartKind.unsupported,
+      };
+    } else if (group != null &&
         groups.length == 1 &&
         axes.length == 2 &&
         categoryAxis != null &&
@@ -320,20 +369,32 @@ final class _ChartReader {
       'scatterChart',
       'stockChart',
     }.contains(group?.name);
+    final bool round = kind == ChartKind.pie || kind == ChartKind.donut;
     final List<_Node> seriesNodes = group?.all('ser').toList() ?? <_Node>[];
     final List<ChartSeries> series = <ChartSeries>[
       for (int i = 0; i < seriesNodes.length; i++)
-        _readSeries(seriesNodes[i], i, lines: lines),
+        round
+            ? _readPieSeries(seriesNodes[i], i)
+            : scatter
+            ? _readScatterSeries(seriesNodes[i], i)
+            : _readSeries(seriesNodes[i], i, lines: lines),
     ];
     final _Node? titleNode = chartNode.child('title');
     final String? titleText = _titleText(titleNode);
+    if (round) {
+      return _readPie(
+        bytes,
+        kind,
+        group!,
+        series,
+        seriesNodes,
+        titleNode,
+        titleText,
+      );
+    }
     final Chart chart = Chart(
       kind: kind,
-      grouping: switch (group?.child('grouping')?.val) {
-        'stacked' => ChartGrouping.stacked,
-        'percentStacked' => ChartGrouping.percentStacked,
-        _ => ChartGrouping.clustered,
-      },
+      grouping: _grouping(group),
       series: series,
       categoryAxis: _axis(categoryAxis),
       valueAxis: _axis(valueAxis),
@@ -344,17 +405,22 @@ final class _ChartReader {
           ? groups.map((_Node g) => g.name).join('+')
           : null,
     );
-    final DrawingChartSpace? typed = kind == ChartKind.unsupported
-        ? null
-        // A supported kind needs both axes, so neither is null here.
-        : _typed(
-            bytes,
-            chart,
-            categoryAxis!,
-            valueAxis!,
-            seriesNodes,
-            autoTitle: titleNode != null && titleText == null,
-          );
+    DrawingChartSpace? typed;
+    if (kind != ChartKind.unsupported) {
+      // A supported kind here (a pie returned above) has both axes.
+      final int? categoryId = _axisId(categoryAxis!);
+      final int? valueId = _axisId(valueAxis!);
+      if (categoryId != null && valueId != null && categoryId != valueId) {
+        typed = _typed(
+          bytes,
+          chart,
+          seriesNodes,
+          categoryAxisId: categoryId,
+          valueAxisId: valueId,
+          autoTitle: titleNode != null && titleText == null,
+        );
+      }
+    }
     return DrawingChartRead(
       chart,
       typed,
@@ -362,22 +428,24 @@ final class _ChartReader {
     );
   }
 
-  /// The typed form of the part, or `null` when its ids cannot be written,
-  /// the writer refuses [theme] (an [ArgumentError]), or writing it does not
-  /// give [bytes] again.
+  /// The typed form of the part, with [categoryAxisId] and [valueAxisId]
+  /// (`DrawingChartIds`' defaults when `null`, as for a pie, which has no
+  /// axes) and [secondaryCategoryAxisId] and [secondaryValueAxisId] (the
+  /// defaults when `null`, as for a part without secondary axes), or `null`
+  /// when its series ids cannot be written, the writer
+  /// refuses [theme] (an [ArgumentError]), or writing it does not give
+  /// [bytes] again.
   DrawingChartSpace? _typed(
     Uint8List bytes,
     Chart chart,
-    _Node categoryAxis,
-    _Node valueAxis,
     List<_Node> seriesNodes, {
+    int? categoryAxisId,
+    int? valueAxisId,
+    int? secondaryCategoryAxisId,
+    int? secondaryValueAxisId,
     required bool autoTitle,
   }) {
-    final int? categoryId = _axisId(categoryAxis);
-    final int? valueId = _axisId(valueAxis);
-    if (categoryId == null || valueId == null || categoryId == valueId) {
-      return null;
-    }
+    const DrawingChartIds defaults = DrawingChartIds();
     final List<String> seriesIds = <String>[];
     for (final _Node node in seriesNodes) {
       final String? id = _seriesId(node);
@@ -395,15 +463,18 @@ final class _ChartReader {
       chart: chart,
       language: root.child('lang')?.val ?? 'en-US',
       ids: DrawingChartIds(
-        categoryAxis: categoryId,
-        valueAxis: valueId,
+        categoryAxis: categoryAxisId ?? defaults.categoryAxis,
+        valueAxis: valueAxisId ?? defaults.valueAxis,
+        secondaryCategoryAxis:
+            secondaryCategoryAxisId ?? defaults.secondaryCategoryAxis,
+        secondaryValueAxis: secondaryValueAxisId ?? defaults.secondaryValueAxis,
         series: List<String>.unmodifiable(seriesIds),
       ),
       autoTitle: autoTitle,
     );
     final DrawingChartWritten written;
     try {
-      written = writeDrawingChartSpace(space, theme);
+      written = writeDrawingChartSpace(space, theme, date1904: date1904);
     } on ArgumentError {
       // The writer refuses the reader's theme (a line width, marker size or
       // text size the part cannot hold): the part is read but not typed.
@@ -412,14 +483,36 @@ final class _ChartReader {
     return xmlDifference(written.bytes, bytes) == null ? space : null;
   }
 
-  static int? _axisId(_Node axis) {
-    final String? text = axis.child('axId')?.val;
+  /// The x axis of a scatter [group] on the two value [axes]: the one whose
+  /// `c:axId` is the group's first, else the first in document order.
+  static _Node _scatterXAxis(_Node group, List<_Node> axes) {
+    final String? first = group.child('axId')?.val;
+    return axes
+            .where((_Node a) => first != null && a.child('axId')?.val == first)
+            .firstOrNull ??
+        axes.first;
+  }
+
+  static int? _axisId(_Node axis) => _id(axis.child('axId')?.val);
+
+  /// [text] as an axis id, or `null` unless it is one: digits, at most
+  /// [_maxAxisId].
+  static int? _id(String? text) {
     if (text == null || !_axisIdText.hasMatch(text)) {
       return null;
     }
     final int id = int.parse(text);
     return id > _maxAxisId ? null : id;
   }
+
+  /// The grouping of [group]'s `c:grouping`: `clustered` for `standard`,
+  /// `clustered`, any other value and none.
+  static ChartGrouping _grouping(_Node? group) =>
+      switch (group?.child('grouping')?.val) {
+        'stacked' => ChartGrouping.stacked,
+        'percentStacked' => ChartGrouping.percentStacked,
+        _ => ChartGrouping.clustered,
+      };
 
   static String? _seriesId(_Node series) {
     for (final _Node ext

@@ -11,30 +11,34 @@ part of 'chart_writer.dart';
 enum _CategoryType { number, date, text }
 
 extension _SeriesWriting on _ChartWriter {
-  void _writeSeries(ChartSeries series, int index) {
+  /// A series of a bar, line or area group, drawn as [kind] (the chart's,
+  /// or in a combination the series' own).
+  void _writeSeries(ChartSeries series, int index, ChartKind kind) {
     w.start('c:ser');
     _value('c:idx', index.toString());
     _value('c:order', index.toString());
     _writeSeriesName(series.name);
     final ChartColor color = theme.colorOf(series, index);
     w.start('c:spPr');
-    if (chart.kind == ChartKind.line) {
+    if (kind == ChartKind.line) {
       _seriesLine(color);
       w.empty('a:effectLst');
       w.end();
       w.start('c:marker');
-      if (theme.lineMarkers) {
+      if (theme.lineMarkersOf(chart.kind)) {
         _value('c:symbol', 'circle');
         _value('c:size', theme.markerSize.clamp(2, 72).round().toString());
         _markerShape(color);
       } else {
-        // Excel's "Line" without markers. A lone point, which the layout
-        // marks, has no marker here: a series' marker is all or nothing.
+        // Excel's "Line" without markers, and a combination's line
+        // (`chart_reference_j4.xlsx`, chart 5). A lone point, which the
+        // layout marks, has no marker here: a series' marker is all or
+        // nothing.
         _value('c:symbol', 'none');
       }
       w.end();
     } else {
-      final bool area = chart.kind == ChartKind.area;
+      final bool area = kind == ChartKind.area;
       _solidFill(
         color,
         alpha: area && theme.areaOpacity < 1 ? theme.areaOpacity : null,
@@ -48,18 +52,29 @@ extension _SeriesWriting on _ChartWriter {
       }
       w.empty('a:effectLst');
       w.end();
-      if (_bars) {
+      if (_isBars(kind)) {
         _value('c:invertIfNegative', '0');
       }
     }
-    if (chart.kind != ChartKind.area) {
-      _writePointColors(series, color);
+    if (kind != ChartKind.area) {
+      _writePointColors(series, color, kind);
     }
     if (chart.dataLabels.visible) {
       _writeSeriesDataLabels();
     }
     _writeCategories(series.categories);
-    w.start('c:val');
+    _writeValues(series);
+    if (kind == ChartKind.line) {
+      _value('c:smooth', series.smooth ? '1' : '0');
+    }
+    _writeSeriesId(index);
+    w.end();
+  }
+
+  /// The series' `c:val`, or the element [name], in its format code
+  /// (`General` when it has none).
+  void _writeValues(ChartSeries series, {String name = 'c:val'}) {
+    w.start(name);
     _writeNumbers(
       series.values.values,
       series.values.reference,
@@ -67,9 +82,11 @@ extension _SeriesWriting on _ChartWriter {
       (double v) => v,
     );
     w.end();
-    if (chart.kind == ChartKind.line) {
-      _value('c:smooth', series.smooth ? '1' : '0');
-    }
+  }
+
+  /// The `c:extLst` of the `c16:uniqueId` of series [index], left out when
+  /// `space.ids` has no id for it.
+  void _writeSeriesId(int index) {
     if (index < space.ids.series.length) {
       w.start('c:extLst');
       w.start('c:ext');
@@ -79,7 +96,6 @@ extension _SeriesWriting on _ChartWriter {
       w.end();
       w.end();
     }
-    w.end();
   }
 
   /// A series' `a:ln` of [color]: the theme's line width, a round cap and a
@@ -106,7 +122,7 @@ extension _SeriesWriting on _ChartWriter {
     w.end();
   }
 
-  /// One `c:dPt` per point of [series] with its own colour
+  /// One `c:dPt` per point of [series], drawn as [kind], with its own colour
   /// (`ChartTheme.pointColorOf`: a point colour key is written as the
   /// theme's colour of it), after the
   /// series' shape and marker (`c:dPt` follows `c:marker` and
@@ -115,9 +131,16 @@ extension _SeriesWriting on _ChartWriter {
   /// Each holds the index, `c:invertIfNegative 0` of a bar, for a line the
   /// marker with the colour as its fill and line, `c:bubble3D 0` and the
   /// shape, a fill for a bar and the series' own line (the segment is not
-  /// recoloured) for a line. The layout is an estimate, not checked in Excel
-  /// (pending E1).
-  void _writePointColors(ChartSeries series, ChartColor seriesColor) {
+  /// recoloured) for a line, or a scatter chart's line without fill. The
+  /// layout is an estimate, not checked in Excel (pending E1; a scatter
+  /// chart's, as a line's, is not in the E1 file).
+  void _writePointColors(
+    ChartSeries series,
+    ChartColor seriesColor,
+    ChartKind kind,
+  ) {
+    final bool scatter = kind == ChartKind.scatter;
+    final bool marked = scatter || kind == ChartKind.line;
     for (int i = 0; i < theme.pointColorCount(series); i++) {
       final ChartColor? color = theme.pointColorOf(series, i);
       if (color == null) {
@@ -125,10 +148,10 @@ extension _SeriesWriting on _ChartWriter {
       }
       w.start('c:dPt');
       _value('c:idx', i.toString());
-      if (_bars) {
+      if (_isBars(kind)) {
         _value('c:invertIfNegative', '0');
       }
-      if (chart.kind == ChartKind.line) {
+      if (marked) {
         w.start('c:marker');
         _value('c:symbol', 'circle');
         _value('c:size', theme.markerSize.clamp(2, 72).round().toString());
@@ -137,7 +160,9 @@ extension _SeriesWriting on _ChartWriter {
       }
       _value('c:bubble3D', '0');
       w.start('c:spPr');
-      if (chart.kind == ChartKind.line) {
+      if (scatter) {
+        _scatterSeriesLine();
+      } else if (marked) {
         _seriesLine(seriesColor);
       } else {
         _solidFill(color);
@@ -155,9 +180,9 @@ extension _SeriesWriting on _ChartWriter {
   /// (`chart_reference.xlsx`, charts 20 and 21): the format when the labels
   /// have one, a bare shape, the data label text, `c:showVal 1` among the
   /// flags, `c:showLeaderLines 0`, and Excel's leader lines in a `c15`
-  /// extension. No position: Excel writes none, and draws each kind's
-  /// default.
-  void _writeSeriesDataLabels() {
+  /// extension (left out when not [leaderLines]). No position: Excel writes
+  /// none, and draws each kind's default.
+  void _writeSeriesDataLabels({bool leaderLines = true}) {
     w.start('c:dLbls');
     final String? formatCode = chart.dataLabels.formatCode;
     if (formatCode != null) {
@@ -176,6 +201,10 @@ extension _SeriesWriting on _ChartWriter {
     );
     _writeLabelFlags(showValue: chart.dataLabels.showValue);
     _value('c:showLeaderLines', '0');
+    if (!leaderLines) {
+      w.end();
+      return;
+    }
     w.start('c:extLst');
     w.start('c:ext');
     w.attribute('uri', _leaderLinesExtension);
@@ -217,15 +246,15 @@ extension _SeriesWriting on _ChartWriter {
     w.end();
   }
 
-  /// The series' `c:cat`, left out when the categories have neither values
-  /// nor a reference.
-  void _writeCategories(ChartData<Object> categories) {
+  /// The series' `c:cat`, or the element [name], left out when the
+  /// categories have neither values nor a reference.
+  void _writeCategories(ChartData<Object> categories, {String name = 'c:cat'}) {
     final List<Object?> values = categories.values;
     final String? reference = categories.reference;
     if (values.isEmpty && reference == null) {
       return;
     }
-    w.start('c:cat');
+    w.start(name);
     switch (_categoryType(values)) {
       case _CategoryType.number:
         _writeNumbers(
@@ -239,7 +268,7 @@ extension _SeriesWriting on _ChartWriter {
           values,
           reference,
           _scrub(chart.categoryAxis.formatCode ?? 'm/d/yyyy'),
-          (Object v) => drawingSerialOf(v as DateTime),
+          (Object v) => drawingSerialOf(v as DateTime, date1904: date1904),
         );
       case _CategoryType.text:
         _writeTexts(values, reference);

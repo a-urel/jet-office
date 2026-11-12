@@ -15,7 +15,9 @@ tables); and milestone W5, structural editing (rows and columns inserted and
 deleted, sheets renamed, moved and added, tables renamed and removed, and
 change sets with undo and redo); and milestone W6, proof and release
 readiness: the two W5 gaps closed, writer parity over every fixture, an API
-review, the benchmarks, and the names fixed.
+review, the benchmarks, and the names fixed; and milestone C2 of the chart
+phase, the XLSX chart host: charts listed, added, replaced, moved and
+removed, and a chart's data written to cells.
 
 ```dart
 final XlsxWorkbook book = XlsxWorkbook.open(bytes);
@@ -30,8 +32,9 @@ writes values as the writers do. What the model does not type (W1 types only
 cells, the workbook's sheet list and `date1904`, the shared strings and the
 number formats of the styles; W2 adds the rest of the styles, rows, columns,
 merges, views and tab colours; W3 adds the features listed under "What W3
-adds"; W4 adds rich text, notes, pictures and tables) is kept as opaque XML
-at its position and written back, with the namespace declarations it needs.
+adds"; W4 adds rich text, notes, pictures and tables; C2 adds charts) is
+kept as opaque XML at its position and written back, with the namespace
+declarations it needs.
 
 ## What W1 does and does not do
 
@@ -349,6 +352,73 @@ W6 adds no feature; it proves the model and fixes its names.
   cell formats and styles stay); there is no `removeSheet`; charts stay opaque
   until C2.
 
+## What C2 adds
+
+C2 makes a chart an object of the model, as W4 made a picture one. A chart is
+a `jet_charts_core` `Chart` placed by an `XlsxAnchor`; its part
+(`xl/charts/chartN.xml`) is written and read by the DrawingML layer
+([`drawingml-charts.md`](drawingml-charts.md)), which knows no XLSX.
+
+```dart
+final XlsxWorkbook book = XlsxWorkbook();
+final XlsxSheet data = book.addSheet('Veri');
+final XlsxSheet board = book.addSheet('Pano');
+final Chart bound = data.writeChartData(chart, 0, 0); // cells, then refs
+board.addChart(XlsxChart(
+  bound,
+  const XlsxTwoCellAnchor(XlsxAnchorPoint(0, 0), XlsxAnchorPoint(15, 8)),
+  language: 'tr-TR',
+));
+```
+
+- **Members.** On a sheet: `charts` (each an `XlsxSheetChart`: anchor, name,
+  description, `view` and `typed`), `addChart`, `replaceChartAt`,
+  `moveChartAt`, `removeChartAt` and `writeChartData`; `XlsxChart` is a chart
+  to add and the typed form of a listed one. The barrel re-exports the
+  `jet_charts_core` types they take (`Chart`, its series, data, axes, title,
+  legend, labels and enums, `ChartTheme`, `ChartColor`), so a caller needs one
+  import; the `Drawing*` types stay private. `XlsxWriter` and
+  `XlsxStreamWriter` get no chart API (the owner's decision 2): a writer's
+  output can be opened with the model and charted.
+- **Kinds.** Column, bar, line and area in three groupings, smooth lines,
+  pie, donut, scatter of markers only, combinations of column, line and area
+  groups, and a secondary value axis. Any other kind in a file is kept and
+  lists as a view without a typed form.
+- **The data lives in cells** (the owner's decision 1). `writeChartData`
+  writes a chart's table to a sheet (a header row of series names, the
+  categories in the first column, a column per series; a scatter series an x
+  and a y column) and returns the chart with every series bound to those
+  cells, quoted as Excel quotes a sheet name; the chart then follows the
+  cells in Excel. A caller may instead give references or literal data.
+- **Typed only when nothing is lost.** A listed chart's `typed` is set only
+  when writing it again gives the part (`xmlDifference` equal), read in the
+  Office theme with the file theme's colours and the workbook's date system.
+  A chart written in an app theme with fixed colours may list as a view only
+  after a reopen: the file records no theme.
+- **Ids.** A new part `chart{n}.xml` gets deterministic ids from n (axes
+  `100000 + 2n` and `100001 + 2n`, the secondary pair `200000 + 2n` and
+  `200001 + 2n`, series GUIDs `{00000000-00C1-0000-nnnn-iiiiiiiiiiii}`), so
+  the same calls give the same bytes; a chart read from a part carries its
+  part's ids privately, and a replace keeps them.
+- **Caches stay as written** (the owner's decision 5). After `setCell` or a
+  structural edit the chart's caches, its `view` and its `typed` form keep
+  the old values; Excel and LibreOffice redraw from the cells.
+- **Structural edits.** A chart's anchor and series formulas follow row and
+  column edits and sheet renames, whether the part came from the file or was
+  added this session, and an added chart stays typed after the shift.
+- **One change per edit.** Each member is one recorded change
+  (`featureChanged`; `writeChartData` is `cellsSet`), undone and redone
+  byte-equal: parts, relationships, content types and the parts' bytes.
+- **Untrusted input.** `XlsxReadLimits.maxChartPartBytes` (32 MiB) caps a
+  chart part before it is read; reading never throws for a chart part.
+- **Warnings.** `featureEntryInvalid` with the detail `chart` (a frame or part
+  that cannot be read), `invalidCharactersRemoved` (text the writer
+  scrubbed) and the new `chartValueOmitted` (a value that is not a finite
+  number left out of a written chart).
+- **Out of C2.** Sparklines and chartsheets (decision 3): a sparkline is a
+  cell feature, a chartsheet keeps being saved as read. A chart beside a list
+  of `XlsxListExport`, and the DOCX host (C3).
+
 ## Rules the model enforces
 
 A file the model cannot open throws `XlsxReadException` with the reader's
@@ -558,6 +628,31 @@ Nothing is dropped silently.
 | Change sets | `transaction` returns one `XlsxChangeSet` of every edit in it; a throw reverts and rethrows; a nested transaction joins the outer one, and a caught throw inside undoes only its own edits; `undo` takes the last applied set, out of order is a `StateError`; an edit outside a transaction ends undo of the sets before it; `redo` after another edit throws; setting the value a cell holds records nothing | the library keeps no undo stack (0009): the caller holds the sets | `test/xlsx/model/change_set_test.dart` (all), `test/architecture/change_log_history_test.dart` |
 | Fuzzing | the feature fuzz inserts and deletes rows and columns, renames and moves sheets and undoes them over its corpus; the lexer fuzz (`test/xlsx/formula/formula_lexer_fuzz_test.dart`) requires the lexer never to throw and its tokens to join back to the input | files and formulas are untrusted input | `test/xlsx/model/feature_fuzz_test.dart`, `test/xlsx/formula/formula_lexer_fuzz_test.dart` |
 
+### Charts (C2)
+
+| Case | Behaviour | Why | Test |
+|---|---|---|---|
+| Listing | `charts` lists, in file order, each `oneCellAnchor` or `twoCellAnchor` that directly holds a graphic frame showing a chart part of the file; one in a group, in `mc:AlternateContent` or under an absolute anchor is kept and unlisted without a warning; a frame of another graphic is no chart; pictures and charts each list only their own | as W4 lists pictures | `test/xlsx/model/xlsx_sheet_charts_test.dart` ("lists c1_kinds' twelve charts, typed, with their ids", "a chart beside a picture: each list holds only its own", "a chart in a group, an absolute anchor or AlternateContent is kept and unlisted without a warning") |
+| A broken frame or part | a frame whose `r:id` dangles, names another relationship type or lacks a `cNvPr` id is kept, unlisted and warned once (`featureEntryInvalid`, `chart`); a part that is not a chart lists with no view and warns; a number that cannot be read warns and the chart lists; never a throw from `charts` for the part itself | a silent loss is an anti-goal; the file is untrusted | `xlsx_sheet_charts_test.dart` ("a dangling r:id is kept, unlisted and warned about once", "a part that is not a chart lists without a view and warns once", "a number that cannot be read warns; the chart lists") |
+| Typed | `typed` only when writing it gives the part again, read in the Office theme, the workbook theme's colours and its date system; a kind the model does not write lists as a view without a warning; 22 of the 23 charts of the owner's `chart_reference.xlsx` and 6 of the 7 of `chart_reference_j4.xlsx` list typed | editing a typed chart loses nothing | `xlsx_sheet_charts_test.dart` ("a kind the model does not draw lists as a view, without a warning", "reads in the workbook's date system", "reads scheme colours in the workbook theme's colours"), `test/xlsx/model/xlsx_sheet_charts_excel_test.dart` |
+| An app theme after a reopen | a chart written in an app theme with fixed colours lists its view with those colours as the series' own, and may have no typed form | the file records no theme | `test/drawingml/chart/chart_fixtures_test.dart` ("its charts list typed, with their ids") |
+| Size cap | a part above `XlsxReadLimits.maxChartPartBytes` (32 MiB, checked on the entry's declared size first) is not read: it lists with no view, warns once and is saved byte for byte, also after an edit rewrote it | a part's tree is several times its size in memory | `xlsx_sheet_charts_test.dart` ("a part over maxChartPartBytes lists without a view, warns and saves unchanged", "a rewritten part over the cap still lists without a view"), `test/xlsx/read/hostile_files_test.dart` ("maxChartPartBytes") |
+| Reading changes nothing | listing and reading every chart, then saving, keeps every chart part as written | decision 0009 | `xlsx_sheet_charts_test.dart` ("reading the charts of c1_options and saving changes no chart part"), `xlsx_sheet_charts_excel_test.dart` ("saving chart_reference.xlsx after reading its charts keeps every chart part") |
+| `addChart` | the part `xl/charts/chart{n}.xml` (n the lowest no part has and no override names), its override, a drawing relationship (`rId{m}` the lowest free), and a frame as Excel writes it (`twoCellAnchor` without `editAs` when it moves and sizes, or a `oneCellAnchor` with its size; `cNvPr` id one above the highest, a default name `Chart {k}` with the lowest k from 1 that no frame of the drawing, listed or not, is named, so add, add, remove the first, add never repeats a name; an `xfrm` of zeros), creating the drawing when there is none; deterministic ids from n; a listed `typed` added again keeps its ids, as a copy; beside pictures, shapes and a chart every other entry stays character for character | the same calls give the same bytes; the W4 pattern | `xlsx_sheet_charts_test.dart` ("adds a part, its relationship and frame to a new workbook", "a second chart takes the next part, id and name", "a default name is the lowest Chart k no frame of the drawing has", "a chart takes no number a content type override of no part names, so undo keeps that override", "a listed typed chart added again keeps its ids, as a copy", "beside pictures, shapes and a chart (excel_objects): pictures and every entry stay") |
+| Refused adds | a kind or secondary axis the writer cannot express, a theme value out of range, a bad anchor (a one-cell anchor without a size) or a name with a forbidden character is an `ArgumentError`, nothing changed | programmer errors throw | `xlsx_sheet_charts_test.dart` ("a kind the writer refuses throws and nothing changes", "a bad anchor or name throws and nothing changes", "a one-cell anchor gives its size; without one it throws") |
+| Written data problems | a value that is not finite is left out and warns `chartValueOmitted` once; characters XML forbids are removed and warn `invalidCharactersRemoved`, each with the chart's name as the detail | data problems warn | `xlsx_sheet_charts_test.dart` ("a value that is not finite warns chartValueOmitted once", "characters XML forbids in the text warn invalidCharactersRemoved") |
+| `replaceChartAt` | writes the chart into the same part, keeping the anchor, frame and the part's relationships, and, when the part reads typed, its language, ids and automatic title (more series take the ids of their positions; a part that showed a pie takes its number's axis ids); works on a view-only chart; an equal chart in the Office theme is no edit | the caller's explicit rebuild; nothing else moves | `xlsx_sheet_charts_test.dart` ("keeps the frame, language, ids and automatic title", "more series take the ids of their positions; a part that showed a pie takes the axis ids of its number", "a part that is not a chart is rebuilt with deterministic ids", "an equal chart records nothing") |
+| Style parts on replace | a replace of another kind drops the chart style and colour style relationships, and their parts when nothing else targets them; of the same kind keeps them; other relationships (user shapes, an embedded workbook) stay, even when the new XML no longer names them; a part two frames show changes for both | their content is per kind | `xlsx_sheet_charts_test.dart` ("a pie for Excel's column chart drops its style parts", "the same kind keeps the style parts", "a style part another chart targets stays"), `xlsx_sheet_charts_excel_test.dart` ("replaceChartAt(0, pie) on chart_reference.xlsx keeps the anchor and series ids and drops style1.xml and colors1.xml") |
+| `moveChartAt` | the anchor element takes the new markers, `ext` and `editAs` (and the other kind's name), the frame stays as written; an equal anchor is no edit; a bad anchor or index throws, nothing changed | as `movePictureAt` | `xlsx_sheet_charts_test.dart` ("moves, keeping the frame; an equal anchor records nothing", "a one-cell anchor without a size, a bad anchor or index throws and nothing changes") |
+| `removeChartAt` | the frame goes, the drawing's relationship when no other entry names it, the part when nothing targets it, and every part only it targets (style, colours, user shapes, an embedded package); the last entry takes the drawing and `<drawing>`; a drawing that goes for any reason (the last picture removed) takes a chart part no frame used, with its own parts and override, and undo restores it byte-equal; the model's cache of opened chart parts drops a removed part | as `removePictureAt`; nothing left dangling | `xlsx_sheet_charts_test.dart` ("removes the frame, the part and the parts only it targets", "the last entry takes the drawing and <drawing> with it", "removing every chart of c1_kinds removes every chart part", "a drawing that goes takes a chart part no frame uses, and its own parts", "a removed chart part leaves the cache of opened parts"), `xlsx_sheet_charts_excel_test.dart` ("removing every chart of chart_defaults.xlsx removes the drawing and <drawing>") |
+| Undo | add, replace, move and remove, each one change, undo and redo byte-equal (parts, relationships, content types, bytes); a structural edit after a replace undoes to the replaced chart; add, insert, replace and their undo in reverse give the file back | decision 0009 | `xlsx_sheet_charts_test.dart` ("undo of add, replace, move and remove restores the file", "a structural edit after a replace undoes to the replaced chart"), `test/xlsx/model/chart_held_shift_test.dart` ("add, insertRows, replace, then undo in reverse gives the file back") |
+| `writeChartData` | writes the table at (`row`, `column`), 0-based: names across the header row, categories down the first column, a column per series (a scatter series an x then a y column); dates as date cells in the category axis' format or `m/d/yyyy`, in the workbook's date system; a series' format code on its value cells; `null` and non-finite entries leave cells empty; returns the chart bound to absolute references, the sheet name quoted only when it needs it; overwrites as `setCell` does; one change; a block leaving the sheet is a `StateError`, nothing changed; on a chart that is not a scatter chart the series share the first column, the longest list of categories goes there and each other series' categories must be its start, else an `ArgumentError` naming `chart.series[i].categories`, checked before any write (nothing changed) | the owner's decision 1: the chart follows its cells | `test/xlsx/model/chart_data_test.dart` ("writes names, categories and values, quoting O'Brien", "date categories are date cells in the axis format", "a 1904 workbook gets 1904 serials in cells and in the cache", "a scatter series takes an x column then a y column", "a series whose categories are a prefix of the longest binds to it", "categories that are not a prefix of the longest throw and change nothing", "a block leaving the sheet throws and changes nothing", "it is one change: undo restores the cells, redo writes them") |
+| Caches stay | after `setCell` or a structural edit a chart's caches, `view` and `typed` keep the values written; no test expects refreshed caches | the owner's decision 5: Excel and LibreOffice redraw from the cells | `chart_held_shift_test.dart` ("insertRows shifts an added chart; it lists typed, caches stay") |
+| Structural edits | a chart added or replaced this session follows row and column edits and renames as a file's does (anchor and `c:f`), and stays typed; a deleted series range gives the rewriter's `#REF!`; another sheet's edit and rename rewrite references to it | every reference is held | `chart_held_shift_test.dart` ("renameSheet to 'Veri 2026' quotes the added chart's references", "deleteRows over a series' values gives the rewriter's #REF!"), `xlsx_sheet_charts_test.dart` ("insertRows on its sheet, its undo and redo", "another sheet's edit and rename, where the chart's data is") |
+| `[0]!Name` | a series bound to a workbook name (`[0]!Tutarlar`) reads, lists and saves unchanged; structural edits and renames leave it alone; `writeChartData` never writes one | whether Excel writes it is open until the owner's chart made by hand | `test/xlsx/model/chart_names_test.dart` |
+| The fixtures and `edit_model` | `c1_kinds`, `c1_options`, `c2_kinds` and `c2_data` are built with `addChart` (C1's parts unchanged); `tool/edit_model.dart` adds a chart over data it wrote, then retitles and moves the first typed chart | every chart fixture goes through the public API | `chart_fixtures_test.dart` ("each C1 part is the one the C1 host wrote", "each saved C2 part holds the ids its part number gives"), `test/tool/edit_model_test.dart` ("an edited workbook holds a column chart over data the model wrote, moved by the structural edits and bound to the renamed sheet", "the first typed chart of the first sheet takes a title and moves one row down") |
+| Fuzzing | the feature fuzz reads every chart, sets each one's anchor and typed chart back, replaces, moves, removes and adds charts and writes a chart's data over its corpus (with `c1_kinds` and `c2_kinds`), and undoing restores the file | the file is untrusted input | `test/xlsx/model/feature_fuzz_test.dart` |
+
 ### What W3 reads and edits less than it might
 
 | Case | Behaviour | Why | Test |
@@ -582,7 +677,7 @@ Nothing is dropped silently.
 
 | Case | Behaviour | Why | Test |
 |---|---|---|---|
-| A fixture rebuilt with the model | semantically equal to the writer's: `m1_values`, `m1_dates`, `m1_sheets`, `m1_properties`, `m2_styles`, `m2_columns_rows`, `m2_style_precedence`, `m2_views`, `m2_merges_filter`, `m2_formula_xstring`, `m3_names`, `m3_hyperlinks`, `m3_validation`, `m3_conditional`, `m3_conditional_x14`, `m3_page_setup`, `m3_header_footer`, `m3_protection`, `m3_properties`, `m4_rich_text`, `m4_notes`, `m4_images`, `m4_tables`, `m4_objects`, `m5_list_plain` and `m5_list_table` (the two lists `XlsxListExport` writes, rebuilt with the model's calls in the test; `XlsxListExport` writes a count total in General over the column's format (its own choice, `_plainNumber`); the writer's `table` and the model's `addTable` both give that cell the column's format, so a model caller who wants the same sets that cell's style after `addTable`, as the rebuild does; this is no difference between writer and model), apart from the two named differences below. `c1_kinds` and `c1_options` are the only fixtures not rebuilt: their charts are written by `writeDrawingChartSpace` into a test-only host, and the model hosts charts in C2. The test fails for a fixture that is neither rebuilt nor named with that reason | one way to write a value | `test/xlsx/model/parity_test.dart` ("fixtures built with the model equal the writer's") |
+| A fixture rebuilt with the model | semantically equal to the writer's: `m1_values`, `m1_dates`, `m1_sheets`, `m1_properties`, `m2_styles`, `m2_columns_rows`, `m2_style_precedence`, `m2_views`, `m2_merges_filter`, `m2_formula_xstring`, `m3_names`, `m3_hyperlinks`, `m3_validation`, `m3_conditional`, `m3_conditional_x14`, `m3_page_setup`, `m3_header_footer`, `m3_protection`, `m3_properties`, `m4_rich_text`, `m4_notes`, `m4_images`, `m4_tables`, `m4_objects`, `m5_list_plain` and `m5_list_table` (the two lists `XlsxListExport` writes, rebuilt with the model's calls in the test; `XlsxListExport` writes a count total in General over the column's format (its own choice, `_plainNumber`); the writer's `table` and the model's `addTable` both give that cell the column's format, so a model caller who wants the same sets that cell's style after `addTable`, as the rebuild does; this is no difference between writer and model), apart from the two named differences below. `c1_kinds`, `c1_options`, `c2_kinds` and `c2_data` are the only fixtures not rebuilt: since C2 the model builds them, and charts have no writer counterpart (the owner's decision 2 of C2). The test fails for a fixture that is neither rebuilt nor named with that reason | one way to write a value | `test/xlsx/model/parity_test.dart` ("fixtures built with the model equal the writer's") |
 | `tabSelected` (named difference) | setting the model's `activeSheet` to another sheet writes `tabSelected="1"`, the writer never does; Excel selects the active tab either way (`m1_sheets` and `m2_views`) | an opened file's old `tabSelected` must move, and the writer's output is pinned | `test/xlsx/model/parity_test.dart` ("fixtures built with the model equal the writer's") |
 | Re-setting what was read | every style, row format, column, default size, view, tab colour, outline summary and merge, and of W3 `protection`, `pageSetup`, `headerFooter`, `autoFilter`, `printArea`, `setPrintTitles` and the workbook's `protection` and `properties`, set back to what it reads changes nothing, on every writer fixture and producer file; a dangling or invalid `s` is the exception (see "Setting cells"). Validations and conditional formats have no setter of their list: removing each and adding it back keeps the getters' values, in the model and after a reopen. Links have their own test | typing must not alter output | `test/xlsx/model/round_trip_test.dart` ("re-setting what was read changes nothing", "removing and re-adding keeps the meaning"), `test/xlsx/model/xlsx_sheet_links_test.dart` ("an equal link is no edit") |
 

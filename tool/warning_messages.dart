@@ -17,6 +17,9 @@
 /// detail, and its second row the warning without one, which counts the
 /// entries after the first ten (2 here). `layoutInvalid` is likewise one
 /// setting of sheet `Daten` with a detail, and a second row without one.
+/// `invalidCharactersRemoved` has a second row for a chart's text (no cell,
+/// the chart `Chart 1`), and `chartValueOmitted` names the chart `Chart 1`
+/// and no cell.
 /// `test/tool/warning_messages_test.dart` compares the output with the
 /// committed `docs/warning-messages.md`, so the file cannot drift.
 library;
@@ -31,7 +34,14 @@ import 'package:jet_office/src/xlsx/warnings.dart';
 ///
 /// [detail] is the format id of `unresolvedNumberFormat`; null gives the
 /// warning without one.
-XlsxWarning _sample(XlsxWarningCode code, {String? detail = '27'}) {
+///
+/// With [chart], `invalidCharactersRemoved` is the warning about a chart's
+/// text: no cell, the chart `Chart 1`.
+XlsxWarning _sample(
+  XlsxWarningCode code, {
+  String? detail = '27',
+  bool chart = false,
+}) {
   const String entry = 'font 3: The font size "abc" is not a finite number.';
   const String layoutEntry = 'row 3: ht "abc" is not a row height.';
   const String featureEntry = 'dataValidation: sqref "abc" is not a range.';
@@ -80,6 +90,10 @@ XlsxWarning _sample(XlsxWarningCode code, {String? detail = '27'}) {
       collector
         ..add(code, sheet: 'Daten', cell: 'A1', detail: detail)
         ..add(code, sheet: 'Daten', cell: 'B2', detail: detail);
+    case XlsxWarningCode.chartValueOmitted:
+      collector.add(code, sheet: 'Daten', detail: 'Chart 1');
+    case XlsxWarningCode.invalidCharactersRemoved when chart:
+      collector.add(code, sheet: 'Daten', detail: 'Chart 1');
     case XlsxWarningCode.invalidCharactersRemoved:
     case XlsxWarningCode.textTruncated:
     case XlsxWarningCode.intPrecisionLost:
@@ -204,6 +218,8 @@ String warningMessagesMarkdown() {
     ..writeln('of sheet `Daten`, its second the warning without a detail,')
     ..writeln('which counts the entries after the first ten. A workbook\'s')
     ..writeln('entry says "the workbook" instead of the sheet.')
+    ..writeln('`invalidCharactersRemoved` (chart) and `chartValueOmitted`')
+    ..writeln('name the chart `Chart 1` of sheet `Daten` and no cell.')
     ..writeln()
     ..writeln('The native-speaker check of the German and Turkish text is')
     ..writeln('recorded under "Native-speaker check" in')
@@ -218,6 +234,9 @@ String warningMessagesMarkdown() {
   );
   for (final XlsxWarningCode code in XlsxWarningCode.values) {
     row('`${code.name}`', _sample(code));
+    if (code == XlsxWarningCode.invalidCharactersRemoved) {
+      row('`${code.name}` (chart)', _sample(code, chart: true));
+    }
     if (code == XlsxWarningCode.unresolvedNumberFormat) {
       row('`${code.name}` (no id)', _sample(code, detail: null));
     }
