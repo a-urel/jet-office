@@ -459,10 +459,17 @@ void main() {
         DateTime(2026, 3, 1, 12, 30),
       ]);
       final DrawingChartRead wrong = readDrawingChartSpace(w1904.bytes);
+      // 44561 read as a 1900 serial: 1,462 days earlier than the real date.
       expect(
         wrong.chart!.series.single.categories.values.first,
-        isNot(DateTime(2026, 1, 1)),
+        DateTime(2021, 12, 31),
       );
+      // The part declares 1904, the reader was told 1900: not typed.
+      expect(wrong.typed, isNull);
+      expect(utf8.decode(w1904.bytes), contains('<c:date1904 val="1"/>'));
+      expect(utf8.decode(w1900.bytes), contains('<c:date1904 val="0"/>'));
+      // And the other way round.
+      expect(readDrawingChartSpace(w1900.bytes, date1904: true).typed, isNull);
     });
 
     test('an app theme with fixed colours and an explicit colour', () {

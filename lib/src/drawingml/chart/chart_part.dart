@@ -102,6 +102,9 @@ final class DrawingChart implements PartContent {
   /// [theme] is the one the part is written with; the theme given to
   /// [DrawingChart.opened], if any, is ignored here.
   ///
+  /// [date1904] is the date system the part is written in (and declares); it
+  /// is not inherited from [DrawingChart.opened].
+  ///
   /// Throws an [ArgumentError] when the writer cannot express the chart, and
   /// then the part is as it was.
   void replace(

@@ -332,7 +332,7 @@ final class _ChartWriter {
     w.attribute('xmlns:a', drawingMainNamespace);
     w.attribute('xmlns:r', _relationshipsNamespace);
     w.attribute('xmlns:c16r2', _c16r2Namespace);
-    _value('c:date1904', '0');
+    _value('c:date1904', date1904 ? '1' : '0');
     _value('c:lang', language);
     _value('c:roundedCorners', '0');
     _writeStyle();
