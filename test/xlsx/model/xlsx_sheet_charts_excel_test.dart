@@ -160,7 +160,7 @@ void main() {
       ),
       isTrue,
     );
-    expect(drawing, contains('name="Chart 24"'));
+    expect(drawing, contains('name="Chart 1"'));
     final List<XlsxSheetChart> charts = XlsxWorkbook.open(
       book.save().bytes,
     ).sheet('Veri').charts;

@@ -111,11 +111,14 @@
 /// ([XlsxSheet.tables], [XlsxSheet.addTable], [XlsxSheet.setTableStyle],
 /// [XlsxSheet.resizeTable], [XlsxSheet.removeTable]) and charts
 /// ([XlsxSheet.charts], each an [XlsxSheetChart] showing a [Chart], typed as
-/// an [XlsxChart] when writing it again loses nothing; the chart types of the
-/// jet_charts_core package are re-exported, so a caller needs no import of
-/// it). A shape, a form control or a threaded comment beside them is kept as
-/// written, and removing a table turns the formulas that name it into plain
-/// ranges, as Excel's Convert to Range does.
+/// an [XlsxChart] when writing it again loses nothing, [XlsxSheet.addChart],
+/// [XlsxSheet.replaceChartAt], [XlsxSheet.moveChartAt],
+/// [XlsxSheet.removeChartAt], and [XlsxSheet.writeChartData], which binds a
+/// chart to cells; the chart types of the jet_charts_core package are
+/// re-exported, so a caller needs no import of it). A shape, a form control
+/// or a threaded comment beside them is kept as written, and removing a table
+/// turns the formulas that name it into plain ranges, as Excel's Convert to
+/// Range does.
 ///
 /// A sheet edits its structure: [XlsxSheet.insertRows], [XlsxSheet.deleteRows],
 /// [XlsxSheet.insertColumns] and [XlsxSheet.deleteColumns] move cells,

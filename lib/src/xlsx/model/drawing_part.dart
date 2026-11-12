@@ -121,6 +121,10 @@ final class DrawingEntry {
   /// first use. Throws XML errors as a reader does.
   late final Set<String> relationshipIds = relationshipIdsIn(source);
 
+  /// The `name` of every `cNvPr` the element holds, read on first use.
+  /// Throws XML errors as a reader does.
+  late final Set<String> names = _namesIn(source);
+
   /// Where the picture sits, or `null`.
   final XlsxAnchor? anchor;
 
@@ -483,6 +487,21 @@ Set<String> relationshipIdsIn(OpaqueXml element) {
     }
   } while (r.next());
   return ids;
+}
+
+/// The `name` of every `cNvPr` [element] holds, at any depth. Throws XML
+/// errors as a reader does on what a file holds.
+Set<String> _namesIn(OpaqueXml element) {
+  final Set<String> names = <String>{};
+  final XmlPullReader r = readerOf(element);
+  do {
+    if (r.eventType != XmlEventType.startElement || r.localName != 'cNvPr') {
+      continue;
+    }
+    final String? name = r.getAttribute('name');
+    if (name != null) names.add(name);
+  } while (r.next());
+  return names;
 }
 
 /// A drawing part with its anchors kept as written and its pictures typed.

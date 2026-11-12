@@ -545,11 +545,12 @@ files (`test/xlsx/read/support/fuzz.dart`; `c1_kinds` among them, with its
 twelve chart parts, and `c2_kinds`, with its seven) and requires the reader
 to throw nothing but `XlsxReadException`. The gate runs seeds 1 to 4 with 500
 cases each, the same cases on the VM and in Chrome (except the two deflated
-corpus entries, whose cases may differ by platform, decision 0006). It ran 100 until `c1_kinds`
-joined the corpus: the fixed seeds must mutate every part name of the corpus
-(`every part name is mutated in some corpus entry`), and 400 left
-`xl/charts/chart12.xml` unmutated (`c2_kinds` needed no more); raise the
-count again when a new entry makes that test fail. For longer runs, by hand:
+corpus entries, whose cases may differ by platform, decision 0006). It ran 100
+until `c1_kinds` joined the corpus: the fixed seeds must mutate every part
+name of the corpus (`every part name is mutated in some corpus entry`), and
+400 left `xl/charts/chart12.xml` unmutated (`c2_kinds` needed no more); raise
+the count again when a new entry makes that test fail. For longer runs, by
+hand:
 
 ```bash
 dart run tool/fuzz_reader.dart --seeds 1-200 --cases 1000

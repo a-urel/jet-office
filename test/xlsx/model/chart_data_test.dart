@@ -193,6 +193,60 @@ void main() {
       expect(bound.series.single.values.reference, r'Data!$B$2:$B$4');
     });
 
+    test(
+      'a series whose categories are a prefix of the longest binds to it',
+      () {
+        final XlsxSheet sheet = XlsxWorkbook().addSheet('Data');
+        final Chart bound = sheet.writeChartData(
+          _chart(<ChartSeries>[
+            _series('A', <Object?>['a', 'b', 'c'], <double?>[1, 2, 3]),
+            _series('B', <Object?>['a', 'b'], <double?>[4, 5]),
+            _series('C', <Object?>[], <double?>[6]),
+          ]),
+          0,
+          0,
+        );
+        expect(
+          <Object?>[for (int r = 1; r <= 3; r++) _value(sheet, r, 0)],
+          <Object?>['a', 'b', 'c'],
+        );
+        expect(bound.series[0].categories.reference, r'Data!$A$2:$A$4');
+        expect(bound.series[1].categories.reference, r'Data!$A$2:$A$3');
+        expect(bound.series[2].categories.reference, isNull);
+      },
+    );
+
+    test('categories that are not a prefix of the longest throw and change '
+        'nothing', () {
+      final XlsxWorkbook book = XlsxWorkbook();
+      final XlsxSheet sheet = book.addSheet('Data');
+      sheet.setCell(0, 0, 'keep');
+      final Uint8List before = book.save().bytes;
+      final Chart other = _chart(<ChartSeries>[
+        _series('A', <Object?>['a', 'b', 'c'], <double?>[1, 2, 3]),
+        _series('B', <Object?>['x', 'y'], <double?>[4, 5]),
+      ]);
+      expect(
+        () => sheet.writeChartData(other, 0, 0),
+        throwsA(
+          isA<ArgumentError>().having(
+            (ArgumentError e) => e.toString(),
+            'message',
+            contains('chart.series[1].categories'),
+          ),
+        ),
+      );
+      expect(_value(sheet, 0, 0), 'keep');
+      expect(_value(sheet, 1, 0), isNull);
+      expect(book.save().bytes, before);
+      // A scatter chart gives each series its own x column: no refusal.
+      sheet.writeChartData(
+        Chart(kind: ChartKind.scatter, series: other.series),
+        5,
+        0,
+      );
+    });
+
     test('a block leaving the sheet throws and changes nothing', () {
       final XlsxWorkbook book = XlsxWorkbook();
       final XlsxSheet sheet = book.addSheet('Data');

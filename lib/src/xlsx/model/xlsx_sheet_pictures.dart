@@ -159,6 +159,9 @@ mixin _SheetPictures {
   Set<String> get _featureReported;
   void _warn(XlsxWarningCode code, String? cell, {String? detail});
 
+  // What the sheet's chart half gives it.
+  void _dropChartPart(String target);
+
   /// The pictures read on first use; `null` until then.
   _PicturesRead? _picturesRead;
 
@@ -584,8 +587,9 @@ mixin _SheetPictures {
   }
 
   /// Removes the sheet's `<drawing>` and its relationship, and the drawing
-  /// part, with the parts only it still relates to, unless something else
-  /// points at the part.
+  /// part, with the parts only it still relates to (a chart no frame used,
+  /// with its own parts, as [_dropChartPart] takes them), unless something
+  /// else points at the part.
   void _dropDrawing(WorksheetPart part, _PicturesRead read) {
     final ChangeLog log = _host.log;
     final PackageReader reader = _host.reader;
@@ -597,6 +601,12 @@ mixin _SheetPictures {
     }
     removeLayout(log, part, 'drawing');
     final Iterable<String> left = _relationshipTargets(drawingName).values;
+    final Set<String> charts = <String>{
+      for (final PartRelationship rel in reader.relationshipsOf(drawingName))
+        if (rel.type == drawingChartRelationshipType &&
+            reader.hasPart(rel.target))
+          rel.target,
+    };
     <String, String>{...read.media}.forEach((String id, String media) {
       applyChange(log, _DrawingMediaChange(read, id, media, null));
     });
@@ -609,7 +619,15 @@ mixin _SheetPictures {
     );
     if (!used) {
       removeStoredPart(log, package, drawingName);
-      left.forEach(_dropTarget);
+      for (final String target in left) {
+        // A chart no frame used (so its relationship stayed) goes with the
+        // parts only it targets; any other part is a picture's image.
+        if (charts.contains(target)) {
+          _dropChartPart(target);
+        } else {
+          _dropTarget(target);
+        }
+      }
     }
     applyChange(log, _DrawingPartChange(read, null, null));
   }

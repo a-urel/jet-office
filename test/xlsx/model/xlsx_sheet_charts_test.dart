@@ -7,6 +7,8 @@ import 'package:jet_office/src/drawingml/chart/chart_writer.dart';
 import 'package:jet_office/src/opc/change_log.dart';
 import 'package:jet_office/src/xlsx/chart.dart'
     show xlsxChartIds, xlsxChartWithIds;
+import 'package:jet_office/src/xlsx/model/xlsx_sheet.dart'
+    show openedChartPartCount;
 import 'package:jet_office/src/xlsx/model/xlsx_workbook.dart' show changeLogOf;
 import 'package:jet_office/src/xml/xml_equivalence.dart';
 import 'package:test/test.dart';
@@ -946,6 +948,31 @@ void main() {
       expect(drawing, contains('<xdr:twoCellAnchor editAs="absolute">'));
     });
 
+    test(
+      'a default name is the lowest Chart k no frame of the drawing has',
+      () {
+        final XlsxWorkbook book = XlsxWorkbook();
+        final XlsxSheet sheet = book.addSheet('S');
+        sheet
+          ..addChart(XlsxChart(_columns(), at))
+          ..addChart(XlsxChart(_columns(), at))
+          ..removeChartAt(0)
+          ..addChart(XlsxChart(_columns(), at));
+        expect(sheet.charts.map((XlsxSheetChart c) => c.name), <String>[
+          'Chart 2',
+          'Chart 1',
+        ]);
+        sheet.addChart(XlsxChart(_columns(), at, name: 'Chart 3'));
+        sheet.addChart(XlsxChart(_columns(), at));
+        expect(sheet.charts.map((XlsxSheetChart c) => c.name), <String>[
+          'Chart 2',
+          'Chart 1',
+          'Chart 3',
+          'Chart 4',
+        ]);
+      },
+    );
+
     test('a second chart takes the next part, id and name', () {
       final XlsxWorkbook book = XlsxWorkbook();
       final XlsxSheet sheet = book.addSheet('S');
@@ -1344,6 +1371,29 @@ void main() {
       expect(XlsxWorkbook.open(saved).sheets.single.pictures, pictures);
     });
 
+    test('a drawing that goes takes a chart part no frame uses, and its '
+        'own parts', () {
+      final Uint8List styled = _styledColumn(picture: true);
+      final Map<String, Uint8List> parts = readXlsxBytes(styled);
+      // The frame goes: the chart relationship stays, used by no entry.
+      parts['xl/drawings/drawing1.xml'] = Uint8List.fromList(
+        utf8.encode('<xdr:wsDr $_xdr>${_oneCellPic(3)}</xdr:wsDr>'),
+      );
+      final Uint8List input = buildZip(<String, List<int>>{...parts});
+      expect(_chartParts(input), hasLength(4));
+      final XlsxWorkbook book = XlsxWorkbook.open(input);
+      expect(book.sheets.single.charts, isEmpty);
+      book.sheets.single.removePictureAt(0);
+      final Uint8List saved = book.save().bytes;
+      expect(readXlsxBytes(saved).keys, isNot(contains(startsWith('xl/dr'))));
+      expect(_chartParts(saved), isEmpty);
+      expect(
+        _text(saved, '[Content_Types].xml'),
+        isNot(contains('/xl/charts/')),
+      );
+      _undone(input, (XlsxSheet s) => s.removePictureAt(0));
+    });
+
     test('the last entry takes the drawing and <drawing> with it', () {
       final XlsxWorkbook book = XlsxWorkbook.open(_styledColumn());
       final XlsxSheet sheet = book.sheets.single;
@@ -1366,6 +1416,20 @@ void main() {
       final Uint8List saved = book.save().bytes;
       expect(_chartParts(saved), isEmpty);
       expect(readXlsxBytes(saved).keys, isNot(contains(startsWith('xl/dr'))));
+    });
+
+    test('a removed chart part leaves the cache of opened parts', () {
+      final XlsxSheet sheet = XlsxWorkbook.open(
+        _fixture('c1_kinds'),
+      ).sheet('Data');
+      expect(sheet.charts, hasLength(12));
+      expect(openedChartPartCount(sheet), 12);
+      sheet.removeChartAt(0);
+      expect(openedChartPartCount(sheet), 11);
+      while (sheet.charts.isNotEmpty) {
+        sheet.removeChartAt(0);
+      }
+      expect(openedChartPartCount(sheet), 0);
     });
 
     test('a bad index throws and nothing changes', () {

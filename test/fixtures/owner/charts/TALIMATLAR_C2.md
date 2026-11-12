@@ -126,7 +126,10 @@ düzenlemelerin geri alınmış hâlidir.
      (başlıklar 1. satırda);
    - grafik 1 `Pasta`: `Kuzey` serisinin dört dilimi;
    - grafik 2 on iki satır aşağıda (10 taşıma, 2 eklenen satır); grafik 5'in
-     üstüne biniyor, bu beklenen;
+     üstüne biniyor. Bu bir hata değil: yalnızca sabit "10 satır taşı" deneyinin
+     sonucu, çünkü grafikler 15 satır aralıkla dizili ve 10 satır grafik 2'yi
+     grafik 5'e getiriyor. Modelin bir şeyi bozduğu anlamına gelmez, sorun
+     olarak yazma;
    - grafik 3 yok;
    - en altta `Eklenen grafik`: `Kuzey` ve `Güney` sütunları;
    - bir grafiğe sağ tıkla, **Veri Seç**: seriler `='Veri 2026'!$B$4:$B$7`

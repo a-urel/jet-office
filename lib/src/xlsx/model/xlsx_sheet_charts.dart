@@ -198,9 +198,9 @@ mixin _SheetCharts {
   /// moves and sizes with its cells, else as a picture's) or a
   /// `oneCellAnchor`, holding a `graphicFrame` with a `cNvPr` id one above
   /// the highest of the drawing, at least 2, the name `Chart {k}` when
-  /// [XlsxChart.name] is `null`, k being the chart's position in [charts]
-  /// from 1, and an `xfrm` of zeros. The part is written in
-  /// [XlsxChart.theme] and the workbook's date system, with the ids a chart
+  /// [XlsxChart.name] is `null`, k the lowest number from 1 that no frame of
+  /// the drawing (listed or not) is named, and an `xfrm` of zeros. The part
+  /// is written in [XlsxChart.theme] and the workbook's date system, with the ids a chart
   /// read from a part carries (a listed [XlsxSheetChart.typed] added again
   /// is a copy, whose axis ids are its own part's), else the ids
   /// `xlsxChartPartIds` gives n, so the same calls give the same bytes.
@@ -224,7 +224,7 @@ mixin _SheetCharts {
         final WorksheetPart part = _editablePart('charts');
         final _PicturesRead read = _editablePictures(part, what: 'charts');
         final int k = _listedCharts(read).length + 1;
-        final String frameName = chart.name ?? 'Chart $k';
+        final String frameName = chart.name ?? _freeFrameName(read);
         final ({int cx, int cy})? extent = checkChartFrame(
           chart.anchor,
           which: 'Chart $k on sheet "$name"',
@@ -516,7 +516,10 @@ mixin _SheetCharts {
   /// is the number format of its value cells; a `null` or non-finite entry
   /// leaves its cell empty. A series without categories, values or a name
   /// binds none of them. A series longer than the categories extends the
-  /// block.
+  /// block. On a chart that is not a scatter chart every series shares the
+  /// first column: the categories of the series with the most go there, and
+  /// every other series' categories must be the start of that list (a
+  /// series with none binds none).
   ///
   /// The result holds, for each series, the `name`, `categories` and
   /// `values` references of the cells (`Sheet!$B$1`, `Sheet!$A$2:$A$5`,
@@ -525,125 +528,168 @@ mixin _SheetCharts {
   /// [setCell] does, overwriting what they held, and all of it is one
   /// change.
   ///
-  /// Throws a [RangeError] for a [row] or [column] outside the sheet and a
-  /// [StateError] when the table does not fit on it, or as [setCell] does;
-  /// whatever it throws, nothing has changed.
-  Chart writeChartData(Chart chart, int row, int column) =>
-      _recordSheetEdit(this, XlsxChangeKind.cellsSet, () {
-        RangeError.checkValueInInterval(row, 0, XlsxLimits.maxRows - 1, 'row');
-        RangeError.checkValueInInterval(
-          column,
-          0,
-          XlsxLimits.maxColumns - 1,
-          'column',
+  /// Throws a [RangeError] for a [row] or [column] outside the sheet, an
+  /// [ArgumentError] named `chart.series[i].categories` for a series of a
+  /// chart that is not a scatter chart whose categories are not the start of
+  /// the longest list, and a [StateError] when the table does not fit on it,
+  /// or as [setCell] does; whatever it throws, nothing has changed.
+  Chart writeChartData(
+    Chart chart,
+    int row,
+    int column,
+  ) => _recordSheetEdit(this, XlsxChangeKind.cellsSet, () {
+    RangeError.checkValueInInterval(row, 0, XlsxLimits.maxRows - 1, 'row');
+    RangeError.checkValueInInterval(
+      column,
+      0,
+      XlsxLimits.maxColumns - 1,
+      'column',
+    );
+    final List<ChartSeries> series = chart.series;
+    if (series.isEmpty) return chart;
+    final bool scatter = chart.kind == ChartKind.scatter;
+    int length = 0;
+    for (final ChartSeries s in series) {
+      final int own = s.categories.values.length > s.values.values.length
+          ? s.categories.values.length
+          : s.values.values.length;
+      if (own > length) length = own;
+    }
+    final int width = scatter ? 2 * series.length : 1 + series.length;
+    if (row + 1 + length > XlsxLimits.maxRows ||
+        column + width > XlsxLimits.maxColumns) {
+      throw StateError(
+        'The data of the chart needs ${1 + length} rows and $width '
+        'columns from ${cellRef(row, column)}, which do not fit on sheet '
+        '"$name".',
+      );
+    }
+    String ref(int r, int c, [int? lastRow]) {
+      final String first = '\$${columnName(c)}\$${r + 1}';
+      final String last = lastRow == null || lastRow == r
+          ? ''
+          : ':\$${columnName(c)}\$${lastRow + 1}';
+      return '${renderSheetPrefix(name)}$first$last';
+    }
+
+    final String dateFormat = chart.categoryAxis.formatCode ?? 'm/d/yyyy';
+    void writeCategories(ChartSeries s, int c) {
+      final List<Object?> values = s.categories.values;
+      for (int i = 0; i < values.length; i++) {
+        final Object? v = values[i];
+        if (v == null || (v is double && !v.isFinite)) continue;
+        setCell(
+          row + 1 + i,
+          c,
+          v is DateTime
+              ? XlsxCell(
+                  v,
+                  style: XlsxStyle(numFmt: XlsxNumFmt.custom(dateFormat)),
+                )
+              : v,
         );
-        final List<ChartSeries> series = chart.series;
-        if (series.isEmpty) return chart;
-        final bool scatter = chart.kind == ChartKind.scatter;
-        int length = 0;
-        for (final ChartSeries s in series) {
-          final int own = s.categories.values.length > s.values.values.length
-              ? s.categories.values.length
-              : s.values.values.length;
-          if (own > length) length = own;
-        }
-        final int width = scatter ? 2 * series.length : 1 + series.length;
-        if (row + 1 + length > XlsxLimits.maxRows ||
-            column + width > XlsxLimits.maxColumns) {
-          throw StateError(
-            'The data of the chart needs ${1 + length} rows and $width '
-            'columns from ${cellRef(row, column)}, which do not fit on sheet '
-            '"$name".',
-          );
-        }
-        String ref(int r, int c, [int? lastRow]) {
-          final String first = '\$${columnName(c)}\$${r + 1}';
-          final String last = lastRow == null || lastRow == r
-              ? ''
-              : ':\$${columnName(c)}\$${lastRow + 1}';
-          return '${renderSheetPrefix(name)}$first$last';
-        }
+      }
+    }
 
-        final String dateFormat = chart.categoryAxis.formatCode ?? 'm/d/yyyy';
-        void writeCategories(ChartSeries s, int c) {
-          final List<Object?> values = s.categories.values;
-          for (int i = 0; i < values.length; i++) {
-            final Object? v = values[i];
-            if (v == null || (v is double && !v.isFinite)) continue;
-            setCell(
-              row + 1 + i,
-              c,
-              v is DateTime
-                  ? XlsxCell(
-                      v,
-                      style: XlsxStyle(numFmt: XlsxNumFmt.custom(dateFormat)),
-                    )
-                  : v,
-            );
-          }
+    final List<ChartSeries> bound = <ChartSeries>[];
+    // The categories column of a non-scatter chart: the series with the
+    // most categories gives them, every series binds to it, so each
+    // series' categories must be the start of that list.
+    if (!scatter) {
+      ChartSeries? shared;
+      for (final ChartSeries s in series) {
+        if (s.categories.values.length >
+            (shared?.categories.values.length ?? 0)) {
+          shared = s;
         }
-
-        final List<ChartSeries> bound = <ChartSeries>[];
-        // The categories column of a non-scatter chart: the series with the
-        // most categories gives them, every series binds to it.
-        if (!scatter) {
-          ChartSeries? shared;
-          for (final ChartSeries s in series) {
-            if (s.categories.values.length >
-                (shared?.categories.values.length ?? 0)) {
-              shared = s;
-            }
-          }
-          if (shared != null) writeCategories(shared, column);
-        }
+      }
+      if (shared != null) {
+        final List<Object?> all = shared.categories.values;
         for (int i = 0; i < series.length; i++) {
-          final ChartSeries s = series[i];
-          final int xColumn = column + 2 * i;
-          final int yColumn = scatter ? xColumn + 1 : column + 1 + i;
-          if (scatter) writeCategories(s, xColumn);
-          final String? nameText = s.name.values.isEmpty
-              ? null
-              : s.name.values.first;
-          final bool named = nameText != null && nameText.isNotEmpty;
-          if (named) setCell(row, yColumn, nameText);
-          final XlsxStyle? valueStyle = s.formatCode == null
-              ? null
-              : XlsxStyle(numFmt: XlsxNumFmt.custom(s.formatCode!));
-          final List<double?> values = s.values.values;
-          for (int j = 0; j < values.length; j++) {
-            final double? v = values[j];
-            if (v == null || !v.isFinite) continue;
-            setCell(
-              row + 1 + j,
-              yColumn,
-              valueStyle == null ? v : XlsxCell(v, style: valueStyle),
+          final List<Object?> own = series[i].categories.values;
+          for (int j = 0; j < own.length; j++) {
+            final Object? a = own[j];
+            final Object? b = all[j];
+            if (a == b || (a is double && b is double && a.isNaN && b.isNaN)) {
+              continue;
+            }
+            throw ArgumentError.value(
+              own,
+              'chart.series[$i].categories',
+              'A series of a chart that is not a scatter chart shares one '
+                  'categories column, so its categories must be the start of '
+                  'those of the series with the most.',
             );
           }
-          final int categoryCount = s.categories.values.length;
-          bound.add(
-            s.copyWith(
-              name: named
-                  ? s.name.copyWith(reference: ref(row, yColumn))
-                  : s.name,
-              categories: categoryCount == 0
-                  ? s.categories
-                  : s.categories.copyWith(
-                      reference: ref(
-                        row + 1,
-                        scatter ? xColumn : column,
-                        row + categoryCount,
-                      ),
-                    ),
-              values: values.isEmpty
-                  ? s.values
-                  : s.values.copyWith(
-                      reference: ref(row + 1, yColumn, row + values.length),
-                    ),
-            ),
-          );
         }
-        return chart.copyWith(series: bound);
-      });
+        writeCategories(shared, column);
+      }
+    }
+    for (int i = 0; i < series.length; i++) {
+      final ChartSeries s = series[i];
+      final int xColumn = column + 2 * i;
+      final int yColumn = scatter ? xColumn + 1 : column + 1 + i;
+      if (scatter) writeCategories(s, xColumn);
+      final String? nameText = s.name.values.isEmpty
+          ? null
+          : s.name.values.first;
+      final bool named = nameText != null && nameText.isNotEmpty;
+      if (named) setCell(row, yColumn, nameText);
+      final XlsxStyle? valueStyle = s.formatCode == null
+          ? null
+          : XlsxStyle(numFmt: XlsxNumFmt.custom(s.formatCode!));
+      final List<double?> values = s.values.values;
+      for (int j = 0; j < values.length; j++) {
+        final double? v = values[j];
+        if (v == null || !v.isFinite) continue;
+        setCell(
+          row + 1 + j,
+          yColumn,
+          valueStyle == null ? v : XlsxCell(v, style: valueStyle),
+        );
+      }
+      final int categoryCount = s.categories.values.length;
+      bound.add(
+        s.copyWith(
+          name: named ? s.name.copyWith(reference: ref(row, yColumn)) : s.name,
+          categories: categoryCount == 0
+              ? s.categories
+              : s.categories.copyWith(
+                  reference: ref(
+                    row + 1,
+                    scatter ? xColumn : column,
+                    row + categoryCount,
+                  ),
+                ),
+          values: values.isEmpty
+              ? s.values
+              : s.values.copyWith(
+                  reference: ref(row + 1, yColumn, row + values.length),
+                ),
+        ),
+      );
+    }
+    return chart.copyWith(series: bound);
+  });
+
+  /// `Chart k` with the lowest k from 1 that no frame of the drawing, listed
+  /// or not, is named.
+  String _freeFrameName(_PicturesRead read) {
+    final DrawingPart? drawing = read.part;
+    final Set<String> taken = drawing == null
+        ? const <String>{}
+        : _host.reader.guardXml(
+            read.partName!,
+            () => <String>{
+              for (final DrawingEntry e in drawing.entries) ...e.names,
+            },
+          );
+    int k = 1;
+    while (taken.contains('Chart $k')) {
+      k++;
+    }
+    return 'Chart $k';
+  }
 
   /// Where the charts listed in [charts] are among the drawing's entries.
   List<int> _listedCharts(_PicturesRead read) {
@@ -731,6 +777,7 @@ mixin _SheetCharts {
     );
     if (children == null) return;
     removeStoredPart(_host.log, package, target);
+    _chartParts.remove(target);
     for (final ({String type, String name}) child in children) {
       if (child.type == RelType.image) {
         _dropTarget(child.name);
@@ -787,3 +834,7 @@ mixin _SheetCharts {
     );
   }
 }
+
+/// How many chart parts [sheet] holds opened. Not exported: the test of the
+/// cache's upkeep reads it.
+int openedChartPartCount(XlsxSheet sheet) => sheet._chartParts.length;

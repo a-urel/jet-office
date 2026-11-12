@@ -176,6 +176,15 @@ void main() {
     expect(runC2Check(<String>['a', 'b'], out: out, err: err), 2);
   });
 
+  test('runC2Check: exit 1 when the out-dir is an existing file', () {
+    final File file = File('${temp.path}/a_file')..writeAsStringSync('x');
+    final StringBuffer out = StringBuffer();
+    final StringBuffer err = StringBuffer();
+    expect(runC2Check(<String>[file.path], out: out, err: err), 1);
+    expect(err.toString(), contains('write_c2_check failed'));
+    expect(out.toString(), isEmpty);
+  });
+
   test('runC2Check: exit 0 and the paths printed', () {
     final StringBuffer out = StringBuffer();
     final StringBuffer err = StringBuffer();
