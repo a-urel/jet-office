@@ -313,12 +313,14 @@ Under AGENTS.md's hard rules and decision `0015`:
 
 ### Overlap with C2 and C3
 
-- **C2** (`docs/drawingml-charts.md`, "Open for C2") adds the graphic frame
-  anchor, `addChart` and the charts of a sheet. Pictures, charts and shapes
-  share the drawing part, its ids, its anchors and its removal rules, so a
-  sheet should list them through one design (for example one sealed list of
-  drawing objects) rather than three getters that each skip the others. C2
-  makes that design first; shapes extend it.
+- **C2** (`docs/drawingml-charts.md`, "What C2 closed") added the graphic
+  frame anchor, `addChart` and the charts of a sheet. Pictures, charts and
+  shapes share the drawing part, its ids, its anchors and its removal rules,
+  so a sheet should list them through one design (for example one sealed
+  list of drawing objects) rather than three getters that each skip the
+  others. C2 shipped `charts` beside `pictures`, each skipping the other's
+  entries, over one drawing part and its removal rules; the shared list is
+  left for when shapes come.
 - **C3** ("Open for C3") needs inline and anchored drawings in the body. The
   `wp:anchor` model (position, wrapping, z-order) is the same for a chart, a
   floating picture and a shape. Whichever comes first builds it once.

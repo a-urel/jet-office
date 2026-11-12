@@ -6,9 +6,10 @@
 ///
 /// Beyond the chart, the typed form carries the language of the part, the
 /// axis ids (four with a secondary axis), each series' `c16:uniqueId` and
-/// whether the chart shows Excel's automatic title (ruling R3 of C1). Everything else the writer writes is
-/// fixed, as Excel for Mac writes it. A part read from a file is offered in
-/// this form only when writing the form gives the part again.
+/// whether the chart shows Excel's automatic title (ruling R3 of C1).
+/// Everything else the writer writes is fixed, as Excel for Mac writes it. A
+/// part read from a file is offered in this form only when writing the form
+/// gives the part again.
 ///
 /// This layer imports `opc`, `xml`, `common`, `jet_charts_core` and `jet_core`
 /// only, never `xlsx` or `docx` (decisions 0014 and 0015).

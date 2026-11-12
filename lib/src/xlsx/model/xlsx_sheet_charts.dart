@@ -193,16 +193,17 @@ mixin _SheetCharts {
   /// The chart gets the part `xl/charts/chart{n}.xml`, n the lowest number
   /// no part has and no content type override names, with a content type
   /// override, and the drawing a relationship to it, with the lowest
-  /// `rId{m}` the drawing neither has nor names. The frame is an anchor as Excel writes it: a `twoCellAnchor`
-  /// (with no `editAs` when the chart moves and sizes with its cells, else
-  /// as a picture's) or a `oneCellAnchor`, holding a `graphicFrame` with a
-  /// `cNvPr` id one above the highest of the drawing, at least 2, the name
-  /// `Chart {k}` when [XlsxChart.name] is `null`, k being the chart's
-  /// position in [charts] from 1, and an `xfrm` of zeros. The part is
-  /// written in [XlsxChart.theme] and the workbook's date system, with the
-  /// ids a chart read from a part carries (a listed [XlsxSheetChart.typed]
-  /// added again is a copy, whose axis ids are its own part's), else the
-  /// ids `xlsxChartPartIds` gives n, so the same calls give the same bytes.
+  /// `rId{m}` the drawing neither has nor names. The frame is an anchor as
+  /// Excel writes it: a `twoCellAnchor` (with no `editAs` when the chart
+  /// moves and sizes with its cells, else as a picture's) or a
+  /// `oneCellAnchor`, holding a `graphicFrame` with a `cNvPr` id one above
+  /// the highest of the drawing, at least 2, the name `Chart {k}` when
+  /// [XlsxChart.name] is `null`, k being the chart's position in [charts]
+  /// from 1, and an `xfrm` of zeros. The part is written in
+  /// [XlsxChart.theme] and the workbook's date system, with the ids a chart
+  /// read from a part carries (a listed [XlsxSheetChart.typed] added again
+  /// is a copy, whose axis ids are its own part's), else the ids
+  /// `xlsxChartPartIds` gives n, so the same calls give the same bytes.
   ///
   /// A value that is not a finite number is left out and warned about once
   /// as `chartValueOmitted`, characters XML forbids are removed from the
@@ -302,8 +303,11 @@ mixin _SheetCharts {
   /// caller's choice to rebuild it. When [chart]'s kind is not the kind the
   /// part showed (or it showed none), the part's chart style and colour
   /// style relationships go, as their content is per kind, and so do their
-  /// parts when nothing else targets them. A [chart] equal to the part's
-  /// typed chart, in the Office theme, is no edit. Warns as [addChart] does.
+  /// parts when nothing else targets them. Every other relationship of the
+  /// part stays, with the part it targets, even one its new XML no longer
+  /// names (user shapes, an embedded workbook). A part two frames show
+  /// changes for both. A [chart] equal to the part's typed chart, in the
+  /// Office theme, is no edit. Warns as [addChart] does.
   ///
   /// Throws a [RangeError] for an [index] outside [charts]; an
   /// [ArgumentError] for a chart the writer cannot express or a bad [theme];

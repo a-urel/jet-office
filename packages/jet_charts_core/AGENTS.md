@@ -11,7 +11,8 @@ Milestones J1, J2, J3 and J4 are done; J4's Excel checks (E1, the owner's
 `chart_reference_j4.xlsx`, and E2, the J4 gallery side by side) are recorded
 and followed (`docs/excel-checks.md`, "J4 values"; the secondary axis and a
 numeric scatter wait for E3, `TALIMATLAR_E3.md` of the root's
-`test/fixtures/owner/charts/`), and the owner's full axis oracle run is
+`test/fixtures/owner/charts/`, whose steps are part of the root's C2 owner
+check, `TALIMATLAR_C2.md` there), and the owner's full axis oracle run is
 recorded (`docs/axis-scaling.md`, "Findings"). The package exports the model,
 the theme, the drawing primitives and the text measurer (J1), the value scale
 (`autoValueScale`), the layout (`layoutChart`) and the overlap check
@@ -40,9 +41,9 @@ This repository is a pub workspace (decision 0013). The chart family:
 
 `jet_office` depends on this package from C1: its DrawingML layer writes and
 reads `c:chartSpace` for a `Chart` (`docs/drawingml-charts.md` at the root).
-C1 is done; C2 and C3
-add the XLSX and DOCX hosts. `lumMod` and `lumOff` on scheme colours are in
-`ChartColor` (done in C1).
+C1 is done; C2, the XLSX host, is built (its owner's Excel check is open,
+the root's `docs/excel-checks.md`, "C2"); C3 adds the DOCX host. `lumMod` and
+`lumOff` on scheme colours are in `ChartColor` (done in C1).
 
 `jet_charts_core` must not depend on `jet_office`, or the two form a cycle.
 What both need goes in `jet_core`. `jet_charts_flutter` is
@@ -231,8 +232,10 @@ by hand, then fix it.
   covered eventually (decision 0017): J4 kept the model's enums open, the
   polar layout in its own module, and the axis roles and ids extensible by
   name.
-- Writing pie, donut, scatter, combination and secondary-axis charts in
-  DrawingML is C2 and C3; the writer refuses them until then.
+- C2 writes pie, donut, scatter, combination and secondary-axis charts in
+  DrawingML (the root's `docs/drawingml-charts.md`). The secondary axis, a
+  numeric scatter and an area group in a combination are written as
+  estimates; the owner's C2 check, which holds the E3 steps, decides them.
 - Excel's time-scale date axis (owner decision O2; dates are categories, a
   scatter chart's dates are serials on a value axis).
 - The en-US and de-DE oracle regions are unverified; so are fonts other than

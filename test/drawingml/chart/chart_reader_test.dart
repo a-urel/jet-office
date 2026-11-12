@@ -1020,7 +1020,9 @@ void main() {
           );
           expect(read.typed, isNull, reason: '$kind');
           expect(read.issues, contains(DrawingChartIssue.badNumber));
-          expect(watch.elapsed, lessThan(const Duration(seconds: 1)));
+          // About 22 ms on the VM once fixed, 3.6 s before; the bound
+          // leaves Chrome and a loaded machine room.
+          expect(watch.elapsed, lessThan(const Duration(seconds: 3)));
         }
       });
 

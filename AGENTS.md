@@ -41,11 +41,18 @@ testing, tooltip and summary), and J4 is done (the kinds pie, donut,
 sparkline, scatter, combination, the secondary axis, smooth lines), its Excel
 checks E1 and E2 recorded and their values followed
 (`packages/jet_charts_core/docs/excel-checks.md`, "J4 values"; the secondary
-axis and a numeric scatter wait for the owner's later E3), and this package
-depends on it from C1.
+axis and a numeric scatter wait for E3, whose steps are part of the owner's C2
+check), and this package depends on it from C1.
 Milestone C1 (the DrawingML chart layer, `docs/drawingml-charts.md`) is done
 (the owner's Excel check is in `docs/excel-checks.md`); every chart of the
 owner's `chart_reference.xlsx` but one reads typed.
+Milestone C2 (the XLSX chart host: `XlsxSheet.charts`, `addChart`,
+`replaceChartAt`, `moveChartAt`, `removeChartAt`, `writeChartData`, and the
+pie, donut, scatter, combination and secondary axis in the DrawingML layer;
+`docs/xlsx-model.md`, "What C2 adds") is built; the owner's Excel check
+(`tool/write_c2_check.dart`, `test/fixtures/owner/charts/TALIMATLAR_C2.md`) is
+open, and its result goes in `docs/excel-checks.md`, "C2", from the owner
+only.
 `packages/jet_charts_flutter` is its Flutter backend (decision 0016), with its
 own `AGENTS.md`; milestones J3 and J4 are done. This
 package never depends on it. `packages/jet_charts_flutter/docs/app-themes.md`
@@ -140,10 +147,15 @@ dotnet run --project tool/ooxml_validate -- build/excel_gallery
   the sheet `O'Brien` with six charts of the options: title, the four legend
   positions and a hidden legend, axis titles, a fixed range, format codes, data
   labels, hidden axes, literal data, date categories, an automatic title and
-  eight series in an app theme with fixed colours), whose chart parts of
-  `writeDrawingChartSpace` the test-only host `withCharts`
-  (`test/drawingml/chart/support/chart_host.dart`, replaced by C2's host) draws
-  on the sheet, and each
+  eight series in an app theme with fixed colours) and the C2 ones
+  (`c2_kinds`, the sheet `Data` with a pie, a donut of two series, a numeric
+  scatter, two column and line combinations, one with the line on the
+  secondary axis, a column, area and line combination and a smooth line, each
+  beside its data, Office theme; `c2_data`, the data on `O'Brien` written by
+  `writeChartData` with dates and format codes and on `Pano` three charts
+  bound to it, one in an app theme with fixed colours, one of literal data),
+  every chart added by `XlsxWorkbook`'s `addChart` (the C1 parts as C1 wrote
+  them), and each
   DOCX fixture of `docxFixtures()` (`test/fixtures/docx_fixtures.dart`) as
   `<name>.docx` and its expected text as `<name>.expected.txt`: the D1
   documents (`d1_*`), the D2 ones (`d2_*`), the D3 tables (`d3_basic`,
@@ -318,6 +330,23 @@ dotnet run --project tool/ooxml_validate -- build/excel_gallery
   `... -- build/w6/final/owner` validate its
   output, and the owner's steps are in `docs/excel-checks.md`, "W6". Exit 2 on
   unusable arguments, 1 on any error.
+- `tool/write_c2_check.dart <out-dir>` writes the files of the owner's C2
+  Excel check (`build/c2`): the chart fixtures `c2_kinds.xlsx`,
+  `c2_data.xlsx`, `c1_kinds.xlsx` and `c1_options.xlsx`; `c2_dashboard.xlsx`
+  (a `Veri` sheet of data written by `writeChartData` and a `Pano` sheet of
+  eight charts bound to it, named after the gallery app's charts whose data
+  they show, the line in an app theme with fixed colours); and `c2_edited/`,
+  the owner's `chart_reference.xlsx` and `chart_reference_j4.xlsx` with chart
+  1 replaced by a pie, chart 2 moved 10 rows down, chart 3 removed, two rows
+  inserted at row 2, the sheet renamed `Veri 2026` and a chart added, and
+  each `<name>_undone.xlsx`, the same edits undone, which must equal the
+  owner's file but for `dimension` and `spans` (`comparePackages`; the tool
+  fails otherwise). It is not part of the CI chain; `dotnet run --project
+  tool/ooxml_validate -- build/c2` and `... -- build/c2/c2_edited` validate
+  its output, and the owner's steps are in
+  `test/fixtures/owner/charts/TALIMATLAR_C2.md`. Exit 2 on unusable
+  arguments, 1 on any error. `test/tool/write_c2_check_test.dart` (VM) tests
+  it.
 - `tool/compare_text.dart` compares LibreOffice's text export of every DOCX
   fixture (`txt:Text (encoded):UTF8`) with its `<name>.expected.txt`, or its
   `<name>.libreoffice.txt` (`DocxFixture.libreOfficeText`: list labels such as
@@ -514,9 +543,9 @@ dart test -p chrome benchmark
 `test/xlsx/read/fuzz_test.dart` mutates a corpus of fixtures and producer
 files (`test/xlsx/read/support/fuzz.dart`; `c1_kinds` among them, with its
 twelve chart parts, and `c2_kinds`, with its seven) and requires the reader
-to throw nothing but `XlsxReadException`. The gate runs seeds 1 to 4 with 500 cases each, the same
-cases on the VM and in Chrome (except the two deflated corpus entries, whose
-cases may differ by platform, decision 0006). It ran 100 until `c1_kinds`
+to throw nothing but `XlsxReadException`. The gate runs seeds 1 to 4 with 500
+cases each, the same cases on the VM and in Chrome (except the two deflated
+corpus entries, whose cases may differ by platform, decision 0006). It ran 100 until `c1_kinds`
 joined the corpus: the fixed seeds must mutate every part name of the corpus
 (`every part name is mutated in some corpus entry`), and 400 left
 `xl/charts/chart12.xml` unmutated (`c2_kinds` needed no more); raise the
@@ -572,8 +601,9 @@ removes a table, where only the `StateError`s a structural edit documents for
 what it refuses may come out besides; since C2 it also reads every chart
 and sets each one's anchor and typed chart back, replaces, moves, removes and
 adds charts and writes a chart's data, where only the `ArgumentError`s named
-`anchor` or `description` may come out besides), the same cases on the VM
-and in Chrome; longer runs by hand:
+`anchor`, `description`, `width` or `height` (a picture or chart read with
+a value the writer refuses, added back) may come out besides), the same
+cases on the VM and in Chrome; longer runs by hand:
 
 ```bash
 dart run tool/fuzz_reader.dart --features --seeds 1-200 --cases 1000
@@ -706,8 +736,10 @@ synchronous loop must do the same.
 ## Reference
 
 The DOCX model's rules, each with its test, are in `docs/docx-model.md`; the
-Word check is in `docs/word-checks.md`. The chart layer's rules and what C2 and
-C3 must do are in `docs/drawingml-charts.md`.
+Word check is in `docs/word-checks.md`. The chart layer's rules, what C2
+closed and what C3 must do are in `docs/drawingml-charts.md`; the XLSX chart
+host's rules, each with its test, are in `docs/xlsx-model.md`, "Charts
+(C2)".
 Equations (OMML), parked for later (decision 0019), are analysed in
 `docs/equations.md`.
 Shapes, text boxes and icons (Insert > Shapes and Icons), parked for later
