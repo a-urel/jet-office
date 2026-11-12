@@ -19,7 +19,7 @@ const int _cases = 100;
 /// descriptions and bytes' lengths, computed once on the VM. The Chrome leg
 /// compares it, which proves a seed gives the same cases in a browser. A
 /// changed `m3_*`, `m4_*` or `c1_kinds` fixture changes it.
-const int _casesDigest = 1795111468;
+const int _casesDigest = 3542959272;
 
 /// Adler-32 of [data], in arithmetic that stays exact in a browser.
 int _adler32(List<int> data) {
@@ -188,8 +188,23 @@ void main() {
     // Seed 36 case 204 of the long run: `xl/worksheets/Sheet1.xml` beside
     // `xl/worksheets/_rels/sheet1.xml.rels`; undo writes the relationships
     // part after the source's spelling, which OPC takes as the same name.
-    final FuzzCase c = featureFuzzCases(36, 205).last;
-    expect(c.mutation, contains('(archive)'));
+    // Built here, as C2's rebuilt `c1_kinds` changed the seed's cases.
+    const int bit = 55077;
+    final Uint8List bytes = Uint8List.fromList(
+      featureCorpus()
+          .firstWhere(
+            (({String name, Uint8List bytes}) e) => e.name == 'excel_features',
+          )
+          .bytes,
+    );
+    bytes[bit >> 3] ^= 1 << (bit & 7);
+    expect(latin1.decode(bytes), contains('xl/worksheets/Sheet1.xml'));
+    final FuzzCase c = (
+      seed: 36,
+      index: 204,
+      mutation: 'excel_features (archive): flip bits [$bit]',
+      bytes: bytes,
+    );
     expect(() => exerciseFeatureCase(c), returnsNormally);
   });
 

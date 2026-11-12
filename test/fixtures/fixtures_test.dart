@@ -8,6 +8,7 @@ import '../../tool/src/csv_compare.dart' show decodeXstring;
 import '../support/read_xlsx.dart';
 import '../support/xlsx_checker.dart';
 import 'c1_fixtures.dart';
+import 'c2_fixtures.dart';
 import 'fixtures.dart';
 import 'm1_fixtures.dart';
 import 'm2_fixtures.dart';
@@ -121,6 +122,7 @@ void main() {
     ]);
     expect(names(m5Fixtures()), <String>['m5_list_plain', 'm5_list_table']);
     expect(names(c1Fixtures()), <String>['c1_kinds', 'c1_options']);
+    expect(names(c2Fixtures()), <String>['c2_kinds', 'c2_data']);
     expect(names(allFixtures()), <String>[
       ...names(m1Fixtures()),
       ...names(m2Fixtures()),
@@ -128,6 +130,7 @@ void main() {
       ...names(m4Fixtures()),
       ...names(m5Fixtures()),
       ...names(c1Fixtures()),
+      ...names(c2Fixtures()),
     ]);
   });
 

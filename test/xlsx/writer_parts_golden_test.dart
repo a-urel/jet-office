@@ -5,8 +5,10 @@
 // The constants pin the contents of every part the writer produces for every
 // fixture of `allFixtures()`. They were computed on the writer before the
 // cell encoder gained the workbook model's entry points, so a change to the
-// writer's output fails here. A deliberate change to the writer's output
-// updates them, with the reason in the commit.
+// writer's output fails here. The chart fixtures (`c1_*`, `c2_*`) are built
+// with the workbook model (C2), so theirs pin the model's output; the C1
+// chart parts kept their sums when C2 rebuilt them. A deliberate change to
+// the output updates them, with the reason in the commit.
 import 'package:test/test.dart';
 
 import '../fixtures/fixtures.dart';
@@ -429,16 +431,16 @@ const Map<String, Map<String, int>> _pinned = <String, Map<String, int>>{
   'c1_kinds': <String, int>{
     '[Content_Types].xml': 3240496691,
     '_rels/.rels': 4244982426,
-    'xl/_rels/workbook.xml.rels': 440818139,
-    'xl/drawings/_rels/drawing1.xml.rels': 1599793962,
+    'xl/_rels/workbook.xml.rels': 1993758175,
     'xl/worksheets/_rels/sheet1.xml.rels': 68180302,
-    'xl/worksheets/sheet1.xml': 3745261657,
-    'xl/sharedStrings.xml': 2267650270,
+    'xl/drawings/_rels/drawing1.xml.rels': 1599793962,
+    'xl/workbook.xml': 2587307000,
     'xl/styles.xml': 115054457,
-    'xl/workbook.xml': 1703096014,
+    'xl/sharedStrings.xml': 2267650270,
     'docProps/core.xml': 3644369703,
     'docProps/app.xml': 2802199266,
-    'xl/drawings/drawing1.xml': 3947705035,
+    'xl/worksheets/sheet1.xml': 4031317193,
+    'xl/drawings/drawing1.xml': 3305574421,
     'xl/charts/chart1.xml': 1403054275,
     'xl/charts/chart2.xml': 2052218252,
     'xl/charts/chart3.xml': 2319301175,
@@ -455,21 +457,60 @@ const Map<String, Map<String, int>> _pinned = <String, Map<String, int>>{
   'c1_options': <String, int>{
     '[Content_Types].xml': 3408885565,
     '_rels/.rels': 4244982426,
-    'xl/_rels/workbook.xml.rels': 440818139,
-    'xl/drawings/_rels/drawing1.xml.rels': 1828419576,
+    'xl/_rels/workbook.xml.rels': 1993758175,
     'xl/worksheets/_rels/sheet1.xml.rels': 68180302,
-    'xl/worksheets/sheet1.xml': 1657735416,
-    'xl/sharedStrings.xml': 3967218942,
+    'xl/drawings/_rels/drawing1.xml.rels': 1828419576,
+    'xl/workbook.xml': 111567560,
     'xl/styles.xml': 1632134685,
-    'xl/workbook.xml': 1426482590,
+    'xl/sharedStrings.xml': 3967218942,
     'docProps/core.xml': 3644369703,
     'docProps/app.xml': 2802199266,
-    'xl/drawings/drawing1.xml': 1124657265,
+    'xl/worksheets/sheet1.xml': 2240545138,
+    'xl/drawings/drawing1.xml': 145937723,
     'xl/charts/chart1.xml': 2182509888,
     'xl/charts/chart2.xml': 1419736718,
     'xl/charts/chart3.xml': 384893160,
     'xl/charts/chart4.xml': 4227904036,
     'xl/charts/chart5.xml': 415405619,
     'xl/charts/chart6.xml': 2975449669,
+  },
+  'c2_kinds': <String, int>{
+    '[Content_Types].xml': 1503146478,
+    '_rels/.rels': 4244982426,
+    'xl/_rels/workbook.xml.rels': 1993758175,
+    'xl/worksheets/_rels/sheet1.xml.rels': 68180302,
+    'xl/drawings/_rels/drawing1.xml.rels': 530908626,
+    'xl/workbook.xml': 2587307000,
+    'xl/styles.xml': 1116812443,
+    'xl/sharedStrings.xml': 3713814698,
+    'docProps/core.xml': 3644369703,
+    'docProps/app.xml': 2802199266,
+    'xl/worksheets/sheet1.xml': 4144158127,
+    'xl/drawings/drawing1.xml': 2548206015,
+    'xl/charts/chart1.xml': 1725210513,
+    'xl/charts/chart2.xml': 3504695713,
+    'xl/charts/chart3.xml': 3418724901,
+    'xl/charts/chart4.xml': 12337452,
+    'xl/charts/chart5.xml': 1933068989,
+    'xl/charts/chart6.xml': 1876992057,
+    'xl/charts/chart7.xml': 4068690883,
+  },
+  'c2_data': <String, int>{
+    '[Content_Types].xml': 2941058488,
+    '_rels/.rels': 4244982426,
+    'xl/_rels/workbook.xml.rels': 4244391483,
+    'xl/worksheets/_rels/sheet2.xml.rels': 1369832277,
+    'xl/drawings/_rels/drawing2.xml.rels': 2017046626,
+    'xl/workbook.xml': 2183763602,
+    'xl/styles.xml': 3468292177,
+    'xl/sharedStrings.xml': 2042251596,
+    'docProps/core.xml': 3644369703,
+    'docProps/app.xml': 2802199266,
+    'xl/worksheets/sheet1.xml': 3124632904,
+    'xl/worksheets/sheet2.xml': 1849789382,
+    'xl/drawings/drawing2.xml': 3295223369,
+    'xl/charts/chart1.xml': 934532793,
+    'xl/charts/chart2.xml': 3345078563,
+    'xl/charts/chart3.xml': 1855631441,
   },
 };

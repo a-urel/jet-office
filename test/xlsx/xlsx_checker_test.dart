@@ -8,6 +8,7 @@ import 'package:test/test.dart';
 import '../fixtures/c1_fixtures.dart';
 import '../fixtures/fixture.dart';
 import '../fixtures/m4_fixtures.dart' show jpeg3x5, png4x2;
+import '../support/read_xlsx.dart';
 import '../support/xlsx_checker.dart';
 
 /// A small valid workbook: two sheets, shared strings, styled cells (one
@@ -2658,7 +2659,24 @@ void main() {
     }
 
     test('a workbook with chart frames is clean', () {
+      // Excel writes a frame's xfrm as zeros, and so does addChart.
+      expect(
+        readXlsx(chartsBook())[drawing1],
+        contains('<a:ext cx="0" cy="0"/>'),
+      );
       expect(checkXlsx(chartsBook()), isEmpty);
+    });
+    test("a frame's xfrm of a negative size", () {
+      expectViolation(
+        tamper(
+          drawing1,
+          (String x) => x.replaceFirst(
+            '<a:ext cx="0" cy="0"/>',
+            '<a:ext cx="-1" cy="0"/>',
+          ),
+        ),
+        '<a:ext> cx "-1" is not a non-negative integer',
+      );
     });
     test('an anchor with neither a picture nor a frame', () {
       expectViolation(

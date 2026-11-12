@@ -49,9 +49,9 @@ final class XlsxChart {
     required this.description,
     required this.language,
     required this.autoTitle,
+    required this.theme,
     required DrawingChartIds ids,
-  }) : theme = ChartTheme.office,
-       _ids = ids;
+  }) : _ids = ids;
 
   /// What the chart shows.
   final Chart chart;
@@ -113,8 +113,27 @@ XlsxChart readXlsxChart(
   description: description,
   language: space.language,
   autoTitle: space.autoTitle,
+  theme: ChartTheme.office,
   ids: space.ids,
 );
+
+/// [chart] carrying [ids], as a chart read from a part carries its part's:
+/// `XlsxSheet.addChart` writes its part with them in place of the ids
+/// [xlsxChartPartIds] gives the part's number. Equal to [chart].
+///
+/// Not exported. C1's fixtures, whose parts were written with ids of their
+/// own before the model added charts, keep those parts with it.
+XlsxChart xlsxChartWithIds(XlsxChart chart, DrawingChartIds ids) =>
+    XlsxChart._read(
+      chart.chart,
+      chart.anchor,
+      name: chart.name,
+      description: chart.description,
+      language: chart.language,
+      autoTitle: chart.autoTitle,
+      theme: chart.theme,
+      ids: ids,
+    );
 
 /// The ids of the part [chart] was read from, or `null` for a chart made
 /// with [XlsxChart.new].
@@ -127,8 +146,7 @@ DrawingChartIds? xlsxChartIds(XlsxChart chart) => chart._ids;
 /// four digits and i in twelve.
 ///
 /// Excel picks these at random; the model derives them from the part number
-/// so the same calls give the same bytes, and so C1's fixtures rebuilt chart
-/// by chart keep their parts.
+/// so the same calls give the same bytes.
 DrawingChartIds xlsxChartPartIds(int n, int series) => DrawingChartIds(
   categoryAxis: 100000 + 2 * n,
   valueAxis: 100001 + 2 * n,

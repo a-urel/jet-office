@@ -122,14 +122,16 @@ final Map<String, XlsxResult Function()> _scripted =
       'm5_list_table': _listTableBook,
     };
 
+/// Why a chart fixture has no writer counterpart.
+const String _modelOnly =
+    'model only: charts have no writer counterpart (decision 2 of C2)';
+
 /// The fixtures the model does not rebuild, each with its reason.
 const Map<String, String> _notRebuilt = <String, String>{
-  'c1_kinds':
-      'its charts are written by writeDrawingChartSpace into a '
-      'test-only host; the model hosts charts in C2',
-  'c1_options':
-      'its charts are written by writeDrawingChartSpace into a '
-      'test-only host; the model hosts charts in C2',
+  'c1_kinds': _modelOnly,
+  'c1_options': _modelOnly,
+  'c2_kinds': _modelOnly,
+  'c2_data': _modelOnly,
 };
 
 /// Where the model's file may differ from the writer's, applied to the

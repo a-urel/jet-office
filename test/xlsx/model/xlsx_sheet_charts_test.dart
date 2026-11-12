@@ -5,7 +5,8 @@ import 'package:jet_office/jet_office.dart';
 import 'package:jet_office/src/drawingml/chart/chart_space.dart';
 import 'package:jet_office/src/drawingml/chart/chart_writer.dart';
 import 'package:jet_office/src/opc/change_log.dart';
-import 'package:jet_office/src/xlsx/chart.dart' show xlsxChartIds;
+import 'package:jet_office/src/xlsx/chart.dart'
+    show xlsxChartIds, xlsxChartWithIds;
 import 'package:jet_office/src/xlsx/model/xlsx_workbook.dart' show changeLogOf;
 import 'package:jet_office/src/xml/xml_equivalence.dart';
 import 'package:test/test.dart';
@@ -828,6 +829,44 @@ void main() {
       expect(listed.typed, XlsxChart(chart, at, name: 'Chart 1'));
       _sameIds(xlsxChartIds(listed.typed!)!, _ids(1, 2));
       expect(book.warnings, isEmpty);
+    });
+
+    test('a chart given ids keeps them and its theme in its part', () {
+      const DrawingChartIds ids = DrawingChartIds(
+        categoryAxis: 7,
+        valueAxis: 8,
+        series: <String>[
+          '{00000000-0000-0000-0000-000000000001}',
+          '{00000000-0000-0000-0000-000000000002}',
+        ],
+      );
+      final ChartTheme app = ChartTheme.office.copyWith(
+        exportColors: ChartExportColors.fixed,
+      );
+      final Chart chart = _columns(title: 'Ids');
+      final XlsxChart given = xlsxChartWithIds(
+        XlsxChart(chart, at, theme: app, language: 'tr-TR', autoTitle: true),
+        ids,
+      );
+      expect(xlsxChartIds(given), ids);
+      expect(
+        given,
+        XlsxChart(chart, at, theme: app, language: 'tr-TR', autoTitle: true),
+      );
+      final XlsxWorkbook book = XlsxWorkbook();
+      book.addSheet('S').addChart(given);
+      expect(
+        readXlsxBytes(book.save().bytes)['xl/charts/chart1.xml'],
+        writeDrawingChartSpace(
+          DrawingChartSpace(
+            chart: chart,
+            ids: ids,
+            language: 'tr-TR',
+            autoTitle: true,
+          ),
+          app,
+        ).bytes,
+      );
     });
 
     test('a one-cell anchor gives its size; without one it throws', () {
