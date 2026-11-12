@@ -36,17 +36,36 @@ extension _PieReading on _ChartReader {
           ? _holeSize(group.child('holeSize'))
           : _defaultHoleSize,
     );
-    final DrawingChartSpace? typed = _typed(
-      bytes,
-      chart,
-      seriesNodes,
-      autoTitle: titleNode != null && titleText == null,
-    );
+    final DrawingChartSpace? typed = _slicesWritten(series, seriesNodes)
+        ? _typed(
+            bytes,
+            chart,
+            seriesNodes,
+            autoTitle: titleNode != null && titleText == null,
+          )
+        : null;
     return DrawingChartRead(
       chart,
       typed,
       List<DrawingChartIssue>.unmodifiable(issues),
     );
+  }
+
+  /// Whether each of [seriesNodes] holds a `c:dPt` for every value of its
+  /// series in [series], as the writer writes one per slice. A part that
+  /// does not cannot be its typed form's, so the typed check, which would
+  /// write a slice for each of up to a million points a `c:ptCount` gives,
+  /// is skipped.
+  static bool _slicesWritten(
+    List<ChartSeries> series,
+    List<_Node> seriesNodes,
+  ) {
+    for (int i = 0; i < series.length && i < seriesNodes.length; i++) {
+      if (seriesNodes[i].all('dPt').length < series[i].values.values.length) {
+        return false;
+      }
+    }
+    return true;
   }
 
   /// A series of a pie or doughnut: as any series, but its point colours are

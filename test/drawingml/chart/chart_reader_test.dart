@@ -986,6 +986,44 @@ void main() {
         expect(read.issues, <DrawingChartIssue>[DrawingChartIssue.badNumber]);
       });
 
+      test('a point count beyond the limit is read promptly, untyped', () {
+        // Seed 2 case 123 of the chart fuzz's long run (C2): the values'
+        // `c:ptCount` of `c2_kinds`' doughnut set to twenty digits read in
+        // about four seconds, as the typed check wrote a `c:dPt` for each of
+        // a million slices.
+        for (final ChartKind kind in <ChartKind>[
+          ChartKind.pie,
+          ChartKind.donut,
+        ]) {
+          final String xml = utf8
+              .decode(
+                writeDrawingChartSpace(
+                  DrawingChartSpace(chart: _chart(kind)),
+                  _office,
+                ).bytes,
+              )
+              .replaceFirstMapped(
+                RegExp(
+                  r'(<c:numCache>(<c:formatCode>[^<]*</c:formatCode>)?)'
+                  r'<c:ptCount val="\d+"/>',
+                ),
+                (Match m) => '${m[1]}<c:ptCount val="99999999999999999999"/>',
+              );
+          expect(xml, contains('99999999999999999999'), reason: '$kind');
+          final Stopwatch watch = Stopwatch()..start();
+          final DrawingChartRead read = _read(xml);
+          watch.stop();
+          expect(
+            read.chart!.series.first.values.values,
+            hasLength(1 << 20),
+            reason: '$kind',
+          );
+          expect(read.typed, isNull, reason: '$kind');
+          expect(read.issues, contains(DrawingChartIssue.badNumber));
+          expect(watch.elapsed, lessThan(const Duration(seconds: 1)));
+        }
+      });
+
       test('a hole size outside 10 to 90 reads as 75, untyped', () {
         for (final String size in <String>['5', '95']) {
           final String xml = utf8
