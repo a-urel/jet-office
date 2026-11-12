@@ -15,8 +15,10 @@
 part of 'xlsx_sheet.dart';
 
 /// A chart part as the sheet opened it: its `chart`, or `null` when the part
-/// could not be opened or is larger than `XlsxReadLimits.maxChartPartBytes`.
-typedef _ChartPartRead = ({DrawingChart? chart});
+/// could not be opened or is larger than `XlsxReadLimits.maxChartPartBytes`,
+/// and the `source` it was opened from: the content the package held for the
+/// part then (`OpcPackage.contentOf`), `null` for its original bytes.
+typedef _ChartPartRead = ({DrawingChart? chart, PartContent? source});
 
 /// The chart half of [XlsxSheet].
 mixin _SheetCharts {
@@ -26,7 +28,10 @@ mixin _SheetCharts {
   void _warn(XlsxWarningCode code, String? cell, {String? detail});
   _PicturesRead _readPictures();
 
-  /// The chart parts opened, by part name (no leading `/`).
+  /// The chart parts opened, by part name (no leading `/`). An entry holds
+  /// while the package holds the same content for the part: an edit that
+  /// rewrites it (a structural edit's references, on any sheet), its undo and
+  /// its redo give the part other content, and the part is opened again.
   final Map<String, _ChartPartRead> _chartParts = <String, _ChartPartRead>{};
 
   /// The charts of the sheet in file order.
@@ -109,27 +114,38 @@ mixin _SheetCharts {
     return List<XlsxSheetChart>.unmodifiable(found);
   }
 
-  /// The chart part [name], opened once from what the package holds for it
-  /// now. A part over the size cap, or whose bytes cannot be read, opens as
-  /// none.
-  _ChartPartRead _chartPart(String name) =>
-      _chartParts[name] ??= _openChartPart(name);
+  /// The chart part [name], opened from what the package holds for it now,
+  /// and again only once that changes. A part over the size cap, or whose
+  /// bytes cannot be read, opens as none.
+  _ChartPartRead _chartPart(String name) {
+    final PartContent? source = _host.reader.package.contentOf(name);
+    final _ChartPartRead? cached = _chartParts[name];
+    if (cached != null && identical(cached.source, source)) return cached;
+    return _chartParts[name] = _openChartPart(name, source);
+  }
 
-  _ChartPartRead _openChartPart(String name) {
+  _ChartPartRead _openChartPart(String name, PartContent? source) {
     final PackageReader reader = _host.reader;
+    final OpcPackage package = reader.package;
+    final int cap = reader.limits.maxChartPartBytes;
+    // The original bytes are not inflated when the file declares more.
+    if (source == null && (package.declaredSize(name) ?? 0) > cap) {
+      return (chart: null, source: source);
+    }
     final Uint8List bytes;
     try {
-      bytes = reader.guardXml(name, () => reader.package.bytesOf(name));
+      bytes = reader.guardXml(name, () => package.bytesOf(name));
     } on XlsxReadException {
-      return (chart: null);
+      return (chart: null, source: source);
     }
-    if (bytes.length > reader.limits.maxChartPartBytes) return (chart: null);
+    if (bytes.length > cap) return (chart: null, source: source);
     return (
       chart: DrawingChart.opened(
         bytes,
         themeColors: _host.themeColors,
         date1904: _host.date1904,
       ),
+      source: source,
     );
   }
 }

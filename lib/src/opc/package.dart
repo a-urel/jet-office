@@ -216,6 +216,20 @@ final class OpcPackage {
   /// False for an unknown name and for package metadata.
   bool isLoaded(String name) => _parts[_key(name)]?.content != null;
 
+  /// The content a model gave the part ([setContent] or [addPart]), or
+  /// `null` for a part saved from its original bytes or an unknown name. A
+  /// reader that caches what it read of a part can compare it by identity
+  /// to see whether the part changed since.
+  PartContent? contentOf(String name) => _parts[_key(name)]?.content;
+
+  /// The uncompressed size the file declares for the part's original bytes,
+  /// or `null` for an unknown part or one that was added. Reading nothing,
+  /// it tells the size [originalBytes] would give (never more).
+  int? declaredSize(String name) {
+    final String? zipName = _parts[_key(name)]?.zipName;
+    return zipName == null ? null : _zip!.declaredSize(zipName);
+  }
+
   /// The part's original bytes from the file: inflated, CRC-checked and not
   /// cached, so each call inflates again.
   ///

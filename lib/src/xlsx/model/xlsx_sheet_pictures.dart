@@ -175,7 +175,9 @@ mixin _SheetPictures {
   /// written and not listed, without a warning. A picture the model cannot
   /// read (a dangling `r:embed`, a marker or size that is not a number, a
   /// `cNvPr` without an id) is kept, not listed and reported once as
-  /// `featureEntryInvalid` with the detail `pic`; a drawing part that is not
+  /// `featureEntryInvalid` with the detail `pic`, and a chart frame the model
+  /// cannot read (no `cNvPr` id or `c:chart` `r:id`, a broken marker) the
+  /// same way with the detail `chart`; a drawing part that is not
   /// a spreadsheet drawing reads no pictures and is reported with the detail
   /// `drawing`. Pictures that show the same media part share one
   /// `Uint8List`, across sheets too.

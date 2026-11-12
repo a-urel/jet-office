@@ -503,6 +503,114 @@ void main() {
       expect(chart.view!.series.single.color!.rgb, 0xFF0000);
     });
 
+    group('after an edit rewrites a chart part', () {
+      String values(XlsxSheet sheet) =>
+          sheet.charts.first.view!.series.first.values.reference!;
+      String typedValues(XlsxSheet sheet) =>
+          sheet.charts.first.typed!.chart.series.first.values.reference!;
+
+      test('insertRows on its sheet, its undo and redo', () {
+        final XlsxWorkbook book = XlsxWorkbook.open(_fixture('c1_kinds'));
+        final XlsxSheet sheet = book.sheet('Data');
+        expect(values(sheet), r'Data!$B$2:$B$5');
+        final XlsxChangeSet set = book.transaction(
+          () => sheet.insertRows(0, 1),
+        );
+        expect(values(sheet), r'Data!$B$3:$B$6');
+        expect(typedValues(sheet), r'Data!$B$3:$B$6');
+        book.undo(set);
+        expect(values(sheet), r'Data!$B$2:$B$5');
+        book.redo(set);
+        expect(values(sheet), r'Data!$B$3:$B$6');
+      });
+
+      test('a rewritten part over the cap still lists without a view', () {
+        final XlsxWorkbook book = XlsxWorkbook.open(
+          _fixture('c1_kinds'),
+          limits: const XlsxReadLimits(maxChartPartBytes: 100),
+        );
+        final XlsxSheet sheet = book.sheet('Data');
+        expect(sheet.charts.first.view, isNull);
+        sheet.insertRows(0, 1);
+        expect(sheet.charts, hasLength(12));
+        expect(
+          sheet.charts.every((XlsxSheetChart c) => c.view == null),
+          isTrue,
+        );
+      });
+
+      test('renameSheet', () {
+        final XlsxWorkbook book = XlsxWorkbook.open(_fixture('c1_kinds'));
+        final XlsxSheet sheet = book.sheet('Data');
+        expect(values(sheet), r'Data!$B$2:$B$5');
+        book.renameSheet(sheet, 'Veri 2026');
+        expect(values(sheet), r"'Veri 2026'!$B$2:$B$5");
+      });
+
+      test("another sheet's edit and rename, where the chart's data is", () {
+        final DrawingChartSpace space = DrawingChartSpace(
+          chart: Chart(
+            kind: ChartKind.column,
+            series: <ChartSeries>[
+              ChartSeries(
+                name: ChartData<String>(values: const <String?>[]),
+                categories: ChartData<Object>(
+                  values: const <Object?>['a', 'b'],
+                  reference: r'T!$A$2:$A$3',
+                ),
+                values: ChartData<double>(
+                  values: const <double?>[1, 2],
+                  reference: r'T!$B$2:$B$3',
+                ),
+              ),
+            ],
+          ),
+        );
+        final Map<String, Uint8List> parts = readXlsxBytes(
+          _package(
+            _twoCell(_frame(2, 'rIdC')),
+            charts: <String, List<int>>{
+              'rIdC': writeDrawingChartSpace(space, ChartTheme.office).bytes,
+            },
+          ),
+        );
+        // A second sheet T, the chart's data.
+        parts['xl/worksheets/sheet2.xml'] = Uint8List.fromList(
+          utf8.encode('<worksheet xmlns="$mainNs"><sheetData/></worksheet>'),
+        );
+        parts['xl/workbook.xml'] = Uint8List.fromList(
+          utf8.encode(
+            utf8
+                .decode(parts['xl/workbook.xml']!)
+                .replaceFirst(
+                  '</sheets>',
+                  '<sheet name="T" sheetId="2" r:id="rIdT2"/></sheets>',
+                ),
+          ),
+        );
+        parts['xl/_rels/workbook.xml.rels'] = Uint8List.fromList(
+          utf8.encode(
+            utf8
+                .decode(parts['xl/_rels/workbook.xml.rels']!)
+                .replaceFirst(
+                  '</Relationships>',
+                  '<Relationship Id="rIdT2" Type="$relNs/worksheet" '
+                      'Target="worksheets/sheet2.xml"/></Relationships>',
+                ),
+          ),
+        );
+        final XlsxWorkbook book = XlsxWorkbook.open(
+          buildZip(<String, List<int>>{...parts}),
+        );
+        final XlsxSheet host = book.sheet('S');
+        expect(values(host), r'T!$B$2:$B$3');
+        book.sheet('T').insertRows(0, 2);
+        expect(values(host), r'T!$B$4:$B$5');
+        book.renameSheet(book.sheet('T'), 'Q1 Sales');
+        expect(values(host), r"'Q1 Sales'!$B$4:$B$5");
+      });
+    });
+
     test('reading the charts of c1_options and saving changes no chart '
         'part', () {
       final Uint8List input = _fixture('c1_options');

@@ -36,7 +36,7 @@ import '../../drawingml/picture.dart' show DrawingPic, emuPerPixel;
 import '../../opc/change_log.dart';
 import '../../opc/ooxml.dart';
 import '../../opc/opaque_xml.dart';
-import '../../opc/package.dart' show OpcPackage, OpcRelationship;
+import '../../opc/package.dart' show OpcPackage, OpcRelationship, PartContent;
 import '../../xml/xml_escape.dart';
 import '../../xml/xml_number.dart';
 import '../../xml/xml_pull_reader.dart';

@@ -117,6 +117,17 @@ void main() {
       );
     });
 
+    test('contentOf and declaredSize', () {
+      final OpcPackage p = _package(<(String, String)>[('a.xml', '<abc/>')]);
+      expect(p.declaredSize('/A.xml'), 6);
+      expect(p.declaredSize('/gone.xml'), isNull);
+      expect(p.contentOf('a.xml'), isNull);
+      final _Text text = _Text('<z/>');
+      p.setContent('/a.xml', text);
+      expect(identical(p.contentOf('a.xml'), text), isTrue);
+      expect(p.contentOf('/gone.xml'), isNull);
+    });
+
     test('originalBytes of an unknown part is a missingPart failure', () {
       final OpcPackage p = _package(<(String, String)>[('a.xml', '<a/>')]);
       expect(

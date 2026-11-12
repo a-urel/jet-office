@@ -389,6 +389,11 @@ final class ZipReader {
   /// class documentation describes.
   bool contains(String name) => _entries.containsKey(_key(name));
 
+  /// The uncompressed size the entry named [name] declares in the central
+  /// directory, or `null` when there is no such entry. [read] never returns
+  /// more bytes than this.
+  int? declaredSize(String name) => _entries[_key(name)]?.uncompressedSize;
+
   /// The uncompressed bytes of the entry named [name], in a new buffer the
   /// caller owns.
   ///
