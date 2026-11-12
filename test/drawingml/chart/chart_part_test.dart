@@ -159,7 +159,7 @@ void main() {
 
     test('a chart the writer cannot express throws from created', () {
       expect(
-        () => DrawingChart.created(_space(ChartKind.scatter), _office),
+        () => DrawingChart.created(_space(ChartKind.sparkline), _office),
         throwsArgumentError,
       );
     });
@@ -168,7 +168,7 @@ void main() {
       final Uint8List bytes = Uint8List.fromList(utf8.encode(excelColumnChart));
       final DrawingChart part = DrawingChart.opened(bytes);
       expect(
-        () => part.replace(_space(ChartKind.scatter), _office),
+        () => part.replace(_space(ChartKind.sparkline), _office),
         throwsArgumentError,
       );
       expect(part.changed, isFalse);

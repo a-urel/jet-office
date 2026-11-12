@@ -67,9 +67,10 @@ extension _SeriesWriting on _ChartWriter {
     w.end();
   }
 
-  /// The series' `c:val`, in its format code (`General` when it has none).
-  void _writeValues(ChartSeries series) {
-    w.start('c:val');
+  /// The series' `c:val`, or the element [name], in its format code
+  /// (`General` when it has none).
+  void _writeValues(ChartSeries series, {String name = 'c:val'}) {
+    w.start(name);
     _writeNumbers(
       series.values.values,
       series.values.reference,
@@ -126,9 +127,12 @@ extension _SeriesWriting on _ChartWriter {
   /// Each holds the index, `c:invertIfNegative 0` of a bar, for a line the
   /// marker with the colour as its fill and line, `c:bubble3D 0` and the
   /// shape, a fill for a bar and the series' own line (the segment is not
-  /// recoloured) for a line. The layout is an estimate, not checked in Excel
-  /// (pending E1).
+  /// recoloured) for a line, or a scatter chart's line without fill. The
+  /// layout is an estimate, not checked in Excel (pending E1; a scatter
+  /// chart's, as a line's, is not in the E1 file).
   void _writePointColors(ChartSeries series, ChartColor seriesColor) {
+    final bool scatter = chart.kind == ChartKind.scatter;
+    final bool marked = scatter || chart.kind == ChartKind.line;
     for (int i = 0; i < theme.pointColorCount(series); i++) {
       final ChartColor? color = theme.pointColorOf(series, i);
       if (color == null) {
@@ -139,7 +143,7 @@ extension _SeriesWriting on _ChartWriter {
       if (_bars) {
         _value('c:invertIfNegative', '0');
       }
-      if (chart.kind == ChartKind.line) {
+      if (marked) {
         w.start('c:marker');
         _value('c:symbol', 'circle');
         _value('c:size', theme.markerSize.clamp(2, 72).round().toString());
@@ -148,7 +152,9 @@ extension _SeriesWriting on _ChartWriter {
       }
       _value('c:bubble3D', '0');
       w.start('c:spPr');
-      if (chart.kind == ChartKind.line) {
+      if (scatter) {
+        _scatterSeriesLine();
+      } else if (marked) {
         _seriesLine(seriesColor);
       } else {
         _solidFill(color);
@@ -166,9 +172,9 @@ extension _SeriesWriting on _ChartWriter {
   /// (`chart_reference.xlsx`, charts 20 and 21): the format when the labels
   /// have one, a bare shape, the data label text, `c:showVal 1` among the
   /// flags, `c:showLeaderLines 0`, and Excel's leader lines in a `c15`
-  /// extension. No position: Excel writes none, and draws each kind's
-  /// default.
-  void _writeSeriesDataLabels() {
+  /// extension (left out when not [leaderLines]). No position: Excel writes
+  /// none, and draws each kind's default.
+  void _writeSeriesDataLabels({bool leaderLines = true}) {
     w.start('c:dLbls');
     final String? formatCode = chart.dataLabels.formatCode;
     if (formatCode != null) {
@@ -187,6 +193,10 @@ extension _SeriesWriting on _ChartWriter {
     );
     _writeLabelFlags(showValue: chart.dataLabels.showValue);
     _value('c:showLeaderLines', '0');
+    if (!leaderLines) {
+      w.end();
+      return;
+    }
     w.start('c:extLst');
     w.start('c:ext');
     w.attribute('uri', _leaderLinesExtension);
@@ -228,15 +238,15 @@ extension _SeriesWriting on _ChartWriter {
     w.end();
   }
 
-  /// The series' `c:cat`, left out when the categories have neither values
-  /// nor a reference.
-  void _writeCategories(ChartData<Object> categories) {
+  /// The series' `c:cat`, or the element [name], left out when the
+  /// categories have neither values nor a reference.
+  void _writeCategories(ChartData<Object> categories, {String name = 'c:cat'}) {
     final List<Object?> values = categories.values;
     final String? reference = categories.reference;
     if (values.isEmpty && reference == null) {
       return;
     }
-    w.start('c:cat');
+    w.start(name);
     switch (_categoryType(values)) {
       case _CategoryType.number:
         _writeNumbers(

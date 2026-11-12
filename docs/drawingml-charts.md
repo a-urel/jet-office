@@ -63,9 +63,9 @@ Each rule has the test that holds it.
   writer refuses (below) gives a view and no typed form.
   `chart_reader_test.dart` ("a theme the writer refuses gives a view only,
   never a throw").
-- **A kind outside the model (a combination, a scatter chart, a pie beside
-  axes) or a third axis is `unsupportedKind`:** a view with the kind
-  `unsupported`, no typed form. `chart_reader_test.dart`.
+- **A kind outside the model (a combination, a pie beside axes, a scatter
+  group beside a category axis) or a third axis is `unsupportedKind`:** a
+  view with the kind `unsupported`, no typed form. `chart_reader_test.dart`.
 - **Pies and doughnuts are written and read as Excel writes them (C2).** A
   plot area of one `c:pieChart` or `c:doughnutChart` and no axis reads as
   `pie` or `donut`. The writer writes no axes (the ids' axis fields are
@@ -86,6 +86,29 @@ Each rule has the test that holds it.
   `chart_reference_j4.xlsx` read typed and write their parts again.
   `excel_reference_j4_test.dart`, `chart_writer_test.dart` and
   `chart_reader_test.dart` ("pies and doughnuts").
+- **Scatter charts of markers only are written and read as Excel writes them
+  (C2).** A plot area of one `c:scatterChart` on two `c:valAx` reads as
+  `scatter`, the first axis as the category (x) axis. The writer writes
+  Excel's chart 4 of `chart_reference_j4.xlsx`: `c:scatterStyle lineMarker`,
+  `c:varyColors 0`, each series' line `a:noFill` 3 pt (`38100`, round cap),
+  a circle marker of `markerSize` in its colour whatever `lineMarkers` says,
+  its categories as `c:xVal` and its values as `c:yVal`, and `c:smooth 0`
+  (a series' `smooth` draws nothing in a scatter chart and is not written);
+  the x axis at the bottom with the ids' `categoryAxis` and the category
+  axis' options (grid lines when `categoryAxis.gridLines`; no `c:numFmt`
+  unless it has a format code), the y axis at the left with `valueAxis`,
+  both with no tick marks, labels `nextTo` (though a value is negative),
+  the theme's `scatterAxisLine`, crossing at `autoZero` and `midCat`. The
+  reader takes a series' colour from its marker's fill. Excel's chart took
+  text x values (`c:strRef`); numeric x values (`c:xVal/c:numRef`, as
+  `_writeCategories` writes numbers and dates) are an estimate, not checked
+  in Excel: E3 decides (`packages/jet_charts_core/docs/excel-checks.md`, "E3").
+  So are a scatter chart's data labels (a line's, without the `c15` leader
+  line extension the Open XML SDK refuses there), point colours (a line's
+  markers, the line without fill), an x axis' number format and axis lines
+  in a theme without `scatterAxisLine` (any chart's). Chart 4 reads typed
+  and writes its part again. `excel_reference_j4_test.dart`,
+  `chart_writer_test.dart` and `chart_reader_test.dart` ("scatter charts").
 - **The typed form carries the language, the two axis ids, each series'
   `c16:uniqueId` and Excel's automatic title.** Anything else Excel writes is
   fixed by the writer; a part that differs is not typed.
@@ -148,8 +171,8 @@ Each rule has the test that holds it.
   `chart_reference.xlsx` read typed. `chart_writer_test.dart` ("Excel's
   default charts"), `excel_reference_test.dart`.
 - **Data problems are issues, programmer errors throw.** A chart the writer
-  cannot express (a kind outside the J2 set, pie and donut, a secondary axis,
-  a series of another kind or on the secondary axis, centre text, which no
+  cannot express (a kind other than column, bar, line, area, pie, donut or
+  scatter, a secondary axis, a series of another kind or on the secondary axis, centre text, which no
   part carries) is an `ArgumentError`;
   so are axis ids that are not distinct unsigned 32-bit numbers and series
   ids that are not braced GUIDs.

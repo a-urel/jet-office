@@ -10,8 +10,10 @@
 /// titles, scaling, formats, data labels, a hidden axis), all but one of
 /// which read typed (`docs/drawingml-charts.md`, "Excel's reference
 /// workbook"), and the pies and doughnuts of `chart_reference_j4.xlsx`
-/// (charts 1, 2, 3 and 7, `chart_writer_pie.dart`). The elements are in the schema's order, and everything the
-/// typed form does not carry is fixed as Excel writes it.
+/// (charts 1, 2, 3 and 7, `chart_writer_pie.dart`) and its scatter chart
+/// (chart 4, `chart_writer_scatter.dart`). The elements are in the schema's
+/// order, and everything the typed form does not carry is fixed as Excel
+/// writes it.
 ///
 /// Data problems never throw: a value that is `NaN` or infinite is left out
 /// and text loses the characters XML 1.0 forbids, each reported once as a
@@ -36,6 +38,7 @@ import 'chart_space.dart';
 import 'chart_values.dart';
 
 part 'chart_writer_pie.dart';
+part 'chart_writer_scatter.dart';
 part 'chart_writer_series.dart';
 
 /// A written chart part: its bytes and the data problems the writer got past.
@@ -78,10 +81,18 @@ final class DrawingChartWritten {
 /// `holeSizePercent` rounded. What a pie does not draw is not written: the
 /// axes, the grouping, a series' own colour and its smoothing.
 ///
+/// A scatter chart is written as Excel's `c:scatterChart` of markers only
+/// (`chart_reference_j4.xlsx`, chart 4, `chart_writer_scatter.dart`): each
+/// series' categories are its x values (`c:xVal`) and its values its y
+/// values (`c:yVal`), on two value axes, x at the bottom with the ids'
+/// `categoryAxis` and the category axis' options, y at the left with the
+/// `valueAxis` and the value axis' options. The grouping and a series'
+/// smoothing are not written: a scatter chart draws no line.
+///
 /// Throws an [ArgumentError] when the chart's kind is not column, bar, line,
-/// area, pie or donut, when it has centre text (a part cannot carry it; a
-/// hole size is ignored but by a donut), when it has a secondary value axis, when a series is bound to
-/// the secondary axis or has a kind other than `null` or the chart's, when an
+/// area, pie, donut or scatter, when it has centre text (a part cannot carry
+/// it; a hole size is ignored but by a donut), when it has a secondary value
+/// axis, when a series is bound to the secondary axis or has a kind other than `null` or the chart's, when an
 /// axis id of `space.ids` (the four, secondary ones too) is outside 0 to
 /// 4294967295 or two of them are equal, or
 /// when one of its series ids is not a GUID in braces.
@@ -125,13 +136,14 @@ void _checkExpressible(Chart chart) {
         ChartKind.line ||
         ChartKind.area ||
         ChartKind.pie ||
-        ChartKind.donut:
+        ChartKind.donut ||
+        ChartKind.scatter:
       break;
     default:
       throw ArgumentError.value(
         chart.kind,
         'chart.kind',
-        'must be column, bar, line, area, pie or donut',
+        'must be column, bar, line, area, pie, donut or scatter',
       );
   }
   if (chart.centerText != null) {
@@ -417,6 +429,10 @@ final class _ChartWriter {
     w.empty('c:layout');
     if (_round) {
       _writePieGroup();
+    } else if (chart.kind == ChartKind.scatter) {
+      _writeScatterGroup();
+      _writeScatterAxis(x: true);
+      _writeScatterAxis(x: false);
     } else {
       _writeGroup();
       _writeCategoryAxis();

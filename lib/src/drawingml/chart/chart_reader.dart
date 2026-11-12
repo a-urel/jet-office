@@ -10,10 +10,12 @@
 /// part shows: the kind and grouping of its one group, the series with their
 /// names, categories, values, references and colours, the title, the legend,
 /// the two axes and the data labels, and of a pie or doughnut (a plot area of
-/// its one group and no axis) the slice colours and the hole size. A part the
-/// model does not draw (another group, several groups, a third axis, a pie
-/// beside axes) is [ChartKind.unsupported], with the series of its first
-/// group.
+/// its one group and no axis) the slice colours and the hole size, and of a
+/// scatter chart (its one group on two value axes, the first the x axis)
+/// each series' x values as its categories. A part the model does not draw
+/// (another group, several groups, a third axis, a pie beside axes, a scatter
+/// group beside a category axis) is [ChartKind.unsupported], with the series
+/// of its first group.
 ///
 /// The typed form ([DrawingChartSpace]) is offered only when writing it gives
 /// the part again by `xmlDifference` (ruling R2 of C1), so whatever the reader
@@ -42,6 +44,7 @@ import 'chart_values.dart';
 import 'chart_writer.dart';
 
 part 'chart_reader_pie.dart';
+part 'chart_reader_scatter.dart';
 part 'chart_reader_series.dart';
 
 /// What [readDrawingChartSpace] read from a chart part.
@@ -303,15 +306,28 @@ final class _ChartReader {
         axes.add(node);
       }
     }
-    final _Node? categoryAxis = axes
-        .where((_Node a) => a.name == 'catAx' || a.name == 'dateAx')
-        .firstOrNull;
-    final _Node? valueAxis = axes
-        .where((_Node a) => a.name == 'valAx')
-        .firstOrNull;
     final _Node? group = groups.firstOrNull;
+    // A scatter chart's x axis is a value axis, the first of the two (Excel
+    // writes x first, chart 4 of `chart_reference_j4.xlsx`); the typed check
+    // catches a part that has them the other way.
+    final bool scatter =
+        group != null &&
+        group.name == 'scatterChart' &&
+        groups.length == 1 &&
+        axes.length == 2 &&
+        axes.every((_Node a) => a.name == 'valAx');
+    final _Node? categoryAxis = scatter
+        ? axes.first
+        : axes
+              .where((_Node a) => a.name == 'catAx' || a.name == 'dateAx')
+              .firstOrNull;
+    final _Node? valueAxis = scatter
+        ? axes.last
+        : axes.where((_Node a) => a.name == 'valAx').firstOrNull;
     ChartKind kind = ChartKind.unsupported;
-    if (group != null && groups.length == 1 && axes.isEmpty) {
+    if (scatter) {
+      kind = ChartKind.scatter;
+    } else if (group != null && groups.length == 1 && axes.isEmpty) {
       kind = switch (group.name) {
         'pieChart' => ChartKind.pie,
         'doughnutChart' => ChartKind.donut,
@@ -348,6 +364,8 @@ final class _ChartReader {
       for (int i = 0; i < seriesNodes.length; i++)
         round
             ? _readPieSeries(seriesNodes[i], i)
+            : scatter
+            ? _readScatterSeries(seriesNodes[i], i)
             : _readSeries(seriesNodes[i], i, lines: lines),
     ];
     final _Node? titleNode = chartNode.child('title');

@@ -59,10 +59,10 @@ final class DrawingChartIds {
     this.series = const <String>[],
   });
 
-  /// The `c:axId` of the category axis.
+  /// The `c:axId` of the category axis, or of a scatter chart's x axis.
   final int categoryAxis;
 
-  /// The `c:axId` of the value axis.
+  /// The `c:axId` of the value axis, or of a scatter chart's y axis.
   final int valueAxis;
 
   /// The `c:axId` of the secondary category axis, written only for a chart

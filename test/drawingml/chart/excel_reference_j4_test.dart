@@ -7,7 +7,8 @@
 /// README there names (chart 4 took text x values, chart 5 has no secondary
 /// axis). This test pins Excel's values in the XML, and how the reader reads
 /// each part: the pies and doughnuts (charts 1, 2, 3 and 7) read typed and
-/// write the part again (C2); scatter and the combination wait for C3.
+/// write the part again (C2), as does the scatter chart (chart 4); the
+/// combination waits for C3.
 @TestOn('vm')
 library;
 
@@ -249,23 +250,60 @@ void main() {
     });
   });
 
-  test('the reader types the smooth line and leaves scatter and the '
-      'combination to C3', () {
-    for (final int n in <int>[4, 5, 6]) {
-      final DrawingChartRead read = readDrawingChartSpace(
-        parts['xl/charts/chart$n.xml']!,
-      );
-      if (n == 6) {
-        expect(read.issues, isEmpty);
-        expect(read.typed, isNotNull);
-        expect(read.chart!.kind, ChartKind.line);
-        expect(read.chart!.series.single.smooth, isTrue);
-      } else {
-        expect(read.typed, isNull, reason: '$n');
-        expect(read.issues, <DrawingChartIssue>[
-          DrawingChartIssue.unsupportedKind,
-        ], reason: '$n');
-      }
+  test('the scatter chart reads typed, and writes the part again', () {
+    final Uint8List part = chartPartOf(_path, 4);
+    final DrawingChartRead read = readDrawingChartSpace(
+      part,
+      themeColors: themeColorsOf(_path),
+    );
+    expect(read.issues, isEmpty);
+    final DrawingChartSpace? typed = read.typed;
+    expect(typed, isNotNull);
+    expect(
+      xmlDifference(
+        writeDrawingChartSpace(typed!, ChartTheme.office).bytes,
+        part,
+      ),
+      isNull,
+    );
+    expect(typed.ids.categoryAxis, 1468516991);
+    expect(typed.ids.valueAxis, 1468528639);
+    expect(typed.autoTitle, isTrue);
+    final Chart chart = typed.chart;
+    expect(chart.kind, ChartKind.scatter);
+    expect(chart.categoryAxis.gridLines, isTrue);
+    expect(chart.valueAxis.gridLines, isTrue);
+    expect(chart.series, hasLength(2));
+    expect(chart.series.first.categories.values, <Object?>[
+      'Kuzey',
+      'Güney',
+      'Doğu',
+      'Batı',
+    ]);
+    expect(chart.series.first.categories.reference, r'Veri!$A$2:$A$5');
+    expect(chart.series.first.values.values, <double?>[12, 18, -4, 9]);
+    expect(chart.series.last.name.values, <String?>['Adet']);
+    for (final ChartSeries series in chart.series) {
+      expect(series.color, isNull);
+      expect(series.pointColors, isEmpty);
     }
+  });
+
+  test('the reader types the smooth line and leaves the combination to '
+      'C3', () {
+    final DrawingChartRead line = readDrawingChartSpace(
+      parts['xl/charts/chart6.xml']!,
+    );
+    expect(line.issues, isEmpty);
+    expect(line.typed, isNotNull);
+    expect(line.chart!.kind, ChartKind.line);
+    expect(line.chart!.series.single.smooth, isTrue);
+    final DrawingChartRead combination = readDrawingChartSpace(
+      parts['xl/charts/chart5.xml']!,
+    );
+    expect(combination.typed, isNull);
+    expect(combination.issues, <DrawingChartIssue>[
+      DrawingChartIssue.unsupportedKind,
+    ]);
   });
 }

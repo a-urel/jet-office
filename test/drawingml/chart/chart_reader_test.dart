@@ -772,6 +772,150 @@ void main() {
       });
     });
 
+    group('scatter charts', () {
+      Chart scatter({
+        List<ChartSeries>? series,
+        ChartAxis categoryAxis = const ChartAxis(gridLines: true),
+        ChartAxis valueAxis = const ChartAxis(gridLines: true),
+        ChartDataLabels dataLabels = const ChartDataLabels(),
+      }) => Chart(
+        kind: ChartKind.scatter,
+        series:
+            series ??
+            <ChartSeries>[
+              _series(
+                name: 'Satış',
+                nameReference: r'Sheet1!$B$1',
+                categories: const <Object?>[1.5, 2, 4],
+              ),
+            ],
+        categoryAxis: categoryAxis,
+        valueAxis: valueAxis,
+        dataLabels: dataLabels,
+        legend: const ChartLegend(),
+      );
+
+      test('numeric x values read back typed', () {
+        _expectRoundTrip(
+          DrawingChartSpace(
+            chart: scatter(),
+            ids: DrawingChartIds(series: <String>[_guid(1)]),
+            autoTitle: true,
+          ),
+        );
+      });
+
+      test('text x values of two series read back typed', () {
+        _expectRoundTrip(
+          DrawingChartSpace(
+            chart: scatter(
+              series: <ChartSeries>[
+                _series(name: 'a'),
+                _series(name: 'b', values: const <double?>[-4, null, 9]),
+              ],
+            ),
+            language: 'tr-TR',
+          ),
+        );
+      });
+
+      test('date x values read back typed, in both date systems', () {
+        final DrawingChartSpace space = DrawingChartSpace(
+          chart: scatter(
+            series: <ChartSeries>[
+              _series(
+                categories: <Object?>[
+                  DateTime(2026, 1, 1),
+                  DateTime(2026, 2, 1),
+                  DateTime(2026, 3, 1),
+                ],
+              ),
+            ],
+          ),
+        );
+        _expectRoundTrip(space);
+        for (final bool date1904 in <bool>[false, true]) {
+          final DrawingChartRead read = readDrawingChartSpace(
+            writeDrawingChartSpace(space, _office, date1904: date1904).bytes,
+            date1904: date1904,
+          );
+          expect(read.typed, space, reason: '$date1904');
+        }
+      });
+
+      test('the axes\' options read back typed: no x grid lines, titles, '
+          'a fixed range, formats, a hidden axis', () {
+        _expectRoundTrip(
+          DrawingChartSpace(
+            chart: scatter(
+              categoryAxis: const ChartAxis(
+                title: 'X',
+                min: 0,
+                max: 10,
+                majorUnit: 2,
+                formatCode: '0.0',
+              ),
+              valueAxis: const ChartAxis(
+                title: 'Y',
+                formatCode: '#,##0',
+                gridLines: false,
+              ),
+            ),
+          ),
+        );
+        _expectRoundTrip(
+          DrawingChartSpace(
+            chart: scatter(
+              valueAxis: const ChartAxis(visible: false, gridLines: true),
+            ),
+          ),
+        );
+      });
+
+      test('a series and point colour of its own read back typed', () {
+        final ChartColor red = ChartColor.rgb(0xFF0000);
+        final DrawingChartSpace space = DrawingChartSpace(
+          chart: scatter(
+            series: <ChartSeries>[
+              _series(
+                color: ChartColor.rgb(0x123456),
+              ).copyWith(pointColors: <ChartColor?>[null, red]),
+            ],
+          ),
+        );
+        _expectRoundTrip(space);
+        final ChartSeries read = _roundTrip(space).chart!.series.single;
+        expect(read.color, ChartColor.rgb(0x123456));
+        expect(read.pointColors, <ChartColor?>[null, red]);
+      });
+
+      test('data labels and an app theme with fixed colours read back '
+          'typed', () {
+        _expectRoundTrip(
+          DrawingChartSpace(
+            chart: scatter(dataLabels: const ChartDataLabels(visible: true)),
+          ),
+          theme: _office.copyWith(exportColors: ChartExportColors.fixed),
+        );
+      });
+
+      test('a scatter group beside a category axis is unsupported', () {
+        final String xml = utf8
+            .decode(
+              writeDrawingChartSpace(
+                DrawingChartSpace(chart: scatter()),
+                _office,
+              ).bytes,
+            )
+            .replaceFirst('<c:valAx>', '<c:catAx>')
+            .replaceFirst('</c:valAx>', '</c:catAx>');
+        final DrawingChartRead read = _read(xml);
+        expect(read.chart!.kind, ChartKind.unsupported);
+        expect(read.chart!.unsupportedName, 'scatterChart');
+        expect(read.typed, isNull);
+      });
+    });
+
     test('a bar and line combination is unsupported', () {
       final String line = RegExp(
         '<c:lineChart>.*</c:lineChart>',

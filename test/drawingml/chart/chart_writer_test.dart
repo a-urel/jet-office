@@ -393,6 +393,221 @@ void main() {
     });
   });
 
+  group('scatter charts', () {
+    /// A scatter series whose x values are [xs], by reference.
+    ChartSeries scatterSeries(List<Object?> xs, {String? name}) => ChartSeries(
+      name: ChartData<String>(
+        values: name == null ? const <String?>[] : <String?>[name],
+        reference: name == null ? null : r'Sayfa1!$B$1',
+      ),
+      categories: ChartData<Object>(values: xs, reference: r'Sayfa1!$A$2:$A$4'),
+      values: ChartData<double>(
+        values: const <double?>[12, 18, -4],
+        reference: r'Sayfa1!$B$2:$B$4',
+      ),
+    );
+
+    Chart scatter(List<Object?> xs, {ChartAxis? categoryAxis}) => _chart(
+      ChartKind.scatter,
+      series: <ChartSeries>[scatterSeries(xs, name: 'Satış')],
+      categoryAxis: categoryAxis ?? const ChartAxis(gridLines: true),
+      legend: const ChartLegend(),
+    );
+
+    test('markers only: lineMarker, a 3 pt line without fill, circle '
+        'markers, x and y values', () {
+      final String xml = _xml(_write(scatter(const <Object?>['A', 'B', 'C'])));
+      _expectWellFormed(xml);
+      expect(
+        xml,
+        contains(
+          '<c:plotArea><c:layout/><c:scatterChart>'
+          '<c:scatterStyle val="lineMarker"/><c:varyColors val="0"/><c:ser>',
+        ),
+      );
+      expect(
+        xml,
+        contains(
+          '<c:spPr><a:ln w="38100" cap="rnd"><a:noFill/><a:round/></a:ln>'
+          '<a:effectLst/></c:spPr><c:marker><c:symbol val="circle"/>'
+          '<c:size val="5"/><c:spPr><a:solidFill>'
+          '<a:schemeClr val="accent1"/></a:solidFill><a:ln w="9525">'
+          '<a:solidFill><a:schemeClr val="accent1"/></a:solidFill></a:ln>'
+          '<a:effectLst/></c:spPr></c:marker><c:xVal><c:strRef>'
+          r'<c:f>Sayfa1!$A$2:$A$4</c:f>',
+        ),
+      );
+      expect(
+        xml,
+        contains(r'</c:xVal><c:yVal><c:numRef><c:f>Sayfa1!$B$2:$B$4</c:f>'),
+      );
+      expect(xml, contains('</c:yVal><c:smooth val="0"/>'));
+      expect(xml, isNot(contains('<c:cat>')));
+      expect(xml, isNot(contains('<c:val>')));
+      expect(xml, isNot(contains('c:catAx')));
+      expect(
+        xml,
+        contains(
+          '<c:axId val="500000001"/><c:axId val="500000002"/>'
+          '</c:scatterChart>',
+        ),
+      );
+    });
+
+    test('two value axes: x at the bottom without a number format, both '
+        'crossing midCat with BFBFBF axis lines', () {
+      final String xml = _xml(_write(scatter(const <Object?>['A', 'B', 'C'])));
+      final List<String> axes = RegExp(
+        '<c:valAx>.*?</c:valAx>',
+      ).allMatches(xml).map((RegExpMatch m) => m[0]!).toList();
+      expect(axes, hasLength(2));
+      expect(
+        axes.first,
+        startsWith(
+          '<c:valAx><c:axId val="500000001"/><c:scaling>'
+          '<c:orientation val="minMax"/></c:scaling><c:delete val="0"/>'
+          '<c:axPos val="b"/><c:majorGridlines>',
+        ),
+      );
+      expect(axes.first, isNot(contains('c:numFmt')));
+      expect(axes.first, contains('<c:crossAx val="500000002"/>'));
+      expect(
+        axes.last,
+        startsWith(
+          '<c:valAx><c:axId val="500000002"/><c:scaling>'
+          '<c:orientation val="minMax"/></c:scaling><c:delete val="0"/>'
+          '<c:axPos val="l"/><c:majorGridlines>',
+        ),
+      );
+      expect(
+        axes.last,
+        contains('<c:numFmt formatCode="General" sourceLinked="1"/>'),
+      );
+      expect(axes.last, contains('<c:crossAx val="500000001"/>'));
+      for (final String axis in axes) {
+        expect(
+          axis,
+          contains(
+            '<c:majorTickMark val="none"/><c:minorTickMark val="none"/>'
+            '<c:tickLblPos val="nextTo"/><c:spPr><a:noFill/>'
+            '<a:ln w="9525" cap="flat" cmpd="sng" algn="ctr"><a:solidFill>'
+            '<a:schemeClr val="tx1"><a:lumMod val="25000"/>'
+            '<a:lumOff val="75000"/></a:schemeClr></a:solidFill><a:round/>'
+            '</a:ln><a:effectLst/></c:spPr><c:txPr>',
+          ),
+        );
+        expect(
+          axis,
+          endsWith(
+            '<c:crosses val="autoZero"/><c:crossBetween val="midCat"/>'
+            '</c:valAx>',
+          ),
+        );
+      }
+    });
+
+    test('the x axis has grid lines only when the category axis has', () {
+      final String xml = _xml(
+        _write(
+          scatter(const <Object?>[
+            'A',
+            'B',
+            'C',
+          ], categoryAxis: const ChartAxis()),
+        ),
+      );
+      final List<String> axes = RegExp(
+        '<c:valAx>.*?</c:valAx>',
+      ).allMatches(xml).map((RegExpMatch m) => m[0]!).toList();
+      expect(axes.first, isNot(contains('c:majorGridlines')));
+      expect(axes.last, contains('c:majorGridlines'));
+    });
+
+    test('numeric x values write c:xVal/c:numRef', () {
+      final String xml = _xml(_write(scatter(const <Object?>[1.5, 2, 4])));
+      _expectWellFormed(xml);
+      expect(
+        xml,
+        contains(
+          r'<c:xVal><c:numRef><c:f>Sayfa1!$A$2:$A$4</c:f><c:numCache>'
+          '<c:formatCode>General</c:formatCode><c:ptCount val="3"/>'
+          '<c:pt idx="0"><c:v>1.5</c:v></c:pt>'
+          '<c:pt idx="1"><c:v>2</c:v></c:pt>'
+          '<c:pt idx="2"><c:v>4</c:v></c:pt></c:numCache></c:numRef>'
+          '</c:xVal>',
+        ),
+      );
+    });
+
+    test('a scatter series of kind line is an ArgumentError', () {
+      expect(
+        () => _write(
+          _chart(
+            ChartKind.scatter,
+            series: <ChartSeries>[
+              _excelSeries().copyWith(kind: ChartKind.line),
+            ],
+          ),
+        ),
+        throwsA(
+          isA<ArgumentError>().having(
+            (ArgumentError e) => e.name,
+            'name',
+            'chart.series[0].kind',
+          ),
+        ),
+      );
+      // Its own kind is allowed.
+      expect(
+        _write(
+          _chart(
+            ChartKind.scatter,
+            series: <ChartSeries>[
+              _excelSeries().copyWith(kind: ChartKind.scatter),
+            ],
+          ),
+        ).bytes,
+        isNotEmpty,
+      );
+    });
+
+    test("a scatter chart's labels are a line's without the leader line "
+        'extension, which the Open XML SDK refuses outside a bar, line or '
+        'area group', () {
+      final String xml = _xml(
+        _write(
+          _chart(
+            ChartKind.scatter,
+            dataLabels: const ChartDataLabels(visible: true),
+          ),
+        ),
+      );
+      _expectWellFormed(xml);
+      expect(
+        xml,
+        contains(
+          '<c:showBubbleSize val="0"/><c:showLeaderLines val="0"/>'
+          '</c:dLbls><c:xVal>',
+        ),
+      );
+      expect(xml, isNot(contains('c15:')));
+    });
+
+    test('a smoothed series still writes c:smooth 0: a scatter draws no '
+        'line', () {
+      final String xml = _xml(
+        _write(
+          _chart(
+            ChartKind.scatter,
+            series: <ChartSeries>[_excelSeries().copyWith(smooth: true)],
+          ),
+        ),
+      );
+      expect(xml, contains('<c:smooth val="0"/>'));
+      expect(xml, isNot(contains('<c:smooth val="1"/>')));
+    });
+  });
+
   group('colours', () {
     test('an app theme writes no schemeClr and no theme font', () {
       final ChartTheme app = _office.copyWith(
@@ -1642,7 +1857,6 @@ void main() {
 
     test('for a kind the writer cannot express', () {
       for (final ChartKind kind in <ChartKind>[
-        ChartKind.scatter,
         ChartKind.sparkline,
         ChartKind.combination,
         ChartKind.unsupported,
