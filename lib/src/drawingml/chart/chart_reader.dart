@@ -13,10 +13,13 @@
 /// its one group and no axis) the slice colours and the hole size, and of a
 /// scatter chart (its one group on two value axes, the x axis the one of the
 /// group's first axis id)
-/// each series' x values as its categories. A part the model does not draw
-/// (another group, several groups, a third axis, a pie beside axes, a scatter
-/// group beside a category axis) is [ChartKind.unsupported], with the series
-/// of its first group.
+/// each series' x values as its categories, and of several bar, line and
+/// area groups on one or two axis pairs a combination, or a chart of one
+/// kind with a secondary value axis (`chart_reader_combination.dart`). A
+/// part the model does not draw (another group, a horizontal bar group
+/// beside another, a third axis pair, a pie beside axes, a scatter group
+/// beside a category axis) is [ChartKind.unsupported], with the series of
+/// its first group.
 ///
 /// The typed form ([DrawingChartSpace]) is offered only when writing it gives
 /// the part again by `xmlDifference` (ruling R2 of C1), so whatever the reader
@@ -44,6 +47,7 @@ import 'chart_space.dart';
 import 'chart_values.dart';
 import 'chart_writer.dart';
 
+part 'chart_reader_combination.dart';
 part 'chart_reader_pie.dart';
 part 'chart_reader_scatter.dart';
 part 'chart_reader_series.dart';
@@ -317,6 +321,12 @@ final class _ChartReader {
         groups.length == 1 &&
         axes.length == 2 &&
         axes.every((_Node a) => a.name == 'valAx');
+    if (!scatter && (groups.length > 1 || axes.length == 4)) {
+      final DrawingChartRead? read = _readGroups(bytes, groups, axes);
+      if (read != null) {
+        return read;
+      }
+    }
     final _Node? categoryAxis = scatter
         ? _scatterXAxis(group, axes)
         : axes
@@ -384,11 +394,7 @@ final class _ChartReader {
     }
     final Chart chart = Chart(
       kind: kind,
-      grouping: switch (group?.child('grouping')?.val) {
-        'stacked' => ChartGrouping.stacked,
-        'percentStacked' => ChartGrouping.percentStacked,
-        _ => ChartGrouping.clustered,
-      },
+      grouping: _grouping(group),
       series: series,
       categoryAxis: _axis(categoryAxis),
       valueAxis: _axis(valueAxis),
@@ -424,7 +430,9 @@ final class _ChartReader {
 
   /// The typed form of the part, with [categoryAxisId] and [valueAxisId]
   /// (`DrawingChartIds`' defaults when `null`, as for a pie, which has no
-  /// axes), or `null` when its series ids cannot be written, the writer
+  /// axes) and [secondaryCategoryAxisId] and [secondaryValueAxisId] (the
+  /// defaults when `null`, as for a part without secondary axes), or `null`
+  /// when its series ids cannot be written, the writer
   /// refuses [theme] (an [ArgumentError]), or writing it does not give
   /// [bytes] again.
   DrawingChartSpace? _typed(
@@ -433,8 +441,11 @@ final class _ChartReader {
     List<_Node> seriesNodes, {
     int? categoryAxisId,
     int? valueAxisId,
+    int? secondaryCategoryAxisId,
+    int? secondaryValueAxisId,
     required bool autoTitle,
   }) {
+    const DrawingChartIds defaults = DrawingChartIds();
     final List<String> seriesIds = <String>[];
     for (final _Node node in seriesNodes) {
       final String? id = _seriesId(node);
@@ -452,8 +463,11 @@ final class _ChartReader {
       chart: chart,
       language: root.child('lang')?.val ?? 'en-US',
       ids: DrawingChartIds(
-        categoryAxis: categoryAxisId ?? const DrawingChartIds().categoryAxis,
-        valueAxis: valueAxisId ?? const DrawingChartIds().valueAxis,
+        categoryAxis: categoryAxisId ?? defaults.categoryAxis,
+        valueAxis: valueAxisId ?? defaults.valueAxis,
+        secondaryCategoryAxis:
+            secondaryCategoryAxisId ?? defaults.secondaryCategoryAxis,
+        secondaryValueAxis: secondaryValueAxisId ?? defaults.secondaryValueAxis,
         series: List<String>.unmodifiable(seriesIds),
       ),
       autoTitle: autoTitle,
@@ -479,14 +493,26 @@ final class _ChartReader {
         axes.first;
   }
 
-  static int? _axisId(_Node axis) {
-    final String? text = axis.child('axId')?.val;
+  static int? _axisId(_Node axis) => _id(axis.child('axId')?.val);
+
+  /// [text] as an axis id, or `null` unless it is one: digits, at most
+  /// [_maxAxisId].
+  static int? _id(String? text) {
     if (text == null || !_axisIdText.hasMatch(text)) {
       return null;
     }
     final int id = int.parse(text);
     return id > _maxAxisId ? null : id;
   }
+
+  /// The grouping of [group]'s `c:grouping`: `clustered` for `standard`,
+  /// `clustered`, any other value and none.
+  static ChartGrouping _grouping(_Node? group) =>
+      switch (group?.child('grouping')?.val) {
+        'stacked' => ChartGrouping.stacked,
+        'percentStacked' => ChartGrouping.percentStacked,
+        _ => ChartGrouping.clustered,
+      };
 
   static String? _seriesId(_Node series) {
     for (final _Node ext

@@ -63,9 +63,10 @@ Each rule has the test that holds it.
   writer refuses (below) gives a view and no typed form.
   `chart_reader_test.dart` ("a theme the writer refuses gives a view only,
   never a throw").
-- **A kind outside the model (a combination, a pie beside axes, a scatter
-  group beside a category axis) or a third axis is `unsupportedKind`:** a
-  view with the kind `unsupported`, no typed form. `chart_reader_test.dart`.
+- **A kind outside the model (a horizontal bar group beside another group,
+  a pie beside axes, a scatter group beside a category axis) or a third axis
+  (pair) is `unsupportedKind`:** a view with the kind `unsupported`, no typed
+  form. `chart_reader_test.dart`.
 - **Pies and doughnuts are written and read as Excel writes them (C2).** A
   plot area of one `c:pieChart` or `c:doughnutChart` and no axis reads as
   `pie` or `donut`. The writer writes no axes (the ids' axis fields are
@@ -110,8 +111,44 @@ Each rule has the test that holds it.
   in a theme without `scatterAxisLine` (any chart's). Chart 4 reads typed
   and writes its part again. `excel_reference_j4_test.dart`,
   `chart_writer_test.dart` and `chart_reader_test.dart` ("scatter charts").
-- **The typed form carries the language, the two axis ids, each series'
-  `c16:uniqueId` and Excel's automatic title.** Anything else Excel writes is
+- **Combination charts and the secondary value axis are written and read
+  (C2).** The writer writes a combination as a group per drawn kind (the
+  series' own: column, line or area; no kind is a column; a pie, donut,
+  scatter, bar or other kind there is an `ArgumentError` naming
+  `chart.series[i].kind`), in the layout's order of areas, columns, then
+  lines, each group's series in series order. Excel's chart 5 of
+  `chart_reference_j4.xlsx` ("Clustered Column - Line", one axis) is the
+  template: columns `c:gapWidth 150` and no overlap
+  (`combinationGapWidthPercent`), a line group `standard` whatever the
+  grouping, its lines 2.25 pt without markers (`combinationLineMarkers`
+  off), and no `c:crosses` on the primary axes. In a column, line, area or
+  combination chart a series bound to the secondary axis, while some series
+  is bound to the primary one, goes in a group of its own after every
+  primary group, on a second pair of the ids' `secondaryCategoryAxis` and
+  `secondaryValueAxis`, written after the primary pair: a `c:valAx` on the
+  right (`axPos r`, `crosses max`, the options of `secondaryValueAxis`, no
+  grid lines unless it asks, `0%` only when a percent stacked group is on
+  it), then a deleted `c:catAx` (`delete 1`, ticks `out`). A
+  `secondaryValueAxis` with no series on it, and a binding when every series
+  is secondary, write no second pair (the layout shows none); a bar, pie,
+  donut or scatter chart's secondary axis is an `ArgumentError`. **E3
+  decides:** the secondary axes and a combination with an area group are
+  estimates from the gallery workbook (`excel_gallery.dart`, which the owner
+  opened in Excel in E2), not checked in Excel. The reader reads several
+  bar, line and area groups whose axis ids name one or two pairs, the first
+  group's the primary one: groups of one kind as that kind, of several as a
+  combination whose series carry their group's kind (so a series of no kind
+  reads back as a column), a secondary group's series bound to the
+  secondary axis, the series in their `c:order`, and a secondary axis of
+  default options as `null`. Chart 5 reads typed but for its category
+  labels: Excel writes `nextTo` beside the value -4, the writer `low` (the
+  owner's choice, below), so Excel's own part is untyped and the part with
+  `low` reads typed and writes again. `excel_reference_j4_test.dart`,
+  `chart_writer_test.dart` and `chart_reader_test.dart` ("combination charts
+  and the secondary axis").
+- **The typed form carries the language, the axis ids (four with a
+  secondary axis), each series' `c16:uniqueId` and Excel's automatic
+  title.** Anything else Excel writes is
   fixed by the writer; a part that differs is not typed.
   `chart_reader_test.dart` ("the column chart keeps its ids").
 - **Scheme names.** `dark1`, `light1`, `dark2`, `light2` are written `tx1`,
@@ -172,9 +209,10 @@ Each rule has the test that holds it.
   `chart_reference.xlsx` read typed. `chart_writer_test.dart` ("Excel's
   default charts"), `excel_reference_test.dart`.
 - **Data problems are issues, programmer errors throw.** A chart the writer
-  cannot express (a kind other than column, bar, line, area, pie, donut or
-  scatter, a secondary axis, a series of another kind or on the secondary axis, centre text, which no
-  part carries) is an `ArgumentError`;
+  cannot express (a kind other than column, bar, line, area, pie, donut,
+  scatter or combination, a secondary axis of a bar, pie, donut or scatter
+  chart, a series of another kind, centre text, which no part carries) is an
+  `ArgumentError`;
   so are axis ids that are not distinct unsigned 32-bit numbers and series
   ids that are not braced GUIDs.
   `chart_writer_test.dart` ("ArgumentError", "ids").
@@ -391,8 +429,8 @@ chart that is only a view keeps its bytes until replaced.
 
 ## Open for both
 
-- The secondary axis, combination charts and the other kinds (J4; C2 and C3
-  write them, and the writer refuses them until then).
+- The other kinds (C3 writes them, and the writer refuses them until then).
+  The secondary axis and a combination's area group wait for the owner's E3.
 - Excel's palette past 54 series: the colour cycle starts again after its
   nine variations, which `colors1.xml` does not state (unconfirmed). Series 7
   and 8 match a new chart made in Excel (the owner's check, 2026-11-09).

@@ -56,7 +56,7 @@ extension _ScatterWriting on _ChartWriter {
     _value('c:size', theme.markerSize.clamp(2, 72).round().toString());
     _markerShape(color);
     w.end();
-    _writePointColors(series, color);
+    _writePointColors(series, color, ChartKind.scatter);
     if (chart.dataLabels.visible) {
       // A line's labels without Excel's leader lines: the Open XML SDK
       // refuses their `c15` extension, and `tool/ooxml_validate` ignores

@@ -7,8 +7,10 @@
 /// README there names (chart 4 took text x values, chart 5 has no secondary
 /// axis). This test pins Excel's values in the XML, and how the reader reads
 /// each part: the pies and doughnuts (charts 1, 2, 3 and 7) read typed and
-/// write the part again (C2), as does the scatter chart (chart 4); the
-/// combination waits for C3.
+/// write the part again (C2), as do the scatter chart (chart 4) and the
+/// combination (chart 5), whose category labels the writer writes `low`
+/// under its negative value where Excel writes `nextTo` (the owner's
+/// choice).
 @TestOn('vm')
 library;
 
@@ -289,8 +291,7 @@ void main() {
     }
   });
 
-  test('the reader types the smooth line and leaves the combination to '
-      'C3', () {
+  test('the reader types the smooth line', () {
     final DrawingChartRead line = readDrawingChartSpace(
       parts['xl/charts/chart6.xml']!,
     );
@@ -298,12 +299,75 @@ void main() {
     expect(line.typed, isNotNull);
     expect(line.chart!.kind, ChartKind.line);
     expect(line.chart!.series.single.smooth, isTrue);
-    final DrawingChartRead combination = readDrawingChartSpace(
-      parts['xl/charts/chart5.xml']!,
-    );
-    expect(combination.typed, isNull);
-    expect(combination.issues, <DrawingChartIssue>[
-      DrawingChartIssue.unsupportedKind,
-    ]);
+  });
+
+  group('the combination (chart 5)', () {
+    late final ThemeColors theme;
+    setUpAll(() => theme = themeColorsOf(_path));
+
+    test('reads as a column and a line series on one axis', () {
+      final DrawingChartRead read = readDrawingChartSpace(
+        chartPartOf(_path, 5),
+        themeColors: theme,
+      );
+      expect(read.issues, isEmpty);
+      final Chart chart = read.chart!;
+      expect(chart.kind, ChartKind.combination);
+      expect(chart.grouping, ChartGrouping.clustered);
+      expect(chart.secondaryValueAxis, isNull);
+      expect(chart.legend.position, ChartLegendPosition.bottom);
+      expect(chart.series, hasLength(2));
+      expect(chart.series.first.kind, ChartKind.column);
+      expect(chart.series.last.kind, ChartKind.line);
+      expect(chart.series.first.name.values, <String?>['Satış']);
+      expect(chart.series.last.name.values, <String?>['Adet']);
+      expect(chart.series.first.values.values, <double?>[12, 18, -4, 9]);
+      expect(chart.series.last.values.values, <double?>[120, 95, 140, 80]);
+      for (final ChartSeries series in chart.series) {
+        expect(series.axis, ChartAxisBinding.primary);
+        expect(series.color, isNull);
+      }
+    });
+
+    test('reads typed and writes the part again but for its category '
+        "labels, which the owner's choice writes low under a negative "
+        'value', () {
+      final String excel = utf8.decode(chartPartOf(_path, 5));
+      // Excel writes `nextTo` though the column series has -4; the writer
+      // writes `low` (`docs/drawingml-charts.md`, "A category axis that
+      // crosses inside the plot"), so Excel's own part is not typed.
+      expect(
+        readDrawingChartSpace(utf8.encode(excel), themeColors: theme).typed,
+        isNull,
+      );
+      final Uint8List part = utf8.encode(
+        excel.replaceFirst(
+          '<c:tickLblPos val="nextTo"/>',
+          '<c:tickLblPos val="low"/>',
+        ),
+      );
+      final DrawingChartRead read = readDrawingChartSpace(
+        part,
+        themeColors: theme,
+      );
+      expect(read.issues, isEmpty);
+      final DrawingChartSpace? typed = read.typed;
+      expect(typed, isNotNull);
+      expect(
+        xmlDifference(
+          writeDrawingChartSpace(typed!, ChartTheme.office).bytes,
+          part,
+        ),
+        isNull,
+      );
+      expect(typed.ids.categoryAxis, 1468918719);
+      expect(typed.ids.valueAxis, 1542261375);
+      expect(typed.ids.series, <String>[
+        '{00000000-FF83-4D44-AD47-0FB7785B109C}',
+        '{00000001-FF83-4D44-AD47-0FB7785B109C}',
+      ]);
+      expect(typed.language, 'tr-TR');
+      expect(typed.autoTitle, isTrue);
+    });
   });
 }

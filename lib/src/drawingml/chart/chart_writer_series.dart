@@ -11,30 +11,34 @@ part of 'chart_writer.dart';
 enum _CategoryType { number, date, text }
 
 extension _SeriesWriting on _ChartWriter {
-  void _writeSeries(ChartSeries series, int index) {
+  /// A series of a bar, line or area group, drawn as [kind] (the chart's,
+  /// or in a combination the series' own).
+  void _writeSeries(ChartSeries series, int index, ChartKind kind) {
     w.start('c:ser');
     _value('c:idx', index.toString());
     _value('c:order', index.toString());
     _writeSeriesName(series.name);
     final ChartColor color = theme.colorOf(series, index);
     w.start('c:spPr');
-    if (chart.kind == ChartKind.line) {
+    if (kind == ChartKind.line) {
       _seriesLine(color);
       w.empty('a:effectLst');
       w.end();
       w.start('c:marker');
-      if (theme.lineMarkers) {
+      if (theme.lineMarkersOf(chart.kind)) {
         _value('c:symbol', 'circle');
         _value('c:size', theme.markerSize.clamp(2, 72).round().toString());
         _markerShape(color);
       } else {
-        // Excel's "Line" without markers. A lone point, which the layout
-        // marks, has no marker here: a series' marker is all or nothing.
+        // Excel's "Line" without markers, and a combination's line
+        // (`chart_reference_j4.xlsx`, chart 5). A lone point, which the
+        // layout marks, has no marker here: a series' marker is all or
+        // nothing.
         _value('c:symbol', 'none');
       }
       w.end();
     } else {
-      final bool area = chart.kind == ChartKind.area;
+      final bool area = kind == ChartKind.area;
       _solidFill(
         color,
         alpha: area && theme.areaOpacity < 1 ? theme.areaOpacity : null,
@@ -48,19 +52,19 @@ extension _SeriesWriting on _ChartWriter {
       }
       w.empty('a:effectLst');
       w.end();
-      if (_bars) {
+      if (_isBars(kind)) {
         _value('c:invertIfNegative', '0');
       }
     }
-    if (chart.kind != ChartKind.area) {
-      _writePointColors(series, color);
+    if (kind != ChartKind.area) {
+      _writePointColors(series, color, kind);
     }
     if (chart.dataLabels.visible) {
       _writeSeriesDataLabels();
     }
     _writeCategories(series.categories);
     _writeValues(series);
-    if (chart.kind == ChartKind.line) {
+    if (kind == ChartKind.line) {
       _value('c:smooth', series.smooth ? '1' : '0');
     }
     _writeSeriesId(index);
@@ -118,7 +122,7 @@ extension _SeriesWriting on _ChartWriter {
     w.end();
   }
 
-  /// One `c:dPt` per point of [series] with its own colour
+  /// One `c:dPt` per point of [series], drawn as [kind], with its own colour
   /// (`ChartTheme.pointColorOf`: a point colour key is written as the
   /// theme's colour of it), after the
   /// series' shape and marker (`c:dPt` follows `c:marker` and
@@ -130,9 +134,13 @@ extension _SeriesWriting on _ChartWriter {
   /// recoloured) for a line, or a scatter chart's line without fill. The
   /// layout is an estimate, not checked in Excel (pending E1; a scatter
   /// chart's, as a line's, is not in the E1 file).
-  void _writePointColors(ChartSeries series, ChartColor seriesColor) {
-    final bool scatter = chart.kind == ChartKind.scatter;
-    final bool marked = scatter || chart.kind == ChartKind.line;
+  void _writePointColors(
+    ChartSeries series,
+    ChartColor seriesColor,
+    ChartKind kind,
+  ) {
+    final bool scatter = kind == ChartKind.scatter;
+    final bool marked = scatter || kind == ChartKind.line;
     for (int i = 0; i < theme.pointColorCount(series); i++) {
       final ChartColor? color = theme.pointColorOf(series, i);
       if (color == null) {
@@ -140,7 +148,7 @@ extension _SeriesWriting on _ChartWriter {
       }
       w.start('c:dPt');
       _value('c:idx', i.toString());
-      if (_bars) {
+      if (_isBars(kind)) {
         _value('c:invertIfNegative', '0');
       }
       if (marked) {

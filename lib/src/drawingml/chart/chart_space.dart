@@ -4,9 +4,9 @@
 ///
 /// Not ported from Quds; written for jet_office.
 ///
-/// Beyond the chart, the typed form carries the language of the part, the two
-/// axis ids, each series' `c16:uniqueId` and whether the chart shows Excel's
-/// automatic title (ruling R3 of C1). Everything else the writer writes is
+/// Beyond the chart, the typed form carries the language of the part, the
+/// axis ids (four with a secondary axis), each series' `c16:uniqueId` and
+/// whether the chart shows Excel's automatic title (ruling R3 of C1). Everything else the writer writes is
 /// fixed, as Excel for Mac writes it. A part read from a file is offered in
 /// this form only when writing the form gives the part again.
 ///

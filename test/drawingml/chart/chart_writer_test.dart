@@ -1858,7 +1858,6 @@ void main() {
     test('for a kind the writer cannot express', () {
       for (final ChartKind kind in <ChartKind>[
         ChartKind.sparkline,
-        ChartKind.combination,
         ChartKind.unsupported,
       ]) {
         expect(
@@ -1869,26 +1868,47 @@ void main() {
       }
     });
 
-    test('for a secondary value axis', () {
-      expect(
-        () => _write(
-          _chart(
-            ChartKind.column,
-          ).copyWith(secondaryValueAxis: const ChartAxis()),
-        ),
-        throwsArgumentError,
-      );
-      expect(
-        () => _write(
-          _chart(
-            ChartKind.column,
-            series: <ChartSeries>[
-              _excelSeries().copyWith(axis: ChartAxisBinding.secondary),
-            ],
+    test('for a secondary value axis of a bar, pie, donut or scatter '
+        'chart', () {
+      for (final ChartKind kind in <ChartKind>[
+        ChartKind.bar,
+        ChartKind.pie,
+        ChartKind.donut,
+        ChartKind.scatter,
+      ]) {
+        expect(
+          () => _write(
+            _chart(kind).copyWith(secondaryValueAxis: const ChartAxis()),
           ),
-        ),
-        throwsArgumentError,
-      );
+          throwsA(
+            isA<ArgumentError>().having(
+              (ArgumentError e) => e.name,
+              'name',
+              'chart.secondaryValueAxis',
+            ),
+          ),
+          reason: kind.name,
+        );
+        expect(
+          () => _write(
+            _chart(
+              kind,
+              series: <ChartSeries>[
+                _excelSeries(),
+                _excelSeries().copyWith(axis: ChartAxisBinding.secondary),
+              ],
+            ),
+          ),
+          throwsA(
+            isA<ArgumentError>().having(
+              (ArgumentError e) => e.name,
+              'name',
+              'chart.series[1].axis',
+            ),
+          ),
+          reason: kind.name,
+        );
+      }
     });
 
     test('for a series of another kind', () {
@@ -1915,6 +1935,354 @@ void main() {
         ).issues,
         isEmpty,
       );
+    });
+  });
+
+  group('combination charts and the secondary axis', () {
+    const DrawingChartIds ids = DrawingChartIds(
+      categoryAxis: 100002,
+      valueAxis: 100003,
+      secondaryCategoryAxis: 200002,
+      secondaryValueAxis: 200003,
+    );
+
+    String write(Chart chart, {ChartTheme? theme}) => _xml(
+      writeDrawingChartSpace(
+        DrawingChartSpace(chart: chart, ids: ids),
+        theme ?? _office,
+      ),
+    );
+
+    /// The plot area's groups and axes, by element name, in order.
+    List<String> plotChildren(String xml) => <String>[
+      for (final RegExpMatch m in RegExp(
+        '<c:(barChart|lineChart|areaChart|catAx|valAx)>',
+      ).allMatches(xml))
+        m[1]!,
+    ];
+
+    String element(String xml, String name, [int nth = 0]) =>
+        RegExp('<c:$name>.*?</c:$name>').allMatches(xml).elementAt(nth)[0]!;
+
+    final Chart columnLine = Chart(
+      kind: ChartKind.combination,
+      series: <ChartSeries>[
+        _excelSeries().copyWith(kind: ChartKind.column),
+        _excelSeries().copyWith(kind: ChartKind.line),
+      ],
+    );
+
+    test("a column and line combination on one axis is Excel's chart 5", () {
+      final String xml = write(columnLine);
+      _expectWellFormed(xml);
+      expect(plotChildren(xml), <String>[
+        'barChart',
+        'lineChart',
+        'catAx',
+        'valAx',
+      ]);
+      final String bars = element(xml, 'barChart');
+      expect(bars, contains('<c:grouping val="clustered"/>'));
+      expect(bars, contains('<c:gapWidth val="150"/>'));
+      expect(bars, isNot(contains('c:overlap')));
+      expect(bars, contains('<c:idx val="0"/>'));
+      final String line = element(xml, 'lineChart');
+      expect(line, contains('<c:grouping val="standard"/>'));
+      expect(line, contains('<c:idx val="1"/>'));
+      expect(
+        line,
+        contains(
+          '<c:spPr><a:ln w="28575" cap="rnd"><a:solidFill>'
+          '<a:schemeClr val="accent2"/></a:solidFill><a:round/></a:ln>'
+          '<a:effectLst/></c:spPr><c:marker><c:symbol val="none"/>'
+          '</c:marker>',
+        ),
+      );
+      for (final String group in <String>[bars, line]) {
+        expect(
+          group,
+          endsWith(
+            '<c:axId val="100002"/><c:axId val="100003"/></c:${group == bars ? 'barChart' : 'lineChart'}>',
+          ),
+        );
+      }
+      // Excel's chart 5 writes no c:crosses on either axis.
+      expect(xml, isNot(contains('c:crosses')));
+      expect(xml, contains('<c:dispBlanksAs val="gap"/>'));
+    });
+
+    test('combinationLineMarkers on gives the line its markers', () {
+      final String xml = write(
+        columnLine,
+        theme: _office.copyWith(combinationLineMarkers: true),
+      );
+      expect(
+        element(xml, 'lineChart'),
+        contains('<c:marker><c:symbol val="circle"/><c:size val="5"/>'),
+      );
+    });
+
+    test('a column and line combination with the line on the secondary axis '
+        'writes two groups and four axes', () {
+      final Chart chart = Chart(
+        kind: ChartKind.combination,
+        series: <ChartSeries>[
+          _excelSeries().copyWith(kind: ChartKind.column),
+          _excelSeries().copyWith(
+            kind: ChartKind.line,
+            axis: ChartAxisBinding.secondary,
+          ),
+        ],
+        secondaryValueAxis: const ChartAxis(title: 'Adet'),
+      );
+      final String xml = write(chart);
+      _expectWellFormed(xml);
+      expect(plotChildren(xml), <String>[
+        'barChart',
+        'lineChart',
+        'catAx',
+        'valAx',
+        'valAx',
+        'catAx',
+      ]);
+      expect(
+        element(xml, 'barChart'),
+        endsWith('<c:axId val="100002"/><c:axId val="100003"/></c:barChart>'),
+      );
+      expect(
+        element(xml, 'lineChart'),
+        endsWith('<c:axId val="200002"/><c:axId val="200003"/></c:lineChart>'),
+      );
+      final String secondaryValue = element(xml, 'valAx', 1);
+      expect(secondaryValue, startsWith('<c:valAx><c:axId val="200003"/>'));
+      expect(secondaryValue, contains('<c:delete val="0"/>'));
+      expect(secondaryValue, contains('<c:axPos val="r"/>'));
+      expect(secondaryValue, isNot(contains('c:majorGridlines')));
+      expect(secondaryValue, contains('<a:t>Adet</a:t>'));
+      expect(secondaryValue, contains('rot="-5400000"'));
+      expect(
+        secondaryValue,
+        contains(
+          '<c:crossAx val="200002"/><c:crosses val="max"/>'
+          '<c:crossBetween val="between"/>',
+        ),
+      );
+      final String secondaryCategory = element(xml, 'catAx', 1);
+      expect(secondaryCategory, startsWith('<c:catAx><c:axId val="200002"/>'));
+      expect(secondaryCategory, contains('<c:delete val="1"/>'));
+      expect(secondaryCategory, contains('<c:axPos val="b"/>'));
+      expect(secondaryCategory, contains('<c:majorTickMark val="out"/>'));
+      expect(secondaryCategory, isNot(contains('c:spPr')));
+      expect(secondaryCategory, isNot(contains('c:txPr')));
+      expect(
+        secondaryCategory,
+        contains('<c:crossAx val="200003"/><c:crosses val="autoZero"/>'),
+      );
+      // The primary pair crosses as Excel's chart 5: no c:crosses.
+      expect(element(xml, 'catAx'), isNot(contains('c:crosses')));
+      expect(element(xml, 'valAx'), isNot(contains('c:crosses')));
+    });
+
+    test('a combination of column, area and line writes the groups in the '
+        "layout's order: areas, columns, lines", () {
+      final Chart chart = Chart(
+        kind: ChartKind.combination,
+        series: <ChartSeries>[
+          _excelSeries().copyWith(kind: ChartKind.line),
+          _excelSeries().copyWith(kind: ChartKind.column),
+          _excelSeries().copyWith(kind: ChartKind.area),
+          _excelSeries().copyWith(kind: ChartKind.column),
+        ],
+      );
+      final String xml = write(chart);
+      _expectWellFormed(xml);
+      expect(plotChildren(xml), <String>[
+        'areaChart',
+        'barChart',
+        'lineChart',
+        'catAx',
+        'valAx',
+      ]);
+      expect(element(xml, 'areaChart'), contains('<c:idx val="2"/>'));
+      final String bars = element(xml, 'barChart');
+      expect(
+        RegExp(
+          '<c:idx val="(\\d)"/><c:order',
+        ).allMatches(bars).map((RegExpMatch m) => m[1]),
+        <String>['1', '3'],
+      );
+      expect(element(xml, 'lineChart'), contains('<c:idx val="0"/>'));
+      // Between, as the columns need, and the category axis ticks as a
+      // column chart's.
+      expect(xml, contains('<c:crossBetween val="between"/>'));
+      expect(element(xml, 'catAx'), contains('<c:majorTickMark val="none"/>'));
+    });
+
+    test('a stacked combination stacks its columns and areas, not its '
+        'lines', () {
+      final String xml = write(
+        Chart(
+          kind: ChartKind.combination,
+          grouping: ChartGrouping.stacked,
+          series: <ChartSeries>[
+            _excelSeries().copyWith(kind: ChartKind.column),
+            _excelSeries().copyWith(kind: ChartKind.area),
+            _excelSeries().copyWith(kind: ChartKind.line),
+          ],
+        ),
+      );
+      expect(element(xml, 'barChart'), contains('<c:grouping val="stacked"/>'));
+      expect(element(xml, 'barChart'), contains('<c:overlap val="100"/>'));
+      expect(
+        element(xml, 'areaChart'),
+        contains('<c:grouping val="stacked"/>'),
+      );
+      expect(
+        element(xml, 'lineChart'),
+        contains('<c:grouping val="standard"/>'),
+      );
+    });
+
+    test('a series of no kind in a combination is a column', () {
+      final String xml = write(
+        Chart(
+          kind: ChartKind.combination,
+          series: <ChartSeries>[
+            _excelSeries(),
+            _excelSeries().copyWith(kind: ChartKind.line),
+          ],
+        ),
+      );
+      expect(plotChildren(xml).first, 'barChart');
+    });
+
+    test('a line chart with a secondary series writes a line group per '
+        'axis, primary first', () {
+      final String xml = write(
+        _chart(
+          ChartKind.line,
+          series: <ChartSeries>[
+            _excelSeries().copyWith(axis: ChartAxisBinding.secondary),
+            _excelSeries(),
+          ],
+        ),
+      );
+      _expectWellFormed(xml);
+      expect(plotChildren(xml), <String>[
+        'lineChart',
+        'lineChart',
+        'catAx',
+        'valAx',
+        'valAx',
+        'catAx',
+      ]);
+      expect(element(xml, 'lineChart'), contains('<c:idx val="1"/>'));
+      expect(
+        element(xml, 'lineChart', 1),
+        allOf(contains('<c:idx val="0"/>'), contains('<c:axId val="200003"/>')),
+      );
+      // A chart of one kind keeps its primary axes' c:crosses.
+      expect(element(xml, 'valAx'), contains('<c:crosses val="autoZero"/>'));
+    });
+
+    test('a secondary value axis with no series on it, or with every series '
+        'on it, is not written', () {
+      for (final Chart chart in <Chart>[
+        _chart(
+          ChartKind.column,
+        ).copyWith(secondaryValueAxis: const ChartAxis(title: 'x')),
+        _chart(
+          ChartKind.column,
+          series: <ChartSeries>[
+            _excelSeries().copyWith(axis: ChartAxisBinding.secondary),
+          ],
+        ),
+      ]) {
+        final String xml = write(chart);
+        expect(plotChildren(xml), <String>['barChart', 'catAx', 'valAx']);
+        expect(xml, isNot(contains('200003')));
+      }
+    });
+
+    test('a percent stacked axis shows 0% only where a stacked group is', () {
+      final String xml = write(
+        Chart(
+          kind: ChartKind.combination,
+          grouping: ChartGrouping.percentStacked,
+          series: <ChartSeries>[
+            _excelSeries().copyWith(kind: ChartKind.column),
+            _excelSeries().copyWith(
+              kind: ChartKind.line,
+              axis: ChartAxisBinding.secondary,
+            ),
+          ],
+        ),
+      );
+      expect(element(xml, 'valAx'), contains('formatCode="0%"'));
+      expect(element(xml, 'valAx', 1), contains('formatCode="General"'));
+    });
+
+    test('a pie, donut, scatter or bar series in a combination is an '
+        'ArgumentError naming its kind', () {
+      for (final ChartKind kind in <ChartKind>[
+        ChartKind.pie,
+        ChartKind.donut,
+        ChartKind.scatter,
+        ChartKind.bar,
+        ChartKind.sparkline,
+        ChartKind.combination,
+      ]) {
+        expect(
+          () => write(
+            Chart(
+              kind: ChartKind.combination,
+              series: <ChartSeries>[
+                _excelSeries(),
+                _excelSeries().copyWith(kind: kind),
+              ],
+            ),
+          ),
+          throwsA(
+            isA<ArgumentError>().having(
+              (ArgumentError e) => e.name,
+              'name',
+              'chart.series[1].kind',
+            ),
+          ),
+          reason: kind.name,
+        );
+      }
+    });
+
+    test('a bar chart with a secondary series is an ArgumentError naming '
+        'the series axis', () {
+      expect(
+        () => write(
+          _chart(
+            ChartKind.bar,
+            series: <ChartSeries>[
+              _excelSeries(),
+              _excelSeries(),
+              _excelSeries().copyWith(axis: ChartAxisBinding.secondary),
+            ],
+          ),
+        ),
+        throwsA(
+          isA<ArgumentError>().having(
+            (ArgumentError e) => e.name,
+            'name',
+            'chart.series[2].axis',
+          ),
+        ),
+      );
+    });
+
+    test('a combination with no series writes an empty column group', () {
+      final String xml = write(
+        Chart(kind: ChartKind.combination, series: const <ChartSeries>[]),
+      );
+      _expectWellFormed(xml);
+      expect(plotChildren(xml), <String>['barChart', 'catAx', 'valAx']);
     });
   });
 

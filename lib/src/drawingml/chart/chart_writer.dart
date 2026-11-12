@@ -10,8 +10,9 @@
 /// titles, scaling, formats, data labels, a hidden axis), all but one of
 /// which read typed (`docs/drawingml-charts.md`, "Excel's reference
 /// workbook"), and the pies and doughnuts of `chart_reference_j4.xlsx`
-/// (charts 1, 2, 3 and 7, `chart_writer_pie.dart`) and its scatter chart
-/// (chart 4, `chart_writer_scatter.dart`). The elements are in the schema's
+/// (charts 1, 2, 3 and 7, `chart_writer_pie.dart`), its scatter chart
+/// (chart 4, `chart_writer_scatter.dart`) and its combination (chart 5,
+/// `chart_writer_combination.dart`). The elements are in the schema's
 /// order, and everything the typed form does not carry is fixed as Excel
 /// writes it.
 ///
@@ -37,6 +38,7 @@ import '../text.dart';
 import 'chart_space.dart';
 import 'chart_values.dart';
 
+part 'chart_writer_combination.dart';
 part 'chart_writer_pie.dart';
 part 'chart_writer_scatter.dart';
 part 'chart_writer_series.dart';
@@ -89,13 +91,32 @@ final class DrawingChartWritten {
 /// `valueAxis` and the value axis' options. The grouping and a series'
 /// smoothing are not written: a scatter chart draws no line.
 ///
+/// A combination chart is written as a group per drawn kind
+/// (`chart_writer_combination.dart`): a series' own kind, column, line or
+/// area (a series of no kind is a column), in the layout's order of areas,
+/// columns, then lines. Its columns take the theme's combination gap width
+/// and overlap and its lines `lineMarkersOf(ChartKind.combination)`, and a
+/// line group is `standard` whatever the grouping; its primary axes have no
+/// `c:crosses` (`chart_reference_j4.xlsx`, chart 5). In a column, line, area
+/// or combination chart, the series bound to the secondary axis while some
+/// series is bound to the primary one (as the layout measures them) go in
+/// groups of their own after the primary ones, on a second axis pair of the
+/// ids' `secondaryCategoryAxis` and `secondaryValueAxis`: a deleted category
+/// axis and a value axis on the right, of `chart.secondaryValueAxis` (or
+/// `ChartAxis()`), crossing at the maximum. A `secondaryValueAxis` with no
+/// series on it is not written. The secondary axes and an area group in a
+/// combination are estimates from the gallery workbook, not checked in Excel
+/// (E3 decides).
+///
 /// Throws an [ArgumentError] when the chart's kind is not column, bar, line,
-/// area, pie, donut or scatter, when it has centre text (a part cannot carry
-/// it; a hole size is ignored but by a donut), when it has a secondary value
-/// axis, when a series is bound to the secondary axis or has a kind other than `null` or the chart's, when an
-/// axis id of `space.ids` (the four, secondary ones too) is outside 0 to
-/// 4294967295 or two of them are equal, or
-/// when one of its series ids is not a GUID in braces.
+/// area, pie, donut, scatter or combination, when it has centre text (a part
+/// cannot carry it; a hole size is ignored but by a donut), when a bar, pie,
+/// donut or scatter chart has a secondary value axis or a series bound to
+/// it, when a series of a combination has a kind other than `null`, column,
+/// line or area, or a series of another chart a kind other than `null` or
+/// the chart's, when an axis id of `space.ids` (the four, secondary ones
+/// too) is outside 0 to 4294967295 or two of them are equal, or when one of
+/// its series ids is not a GUID in braces.
 ///
 /// Also throws an [ArgumentError], naming the field (`theme.lineWidth`,
 /// `theme.spacing.gridLineWidth`, `theme.titleText.size` and the like), when
@@ -137,13 +158,14 @@ void _checkExpressible(Chart chart) {
         ChartKind.area ||
         ChartKind.pie ||
         ChartKind.donut ||
-        ChartKind.scatter:
+        ChartKind.scatter ||
+        ChartKind.combination:
       break;
     default:
       throw ArgumentError.value(
         chart.kind,
         'chart.kind',
-        'must be column, bar, line, area, pie, donut or scatter',
+        'must be column, bar, line, area, pie, donut, scatter or combination',
       );
   }
   if (chart.centerText != null) {
@@ -153,25 +175,38 @@ void _checkExpressible(Chart chart) {
       'must be null: a chart part cannot carry centre text',
     );
   }
-  if (chart.secondaryValueAxis != null) {
+  final bool secondaryAxis = _hasSecondaryAxis(chart.kind);
+  if (chart.secondaryValueAxis != null && !secondaryAxis) {
     throw ArgumentError.value(
       chart.secondaryValueAxis,
       'chart.secondaryValueAxis',
-      'must be null',
+      'must be null in a ${chart.kind.name} chart',
     );
   }
   for (int i = 0; i < chart.series.length; i++) {
     final ChartSeries series = chart.series[i];
-    if (series.axis != ChartAxisBinding.primary) {
+    if (series.axis != ChartAxisBinding.primary && !secondaryAxis) {
       throw ArgumentError.value(
         series.axis,
         'chart.series[$i].axis',
-        'must be primary',
+        'must be primary in a ${chart.kind.name} chart',
       );
     }
-    if (series.kind != null && series.kind != chart.kind) {
+    final ChartKind? kind = series.kind;
+    if (chart.kind == ChartKind.combination) {
+      if (kind != null &&
+          kind != ChartKind.column &&
+          kind != ChartKind.line &&
+          kind != ChartKind.area) {
+        throw ArgumentError.value(
+          kind,
+          'chart.series[$i].kind',
+          'must be null, column, line or area in a combination',
+        );
+      }
+    } else if (kind != null && kind != chart.kind) {
       throw ArgumentError.value(
-        series.kind,
+        kind,
         'chart.series[$i].kind',
         'must be null or ${chart.kind.name}',
       );
@@ -321,8 +356,9 @@ final class _ChartWriter {
   final List<DrawingChartIssue> issues = <DrawingChartIssue>[];
   late final String language = _scrub(space.language);
 
-  bool get _bars =>
-      chart.kind == ChartKind.column || chart.kind == ChartKind.bar;
+  /// Whether each series goes on the secondary axes
+  /// (`chart_writer_combination.dart`).
+  late final List<bool> _secondary = _secondaryOf();
 
   /// Whether the chart is a pie or a donut.
   bool get _round =>
@@ -434,9 +470,14 @@ final class _ChartWriter {
       _writeScatterAxis(x: true);
       _writeScatterAxis(x: false);
     } else {
-      _writeGroup();
+      _writeGroups();
       _writeCategoryAxis();
       _writeValueAxis();
+      if (_secondary.contains(true)) {
+        // Excel's order: the secondary value axis before its category axis.
+        _writeValueAxis(secondary: true);
+        _writeCategoryAxis(secondary: true);
+      }
     }
     _noFillShape();
     w.end();
@@ -508,27 +549,39 @@ final class _ChartWriter {
     w.end();
   }
 
-  void _writeGroup() {
-    final String groupName = switch (chart.kind) {
+  /// A `c:barChart`, `c:lineChart` or `c:areaChart` of the series at
+  /// [members], each drawn as [kind], on the primary axes or the
+  /// [secondary] ones.
+  ///
+  /// A combination's line group is `standard` whatever the chart's grouping
+  /// (the layout draws its lines unstacked), and its columns take the
+  /// theme's combination gap width and overlap (Excel's chart 5 of
+  /// `chart_reference_j4.xlsx`: 150 and none).
+  void _writeGroup(
+    ChartKind kind,
+    List<int> members, {
+    bool secondary = false,
+  }) {
+    final bool bars = _isBars(kind);
+    w.start(switch (kind) {
       ChartKind.line => 'c:lineChart',
       ChartKind.area => 'c:areaChart',
       _ => 'c:barChart',
-    };
-    w.start(groupName);
-    if (_bars) {
-      _value('c:barDir', chart.kind == ChartKind.bar ? 'bar' : 'col');
+    });
+    if (bars) {
+      _value('c:barDir', kind == ChartKind.bar ? 'bar' : 'col');
     }
-    _value('c:grouping', switch (chart.grouping) {
-      ChartGrouping.clustered => _bars ? 'clustered' : 'standard',
+    _value('c:grouping', switch (_groupingOf(kind)) {
+      ChartGrouping.clustered => bars ? 'clustered' : 'standard',
       ChartGrouping.stacked => 'stacked',
       ChartGrouping.percentStacked => 'percentStacked',
     });
     _value('c:varyColors', '0');
-    for (int i = 0; i < chart.series.length; i++) {
-      _writeSeries(chart.series[i], i);
+    for (final int i in members) {
+      _writeSeries(chart.series[i], i, kind);
     }
     _writeGroupDataLabels();
-    if (_bars) {
+    if (bars) {
       _value(
         'c:gapWidth',
         _percent(theme.gapWidthPercentOf(chart.kind, chart.grouping), 0, 500),
@@ -543,12 +596,20 @@ final class _ChartWriter {
       if (overlap != '0') {
         _value('c:overlap', overlap);
       }
-    } else if (chart.kind == ChartKind.line) {
+    } else if (kind == ChartKind.line) {
       _value('c:marker', '1');
       _value('c:smooth', '0');
     }
-    _value('c:axId', space.ids.categoryAxis.toString());
-    _value('c:axId', space.ids.valueAxis.toString());
+    _value(
+      'c:axId',
+      (secondary ? space.ids.secondaryCategoryAxis : space.ids.categoryAxis)
+          .toString(),
+    );
+    _value(
+      'c:axId',
+      (secondary ? space.ids.secondaryValueAxis : space.ids.valueAxis)
+          .toString(),
+    );
     w.end();
   }
 
@@ -572,21 +633,31 @@ final class _ChartWriter {
     _value('c:showBubbleSize', '0');
   }
 
-  void _writeCategoryAxis() {
-    final ChartAxis axis = chart.categoryAxis;
+  /// The category axis, or the [secondary] one: Excel's deleted axis at
+  /// the bottom that the secondary value axis crosses (an estimate from the
+  /// gallery workbook, not checked in Excel: E3 decides).
+  void _writeCategoryAxis({bool secondary = false}) {
+    final ChartAxis axis = secondary
+        ? const ChartAxis(visible: false)
+        : chart.categoryAxis;
     w.start('c:catAx');
     _writeAxisStart(
       axis,
-      space.ids.categoryAxis,
+      secondary ? space.ids.secondaryCategoryAxis : space.ids.categoryAxis,
       chart.kind == ChartKind.bar ? 'l' : 'b',
       value: false,
+      secondary: secondary,
     );
     if (axis.visible) {
       _axisLineShape(theme.axisLine);
       _writeAxisLabels();
     }
-    _value('c:crossAx', space.ids.valueAxis.toString());
-    _value('c:crosses', 'autoZero');
+    _value(
+      'c:crossAx',
+      (secondary ? space.ids.secondaryValueAxis : space.ids.valueAxis)
+          .toString(),
+    );
+    _writeCrosses(secondary ? 'autoZero' : null);
     _value('c:auto', '1');
     _value('c:lblAlgn', 'ctr');
     _value('c:lblOffset', '100');
@@ -594,21 +665,32 @@ final class _ChartWriter {
     w.end();
   }
 
-  void _writeValueAxis() {
-    final ChartAxis axis = chart.valueAxis;
+  /// The value axis, or the [secondary] one: on the right, crossing its
+  /// category axis at the maximum, grid lines only when
+  /// `chart.secondaryValueAxis` asks (an estimate from the gallery workbook,
+  /// not checked in Excel: E3 decides).
+  void _writeValueAxis({bool secondary = false}) {
+    final ChartAxis axis = secondary
+        ? chart.secondaryValueAxis ?? const ChartAxis()
+        : chart.valueAxis;
     w.start('c:valAx');
     _writeAxisStart(
       axis,
-      space.ids.valueAxis,
-      chart.kind == ChartKind.bar ? 'b' : 'l',
+      secondary ? space.ids.secondaryValueAxis : space.ids.valueAxis,
+      secondary ? 'r' : (chart.kind == ChartKind.bar ? 'b' : 'l'),
       value: true,
+      secondary: secondary,
     );
     if (axis.visible) {
       _noFillShape();
       _writeAxisLabels();
     }
-    _value('c:crossAx', space.ids.categoryAxis.toString());
-    _value('c:crosses', 'autoZero');
+    _value(
+      'c:crossAx',
+      (secondary ? space.ids.secondaryCategoryAxis : space.ids.categoryAxis)
+          .toString(),
+    );
+    _writeCrosses(secondary ? 'max' : null);
     _value(
       'c:crossBetween',
       chart.kind == ChartKind.area ? 'midCat' : 'between',
@@ -628,7 +710,11 @@ final class _ChartWriter {
   ///
   /// [vertical] turns the title (by default, the value axis' except in a bar
   /// chart, where the category axis'); without [numberFormat] the axis has
-  /// no `c:numFmt` unless it has a format code (a scatter chart's x axis).
+  /// no `c:numFmt` unless it has a format code (a scatter chart's x axis). A
+  /// [secondary] axis' format is `0%` only when a percent stacked group is
+  /// on it, and a secondary category axis ticks outside with its labels
+  /// next to it, as the gallery workbook writes it (an estimate: E3
+  /// decides).
   void _writeAxisStart(
     ChartAxis axis,
     int id,
@@ -636,6 +722,7 @@ final class _ChartWriter {
     required bool value,
     bool? vertical,
     bool numberFormat = true,
+    bool secondary = false,
   }) {
     _value('c:axId', id.toString());
     w.start('c:scaling');
@@ -678,13 +765,8 @@ final class _ChartWriter {
         'formatCode': formatCode != null
             ? _scrub(formatCode)
             // A percent stacked value axis is linked to the source but shows
-            // `0%` (`chart_reference.xlsx`, charts 3, 6, 9 and 12); a
-            // scatter chart has no grouping.
-            : (value &&
-                      chart.kind != ChartKind.scatter &&
-                      chart.grouping == ChartGrouping.percentStacked
-                  ? '0%'
-                  : 'General'),
+            // `0%` (`chart_reference.xlsx`, charts 3, 6, 9 and 12).
+            : (value && _percentAxis(secondary: secondary) ? '0%' : 'General'),
         'sourceLinked': formatCode == null ? '1' : '0',
       });
     }
@@ -692,10 +774,13 @@ final class _ChartWriter {
     // (`chart_reference.xlsx`, charts 10 to 12).
     _value(
       'c:majorTickMark',
-      !value && chart.kind == ChartKind.area ? 'out' : 'none',
+      !value && (secondary || chart.kind == ChartKind.area) ? 'out' : 'none',
     );
     _value('c:minorTickMark', 'none');
-    _value('c:tickLblPos', !value && _crossesInside ? 'low' : 'nextTo');
+    _value(
+      'c:tickLblPos',
+      !value && !secondary && _crossesInside ? 'low' : 'nextTo',
+    );
   }
 
   /// Whether the category axis crosses the value axis inside the plot: a
