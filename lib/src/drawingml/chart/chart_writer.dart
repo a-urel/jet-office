@@ -9,7 +9,8 @@
 /// `chart_reference.xlsx` (every kind and grouping, titles, legends, axis
 /// titles, scaling, formats, data labels, a hidden axis), all but one of
 /// which read typed (`docs/drawingml-charts.md`, "Excel's reference
-/// workbook"). The elements are in the schema's order, and everything the
+/// workbook"), and the pies and doughnuts of `chart_reference_j4.xlsx`
+/// (charts 1, 2, 3 and 7, `chart_writer_pie.dart`). The elements are in the schema's order, and everything the
 /// typed form does not carry is fixed as Excel writes it.
 ///
 /// Data problems never throw: a value that is `NaN` or infinite is left out
@@ -34,6 +35,7 @@ import '../text.dart';
 import 'chart_space.dart';
 import 'chart_values.dart';
 
+part 'chart_writer_pie.dart';
 part 'chart_writer_series.dart';
 
 /// A written chart part: its bytes and the data problems the writer got past.
@@ -67,9 +69,18 @@ final class DrawingChartWritten {
 /// A date category is written as a serial of the 1904 date system when
 /// [date1904] is set (a workbook's `date1904`), of the 1900 one otherwise.
 ///
-/// Throws an [ArgumentError] when the chart's kind is not column, bar, line
-/// or area, when it has centre text (only a donut shows it; a hole size is
-/// ignored), when it has a secondary value axis, when a series is bound to
+/// A pie or donut is written as Excel's `c:pieChart` or `c:doughnutChart`
+/// (`chart_reference_j4.xlsx`, charts 1, 2, 3 and 7): no axes (the axis ids
+/// of `space.ids` are checked but not written), colours varied by slice, a
+/// `c:dPt` per slice in its colour (`ChartTheme.pointColorOf`, else the
+/// theme's colour of the slice's index) outlined in the theme's background,
+/// `sliceBorderWidth` wide, the first slice at 0 and, for a donut, the
+/// `holeSizePercent` rounded. What a pie does not draw is not written: the
+/// axes, the grouping, a series' own colour and its smoothing.
+///
+/// Throws an [ArgumentError] when the chart's kind is not column, bar, line,
+/// area, pie or donut, when it has centre text (a part cannot carry it; a
+/// hole size is ignored but by a donut), when it has a secondary value axis, when a series is bound to
 /// the secondary axis or has a kind other than `null` or the chart's, when an
 /// axis id of `space.ids` (the four, secondary ones too) is outside 0 to
 /// 4294967295 or two of them are equal, or
@@ -78,8 +89,9 @@ final class DrawingChartWritten {
 /// Also throws an [ArgumentError], naming the field (`theme.lineWidth`,
 /// `theme.spacing.gridLineWidth`, `theme.titleText.size` and the like), when
 /// a value of [theme] the part cannot hold is not finite or outside its
-/// range: the line widths ([ChartTheme.lineWidth] and the spacing's grid and
-/// axis line widths) within 0 and 1584 points (`ST_LineWidth`, 0 to 20116800
+/// range: the line widths ([ChartTheme.lineWidth],
+/// [ChartTheme.sliceBorderWidth] and the spacing's grid and axis line widths)
+/// within 0 and 1584 points (`ST_LineWidth`, 0 to 20116800
 /// EMU), [ChartTheme.markerSize] not negative (it is then kept within 2 and
 /// 72, Excel's range), and the size of each of the four text styles within 1
 /// and 4000 points (`ST_TextFontSize`, 100 to 400000 hundredths). The theme is
@@ -108,20 +120,25 @@ DrawingChartWritten writeDrawingChartSpace(
 
 void _checkExpressible(Chart chart) {
   switch (chart.kind) {
-    case ChartKind.column || ChartKind.bar || ChartKind.line || ChartKind.area:
+    case ChartKind.column ||
+        ChartKind.bar ||
+        ChartKind.line ||
+        ChartKind.area ||
+        ChartKind.pie ||
+        ChartKind.donut:
       break;
     default:
       throw ArgumentError.value(
         chart.kind,
         'chart.kind',
-        'must be column, bar, line or area',
+        'must be column, bar, line, area, pie or donut',
       );
   }
   if (chart.centerText != null) {
     throw ArgumentError.value(
       chart.centerText,
       'chart.centerText',
-      'must be null: only a donut has centre text',
+      'must be null: a chart part cannot carry centre text',
     );
   }
   if (chart.secondaryValueAxis != null) {
@@ -171,6 +188,7 @@ void _checkTheme(ChartTheme theme) {
 
   within(theme.lineWidth, 'lineWidth', 0, _maxLineWidth);
   within(theme.markerSize, 'markerSize', 0, double.maxFinite);
+  within(theme.sliceBorderWidth, 'sliceBorderWidth', 0, _maxLineWidth);
   within(
     theme.spacing.gridLineWidth,
     'spacing.gridLineWidth',
@@ -294,6 +312,10 @@ final class _ChartWriter {
   bool get _bars =>
       chart.kind == ChartKind.column || chart.kind == ChartKind.bar;
 
+  /// Whether the chart is a pie or a donut.
+  bool get _round =>
+      chart.kind == ChartKind.pie || chart.kind == ChartKind.donut;
+
   void _report(DrawingChartIssue issue) {
     if (!issues.contains(issue)) {
       issues.add(issue);
@@ -393,9 +415,13 @@ final class _ChartWriter {
     }
     w.start('c:plotArea');
     w.empty('c:layout');
-    _writeGroup();
-    _writeCategoryAxis();
-    _writeValueAxis();
+    if (_round) {
+      _writePieGroup();
+    } else {
+      _writeGroup();
+      _writeCategoryAxis();
+      _writeValueAxis();
+    }
     _noFillShape();
     w.end();
     if (chart.legend.visible) {
@@ -520,13 +546,13 @@ final class _ChartWriter {
   }
 
   /// The six `c:show*` flags of a `c:dLbls`, all off but `c:showVal` when
-  /// [showValue].
-  void _writeLabelFlags({required bool showValue}) {
+  /// [showValue] and `c:showPercent` when [showPercent].
+  void _writeLabelFlags({required bool showValue, bool showPercent = false}) {
     _value('c:showLegendKey', '0');
     _value('c:showVal', showValue ? '1' : '0');
     _value('c:showCatName', '0');
     _value('c:showSerName', '0');
-    _value('c:showPercent', '0');
+    _value('c:showPercent', showPercent ? '1' : '0');
     _value('c:showBubbleSize', '0');
   }
 

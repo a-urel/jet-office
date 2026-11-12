@@ -9,9 +9,11 @@
 /// and [DrawingChartIssue.unreadable]. Anything else gives a view of what the
 /// part shows: the kind and grouping of its one group, the series with their
 /// names, categories, values, references and colours, the title, the legend,
-/// the two axes and the data labels. A part the model does not draw (another
-/// group, several groups, a third axis) is [ChartKind.unsupported], with the
-/// series of its first group.
+/// the two axes and the data labels, and of a pie or doughnut (a plot area of
+/// its one group and no axis) the slice colours and the hole size. A part the
+/// model does not draw (another group, several groups, a third axis, a pie
+/// beside axes) is [ChartKind.unsupported], with the series of its first
+/// group.
 ///
 /// The typed form ([DrawingChartSpace]) is offered only when writing it gives
 /// the part again by `xmlDifference` (ruling R2 of C1), so whatever the reader
@@ -39,6 +41,7 @@ import 'chart_space.dart';
 import 'chart_values.dart';
 import 'chart_writer.dart';
 
+part 'chart_reader_pie.dart';
 part 'chart_reader_series.dart';
 
 /// What [readDrawingChartSpace] read from a chart part.
@@ -308,7 +311,13 @@ final class _ChartReader {
         .firstOrNull;
     final _Node? group = groups.firstOrNull;
     ChartKind kind = ChartKind.unsupported;
-    if (group != null &&
+    if (group != null && groups.length == 1 && axes.isEmpty) {
+      kind = switch (group.name) {
+        'pieChart' => ChartKind.pie,
+        'doughnutChart' => ChartKind.donut,
+        _ => ChartKind.unsupported,
+      };
+    } else if (group != null &&
         groups.length == 1 &&
         axes.length == 2 &&
         categoryAxis != null &&
@@ -333,13 +342,27 @@ final class _ChartReader {
       'scatterChart',
       'stockChart',
     }.contains(group?.name);
+    final bool round = kind == ChartKind.pie || kind == ChartKind.donut;
     final List<_Node> seriesNodes = group?.all('ser').toList() ?? <_Node>[];
     final List<ChartSeries> series = <ChartSeries>[
       for (int i = 0; i < seriesNodes.length; i++)
-        _readSeries(seriesNodes[i], i, lines: lines),
+        round
+            ? _readPieSeries(seriesNodes[i], i)
+            : _readSeries(seriesNodes[i], i, lines: lines),
     ];
     final _Node? titleNode = chartNode.child('title');
     final String? titleText = _titleText(titleNode);
+    if (round) {
+      return _readPie(
+        bytes,
+        kind,
+        group!,
+        series,
+        seriesNodes,
+        titleNode,
+        titleText,
+      );
+    }
     final Chart chart = Chart(
       kind: kind,
       grouping: switch (group?.child('grouping')?.val) {
@@ -357,17 +380,22 @@ final class _ChartReader {
           ? groups.map((_Node g) => g.name).join('+')
           : null,
     );
-    final DrawingChartSpace? typed = kind == ChartKind.unsupported
-        ? null
-        // A supported kind needs both axes, so neither is null here.
-        : _typed(
-            bytes,
-            chart,
-            categoryAxis!,
-            valueAxis!,
-            seriesNodes,
-            autoTitle: titleNode != null && titleText == null,
-          );
+    DrawingChartSpace? typed;
+    if (kind != ChartKind.unsupported) {
+      // A supported kind here (a pie returned above) has both axes.
+      final int? categoryId = _axisId(categoryAxis!);
+      final int? valueId = _axisId(valueAxis!);
+      if (categoryId != null && valueId != null && categoryId != valueId) {
+        typed = _typed(
+          bytes,
+          chart,
+          seriesNodes,
+          categoryAxisId: categoryId,
+          valueAxisId: valueId,
+          autoTitle: titleNode != null && titleText == null,
+        );
+      }
+    }
     return DrawingChartRead(
       chart,
       typed,
@@ -375,22 +403,19 @@ final class _ChartReader {
     );
   }
 
-  /// The typed form of the part, or `null` when its ids cannot be written,
-  /// the writer refuses [theme] (an [ArgumentError]), or writing it does not
-  /// give [bytes] again.
+  /// The typed form of the part, with [categoryAxisId] and [valueAxisId]
+  /// (`DrawingChartIds`' defaults when `null`, as for a pie, which has no
+  /// axes), or `null` when its series ids cannot be written, the writer
+  /// refuses [theme] (an [ArgumentError]), or writing it does not give
+  /// [bytes] again.
   DrawingChartSpace? _typed(
     Uint8List bytes,
     Chart chart,
-    _Node categoryAxis,
-    _Node valueAxis,
     List<_Node> seriesNodes, {
+    int? categoryAxisId,
+    int? valueAxisId,
     required bool autoTitle,
   }) {
-    final int? categoryId = _axisId(categoryAxis);
-    final int? valueId = _axisId(valueAxis);
-    if (categoryId == null || valueId == null || categoryId == valueId) {
-      return null;
-    }
     final List<String> seriesIds = <String>[];
     for (final _Node node in seriesNodes) {
       final String? id = _seriesId(node);
@@ -408,8 +433,8 @@ final class _ChartReader {
       chart: chart,
       language: root.child('lang')?.val ?? 'en-US',
       ids: DrawingChartIds(
-        categoryAxis: categoryId,
-        valueAxis: valueId,
+        categoryAxis: categoryAxisId ?? const DrawingChartIds().categoryAxis,
+        valueAxis: valueAxisId ?? const DrawingChartIds().valueAxis,
         series: List<String>.unmodifiable(seriesIds),
       ),
       autoTitle: autoTitle,

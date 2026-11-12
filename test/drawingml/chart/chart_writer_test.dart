@@ -198,6 +198,201 @@ void main() {
     }
   });
 
+  group('pies and doughnuts', () {
+    Chart pie(ChartKind kind, {List<ChartSeries>? series}) =>
+        _chart(kind, series: series, legend: const ChartLegend());
+
+    test('a pie: varied colours, a slice point per value outlined in lt1, '
+        'the first slice at 0, no axes', () {
+      final String xml = _xml(_write(pie(ChartKind.pie)));
+      _expectWellFormed(xml);
+      expect(
+        xml,
+        contains('<c:plotArea><c:layout/><c:pieChart><c:varyColors val="1"/>'),
+      );
+      for (int i = 0; i < 3; i++) {
+        expect(
+          xml,
+          contains(
+            '<c:dPt><c:idx val="$i"/><c:bubble3D val="0"/><c:spPr>'
+            '<a:solidFill><a:schemeClr val="accent${i + 1}"/></a:solidFill>'
+            '<a:ln w="19050"><a:solidFill><a:schemeClr val="lt1"/>'
+            '</a:solidFill></a:ln><a:effectLst/></c:spPr></c:dPt>',
+          ),
+        );
+      }
+      expect(
+        xml,
+        contains(
+          '<c:showLeaderLines val="1"/></c:dLbls><c:firstSliceAng val="0"/>'
+          '</c:pieChart><c:spPr>',
+        ),
+      );
+      expect(xml, isNot(contains('c:axId')));
+      expect(xml, isNot(contains('c:catAx')));
+      expect(xml, isNot(contains('c:valAx')));
+      expect(xml, isNot(contains('c:holeSize')));
+      expect(xml, contains('<c:legendPos val="b"/>'));
+    });
+
+    test('a doughnut writes its hole size', () {
+      final String xml = _xml(
+        _write(
+          Chart(
+            kind: ChartKind.donut,
+            series: <ChartSeries>[_excelSeries(), _excelSeries()],
+            holeSizePercent: 50.4,
+          ),
+        ),
+      );
+      _expectWellFormed(xml);
+      expect(xml, contains('<c:doughnutChart><c:varyColors val="1"/>'));
+      expect(xml, contains('<c:firstSliceAng val="0"/><c:holeSize val="50"/>'));
+      expect(_count(xml, '<c:dPt>'), 6);
+    });
+
+    test('a point colour of its own replaces the slice\'s accent', () {
+      final String xml = _xml(
+        _write(
+          pie(
+            ChartKind.pie,
+            series: <ChartSeries>[
+              _excelSeries().copyWith(
+                pointColors: <ChartColor?>[null, ChartColor.rgb(0x123456)],
+              ),
+            ],
+          ),
+        ),
+      );
+      expect(xml, contains('<a:schemeClr val="accent1"/>'));
+      expect(xml, contains('<a:srgbClr val="123456"/>'));
+      expect(xml, isNot(contains('<a:schemeClr val="accent2"/>')));
+      expect(xml, contains('<a:schemeClr val="accent3"/>'));
+    });
+
+    test('an app theme with fixed colours writes a:srgbClr per slice', () {
+      final ChartTheme app = _office.copyWith(
+        exportColors: ChartExportColors.fixed,
+      );
+      final String xml = _xml(_write(pie(ChartKind.pie), theme: app));
+      expect(xml, isNot(contains('schemeClr')));
+      for (final String rgb in <String>['156082', 'E97132', '196B24']) {
+        expect(
+          xml,
+          contains(
+            '<a:solidFill><a:srgbClr val="$rgb"/></a:solidFill>'
+            '<a:ln w="19050"><a:solidFill><a:srgbClr val="FFFFFF"/>',
+          ),
+        );
+      }
+    });
+
+    test('a pie\'s labels: best fit, leader lines, in the series and the '
+        'group', () {
+      final String xml = _xml(
+        _write(
+          _chart(
+            ChartKind.pie,
+            dataLabels: const ChartDataLabels(visible: true, showPercent: true),
+          ),
+        ),
+      );
+      _expectWellFormed(xml);
+      expect(_count(xml, '<c:dLblPos val="bestFit"/>'), 2);
+      expect(_count(xml, '<c:showVal val="1"/>'), 2);
+      expect(_count(xml, '<c:showPercent val="1"/>'), 2);
+      expect(_count(xml, '<c:showLeaderLines val="1"/>'), 2);
+      expect(
+        xml,
+        contains(
+          '<c:showLeaderLines val="1"/><c:leaderLines><c:spPr>'
+          '<a:ln w="9525" cap="flat" cmpd="sng" algn="ctr"><a:solidFill>'
+          '<a:schemeClr val="tx1"><a:lumMod val="35000"/>'
+          '<a:lumOff val="65000"/></a:schemeClr></a:solidFill><a:round/>'
+          '</a:ln><a:effectLst/></c:spPr></c:leaderLines><c:extLst>'
+          '<c:ext uri="{CE6537A1-D6FC-4f65-9D91-7224C49458BB}" '
+          'xmlns:c15="http://schemas.microsoft.com/office/drawing/2012/chart"/>'
+          '</c:extLst></c:dLbls><c:cat>',
+        ),
+      );
+    });
+
+    test('a doughnut\'s labels take no position', () {
+      final String xml = _xml(
+        _write(
+          _chart(
+            ChartKind.donut,
+            dataLabels: const ChartDataLabels(visible: true),
+          ),
+        ),
+      );
+      expect(xml, isNot(contains('c:dLblPos')));
+      expect(_count(xml, '<c:showVal val="1"/>'), 2);
+    });
+
+    test('a slice border of 0 is no line', () {
+      final String xml = _xml(
+        _write(
+          pie(ChartKind.pie),
+          theme: _office.copyWith(sliceBorderWidth: 0),
+        ),
+      );
+      expect(xml, isNot(contains('w="19050"')));
+      expect(
+        xml,
+        contains(
+          '<a:schemeClr val="accent1"/></a:solidFill><a:ln><a:noFill/>'
+          '</a:ln>',
+        ),
+      );
+    });
+
+    test('a donut with centre text is an ArgumentError', () {
+      expect(
+        () => _write(
+          Chart(
+            kind: ChartKind.donut,
+            series: <ChartSeries>[_excelSeries()],
+            centerText: 'Total',
+          ),
+        ),
+        throwsA(
+          isA<ArgumentError>().having(
+            (ArgumentError e) => e.name,
+            'name',
+            'chart.centerText',
+          ),
+        ),
+      );
+    });
+
+    test('a pie series on the secondary axis is an ArgumentError', () {
+      for (final ChartKind kind in <ChartKind>[
+        ChartKind.pie,
+        ChartKind.donut,
+      ]) {
+        expect(
+          () => _write(
+            _chart(
+              kind,
+              series: <ChartSeries>[
+                _excelSeries().copyWith(axis: ChartAxisBinding.secondary),
+              ],
+            ),
+          ),
+          throwsA(
+            isA<ArgumentError>().having(
+              (ArgumentError e) => e.name,
+              'name',
+              'chart.series[0].axis',
+            ),
+          ),
+          reason: kind.name,
+        );
+      }
+    });
+  });
+
   group('colours', () {
     test('an app theme writes no schemeClr and no theme font', () {
       final ChartTheme app = _office.copyWith(
@@ -1356,6 +1551,7 @@ void main() {
           'lineWidth $v': _office.copyWith(lineWidth: v),
         for (final double v in <double>[double.nan, double.infinity, -1])
           'markerSize $v': _office.copyWith(markerSize: v),
+        'sliceBorderWidth 1585': _office.copyWith(sliceBorderWidth: 1585),
         'spacing.gridLineWidth 1585': _office.copyWith(
           spacing: _office.spacing.copyWith(gridLineWidth: 1585),
         ),
@@ -1388,6 +1584,7 @@ void main() {
         for (final ChartKind kind in <ChartKind>[
           ChartKind.column,
           ChartKind.line,
+          ChartKind.pie,
         ]) {
           expect(
             () => _write(_chart(kind), theme: theme),
@@ -1445,8 +1642,6 @@ void main() {
 
     test('for a kind the writer cannot express', () {
       for (final ChartKind kind in <ChartKind>[
-        ChartKind.pie,
-        ChartKind.donut,
         ChartKind.scatter,
         ChartKind.sparkline,
         ChartKind.combination,

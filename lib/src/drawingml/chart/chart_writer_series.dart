@@ -59,6 +59,16 @@ extension _SeriesWriting on _ChartWriter {
       _writeSeriesDataLabels();
     }
     _writeCategories(series.categories);
+    _writeValues(series);
+    if (chart.kind == ChartKind.line) {
+      _value('c:smooth', series.smooth ? '1' : '0');
+    }
+    _writeSeriesId(index);
+    w.end();
+  }
+
+  /// The series' `c:val`, in its format code (`General` when it has none).
+  void _writeValues(ChartSeries series) {
     w.start('c:val');
     _writeNumbers(
       series.values.values,
@@ -67,9 +77,11 @@ extension _SeriesWriting on _ChartWriter {
       (double v) => v,
     );
     w.end();
-    if (chart.kind == ChartKind.line) {
-      _value('c:smooth', series.smooth ? '1' : '0');
-    }
+  }
+
+  /// The `c:extLst` of the `c16:uniqueId` of series [index], left out when
+  /// `space.ids` has no id for it.
+  void _writeSeriesId(int index) {
     if (index < space.ids.series.length) {
       w.start('c:extLst');
       w.start('c:ext');
@@ -79,7 +91,6 @@ extension _SeriesWriting on _ChartWriter {
       w.end();
       w.end();
     }
-    w.end();
   }
 
   /// A series' `a:ln` of [color]: the theme's line width, a round cap and a

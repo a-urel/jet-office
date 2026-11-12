@@ -631,7 +631,7 @@ void main() {
       expect(read.typed!.ids.series, isEmpty);
     });
 
-    test('a pie chart is unsupported', () {
+    test('a pie chart beside two axes is unsupported', () {
       final DrawingChartRead read = _read(
         excelColumnChart
             .replaceFirst('<c:barChart><c:barDir val="col"/>', '<c:pieChart>')
@@ -645,6 +645,131 @@ void main() {
       expect(read.issues, <DrawingChartIssue>[
         DrawingChartIssue.unsupportedKind,
       ]);
+    });
+
+    group('pies and doughnuts', () {
+      test('a pie reads back typed', () {
+        _expectRoundTrip(
+          DrawingChartSpace(
+            chart: _chart(ChartKind.pie, legend: const ChartLegend()),
+            language: 'tr-TR',
+            ids: DrawingChartIds(series: <String>[_guid(1)]),
+            autoTitle: true,
+          ),
+        );
+      });
+
+      test('a doughnut of two series and a hole of 40 reads back typed', () {
+        _expectRoundTrip(
+          DrawingChartSpace(
+            chart: Chart(
+              kind: ChartKind.donut,
+              series: <ChartSeries>[
+                _series(name: 'a'),
+                _series(name: 'b'),
+              ],
+              holeSizePercent: 40,
+              title: const ChartTitle(text: 'Halka'),
+            ),
+          ),
+        );
+      });
+
+      test('labels with values and percents read back typed', () {
+        for (final ChartKind kind in <ChartKind>[
+          ChartKind.pie,
+          ChartKind.donut,
+        ]) {
+          _expectRoundTrip(
+            DrawingChartSpace(
+              chart: _chart(
+                kind,
+                dataLabels: const ChartDataLabels(
+                  visible: true,
+                  showValue: false,
+                  showPercent: true,
+                  formatCode: '0.0%',
+                ),
+              ),
+            ),
+          );
+        }
+      });
+
+      test('a point colour of its own reads back; an accent of its index '
+          'reads as automatic', () {
+        final ChartSeries series = _series().copyWith(
+          pointColors: <ChartColor?>[null, ChartColor.rgb(0x123456)],
+        );
+        _expectRoundTrip(
+          DrawingChartSpace(chart: _chart(ChartKind.pie, series: [series])),
+        );
+        final DrawingChartRead read = _roundTrip(
+          DrawingChartSpace(
+            chart: _chart(
+              ChartKind.pie,
+              series: <ChartSeries>[
+                _series().copyWith(
+                  pointColors: <ChartColor?>[_office.seriesColor(0)],
+                ),
+              ],
+            ),
+          ),
+        );
+        expect(read.chart!.series.single.pointColors, isEmpty);
+        expect(read.typed, isNotNull);
+      });
+
+      test('an app theme with fixed colours reads back equal', () {
+        final ChartTheme app = _office.copyWith(
+          exportColors: ChartExportColors.fixed,
+        );
+        _expectRoundTrip(
+          DrawingChartSpace(
+            chart: _chart(
+              ChartKind.pie,
+              legend: const ChartLegend(),
+              dataLabels: const ChartDataLabels(visible: true),
+            ),
+          ),
+          theme: app,
+        );
+      });
+
+      test('a hole size that cannot be read is a bad number, untyped', () {
+        final String xml = utf8
+            .decode(
+              writeDrawingChartSpace(
+                DrawingChartSpace(chart: _chart(ChartKind.donut)),
+                _office,
+              ).bytes,
+            )
+            .replaceFirst('<c:holeSize val="75"/>', '<c:holeSize val="x"/>');
+        final DrawingChartRead read = _read(xml);
+        expect(read.chart!.kind, ChartKind.donut);
+        expect(read.chart!.holeSizePercent, 75);
+        expect(read.typed, isNull);
+        expect(read.issues, <DrawingChartIssue>[DrawingChartIssue.badNumber]);
+      });
+
+      test('a hole size outside 10 to 90 reads as 75, untyped', () {
+        for (final String size in <String>['5', '95']) {
+          final String xml = utf8
+              .decode(
+                writeDrawingChartSpace(
+                  DrawingChartSpace(chart: _chart(ChartKind.donut)),
+                  _office,
+                ).bytes,
+              )
+              .replaceFirst(
+                '<c:holeSize val="75"/>',
+                '<c:holeSize val="$size"/>',
+              );
+          final DrawingChartRead read = _read(xml);
+          expect(read.chart!.holeSizePercent, 75, reason: size);
+          expect(read.typed, isNull, reason: size);
+        }
+      });
     });
 
     test('a bar and line combination is unsupported', () {

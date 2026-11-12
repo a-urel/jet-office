@@ -5,9 +5,9 @@
 /// The sheet `Veri` and its seven charts follow
 /// `test/fixtures/owner/charts/TALIMATLAR_J4.md`, but for two charts the
 /// README there names (chart 4 took text x values, chart 5 has no secondary
-/// axis). The reader does not type pies, doughnuts, scatter or combination
-/// charts yet (C2 and C3), so this test pins Excel's values in the XML, and
-/// how the reader reads each part today.
+/// axis). This test pins Excel's values in the XML, and how the reader reads
+/// each part: the pies and doughnuts (charts 1, 2, 3 and 7) read typed and
+/// write the part again (C2); scatter and the combination wait for C3.
 @TestOn('vm')
 library;
 
@@ -16,11 +16,15 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:jet_charts_core/jet_charts_core.dart';
+import 'package:jet_office/src/common/theme_colors.dart';
 import 'package:jet_office/src/drawingml/chart/chart_reader.dart';
 import 'package:jet_office/src/drawingml/chart/chart_space.dart';
+import 'package:jet_office/src/drawingml/chart/chart_writer.dart';
+import 'package:jet_office/src/xml/xml_equivalence.dart';
 import 'package:test/test.dart';
 
 import '../../support/read_xlsx.dart';
+import 'support/excel_files.dart';
 
 const String _path = 'test/fixtures/owner/charts/chart_reference_j4.xlsx';
 
@@ -176,9 +180,78 @@ void main() {
     }
   });
 
-  test('the reader types the smooth line and leaves the other kinds to C2 '
-      'and C3', () {
-    for (int n = 1; n <= 7; n++) {
+  group('pies and doughnuts read typed, and write the part again', () {
+    late final ThemeColors theme;
+    setUpAll(() => theme = themeColorsOf(_path));
+
+    for (final int n in <int>[1, 2, 3, 7]) {
+      test('chart $n', () {
+        final Uint8List part = chartPartOf(_path, n);
+        final DrawingChartRead read = readDrawingChartSpace(
+          part,
+          themeColors: theme,
+        );
+        expect(read.issues, isEmpty);
+        final DrawingChartSpace? typed = read.typed;
+        expect(typed, isNotNull);
+        expect(
+          xmlDifference(
+            writeDrawingChartSpace(typed!, ChartTheme.office).bytes,
+            part,
+          ),
+          isNull,
+        );
+        expect(typed.language, 'tr-TR');
+        expect(typed.autoTitle, isTrue);
+        final Chart chart = typed.chart;
+        expect(chart.legend.position, ChartLegendPosition.bottom);
+        // Every slice is the Office theme's accent of its index, so none
+        // reads as a colour of its own.
+        for (final ChartSeries series in chart.series) {
+          expect(series.pointColors, isEmpty);
+          expect(series.values.values, hasLength(4));
+        }
+      });
+    }
+
+    test('chart 1 is a pie of one series', () {
+      final Chart chart = readDrawingChartSpace(
+        chartPartOf(_path, 1),
+        themeColors: theme,
+      ).typed!.chart;
+      expect(chart.kind, ChartKind.pie);
+      expect(chart.series.single.values.values, <double?>[12, 18, -4, 9]);
+      expect(chart.series.single.name.values, <String?>['Satış']);
+      expect(chart.dataLabels.visible, isFalse);
+    });
+
+    test('charts 2 and 3 are doughnuts of one and two series, hole 75', () {
+      for (final (int n, int count) in <(int, int)>[(2, 1), (3, 2)]) {
+        final Chart chart = readDrawingChartSpace(
+          chartPartOf(_path, n),
+          themeColors: theme,
+        ).typed!.chart;
+        expect(chart.kind, ChartKind.donut, reason: '$n');
+        expect(chart.series, hasLength(count), reason: '$n');
+        expect(chart.holeSizePercent, 75, reason: '$n');
+      }
+    });
+
+    test('chart 7 is a pie with value labels', () {
+      final Chart chart = readDrawingChartSpace(
+        chartPartOf(_path, 7),
+        themeColors: theme,
+      ).typed!.chart;
+      expect(chart.kind, ChartKind.pie);
+      expect(chart.dataLabels.visible, isTrue);
+      expect(chart.dataLabels.showValue, isTrue);
+      expect(chart.dataLabels.showPercent, isFalse);
+    });
+  });
+
+  test('the reader types the smooth line and leaves scatter and the '
+      'combination to C3', () {
+    for (final int n in <int>[4, 5, 6]) {
       final DrawingChartRead read = readDrawingChartSpace(
         parts['xl/charts/chart$n.xml']!,
       );

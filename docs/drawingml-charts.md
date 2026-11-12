@@ -63,9 +63,29 @@ Each rule has the test that holds it.
   writer refuses (below) gives a view and no typed form.
   `chart_reader_test.dart` ("a theme the writer refuses gives a view only,
   never a throw").
-- **A kind outside the model (a pie, a combination) or a third axis is
-  `unsupportedKind`:** a view with the kind `unsupported`, no typed form.
-  `chart_reader_test.dart`.
+- **A kind outside the model (a combination, a scatter chart, a pie beside
+  axes) or a third axis is `unsupportedKind`:** a view with the kind
+  `unsupported`, no typed form. `chart_reader_test.dart`.
+- **Pies and doughnuts are written and read as Excel writes them (C2).** A
+  plot area of one `c:pieChart` or `c:doughnutChart` and no axis reads as
+  `pie` or `donut`. The writer writes no axes (the ids' axis fields are
+  checked but unused, and a pie reads back with `DrawingChartIds`' defaults),
+  `c:varyColors 1`, per slice a `c:dPt` in its point colour or the theme's
+  colour of its index, outlined `sliceBorderWidth` wide in the background
+  (`lt1` when that is the first light slot, as Excel's style 251 names it;
+  `a:noFill` at 0), `c:firstSliceAng 0` and a donut's `holeSizePercent`
+  rounded as `c:holeSize`; no series `c:spPr`, so a series' own colour, its
+  smoothing, the grouping and the axes are not written. Shown labels are
+  each series' with Excel's chart 7 values (a pie's `bestFit`, none for a
+  doughnut, an estimate), leader lines in the theme's `leaderLine` at 0.75 pt
+  and an empty `c15` extension; the group's repeat their position and flags,
+  with `c:showLeaderLines 1` always. The reader gives a slice in the theme's
+  colour of its index back as automatic, reads `showVal` and `showPercent`,
+  and a hole size that is missing, outside 10 to 90 or not a number (that last
+  a `badNumber`) as 75, so such a part is untyped. Charts 1, 2, 3 and 7 of
+  `chart_reference_j4.xlsx` read typed and write their parts again.
+  `excel_reference_j4_test.dart`, `chart_writer_test.dart` and
+  `chart_reader_test.dart` ("pies and doughnuts").
 - **The typed form carries the language, the two axis ids, each series'
   `c16:uniqueId` and Excel's automatic title.** Anything else Excel writes is
   fixed by the writer; a part that differs is not typed.
@@ -128,14 +148,15 @@ Each rule has the test that holds it.
   `chart_reference.xlsx` read typed. `chart_writer_test.dart` ("Excel's
   default charts"), `excel_reference_test.dart`.
 - **Data problems are issues, programmer errors throw.** A chart the writer
-  cannot express (a kind outside the J2 set, a secondary axis, a series of
-  another kind, centre text, which only a donut shows) is an `ArgumentError`;
+  cannot express (a kind outside the J2 set, pie and donut, a secondary axis,
+  a series of another kind or on the secondary axis, centre text, which no
+  part carries) is an `ArgumentError`;
   so are axis ids that are not distinct unsigned 32-bit numbers and series
   ids that are not braced GUIDs.
   `chart_writer_test.dart` ("ArgumentError", "ids").
 - **A theme value the part cannot hold is an `ArgumentError` naming the
-  field:** a line width (`lineWidth`, the spacing's grid and axis line
-  widths) that is not finite or outside 0 to 1584 points (`ST_LineWidth`), a
+  field:** a line width (`lineWidth`, `sliceBorderWidth`, the spacing's grid
+  and axis line widths) that is not finite or outside 0 to 1584 points (`ST_LineWidth`), a
   `markerSize` that is not finite or negative (it is then kept within 2 and
   72), a text size that is not finite or outside 1 to 4000 points
   (`ST_TextFontSize`, `sz` 100 to 400000). `chart_writer_test.dart`
@@ -243,8 +264,8 @@ checks what it shows. What it showed, each now what the writer writes:
   `(opacity * 100000).round()` after the fill colour's luminance children,
   and `areaLine` writes the series' `a:ln` (series colour, `lineWidth`,
   round cap) in place of no line; other kinds ignore both. `showValue: false`
-  is `c:showVal 0`; `showPercent` is always `c:showPercent 0` (Excel allows
-  it in pies only), and a `holeSizePercent` is ignored outside a donut.
+  is `c:showVal 0`; `showPercent` is `c:showPercent 0` but in a pie or doughnut
+  (Excel allows it there only), and a `holeSizePercent` is ignored outside a donut.
   The reader reads `smooth` and the point colours back, and reads (and drops)
   an `a:alpha` of a series fill only (any other translucent colour reads as
   no colour, as before), so the typed form still depends on writing the
