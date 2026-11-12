@@ -4,11 +4,12 @@
 /// charts `XlsxSheet.addChart` draws on one sheet, so the parts reach the
 /// Open XML SDK, LibreOffice and Excel inside a real file. Until C2 a
 /// test-only host drew them; each chart carries the ids C1 gave it
-/// (`xlsxChartWithIds`), so every part is still the one C1's Excel check
-/// opened (`docs/excel-checks.md`, "C1"). The values follow the conventions
-/// documented in `m1_fixtures.dart`; the charts' series refer to the sheet's
-/// cells and cache their values. [c1Charts] gives each fixture's charts, in
-/// part order, for `test/drawingml/chart/chart_fixtures_test.dart`.
+/// (`xlsxChartWithIds`), so every chart part is still the one C1's Excel
+/// check opened (`docs/excel-checks.md`, "C1"). The values follow the
+/// conventions documented in `m1_fixtures.dart`; the charts' series refer to
+/// the sheet's cells and cache their values. [c1Charts] gives each
+/// fixture's charts, in part order, for
+/// `test/drawingml/chart/chart_fixtures_test.dart`.
 library;
 
 import 'package:jet_office/jet_office.dart';

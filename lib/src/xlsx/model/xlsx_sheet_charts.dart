@@ -515,10 +515,11 @@ mixin _SheetCharts {
   /// block.
   ///
   /// The result holds, for each series, the `name`, `categories` and
-  /// `values` references of the cells (`'Sheet'!$B$1`,
-  /// `'Sheet'!$A$2:$A$5`, absolute, the sheet name always quoted), with the
-  /// values as given. The cells are set as [setCell] does, overwriting what
-  /// they held, and all of it is one change.
+  /// `values` references of the cells (`Sheet!$B$1`, `Sheet!$A$2:$A$5`,
+  /// absolute, the sheet name quoted when it needs it, as in
+  /// `'Q1 Sales'!$B$1`), with the values as given. The cells are set as
+  /// [setCell] does, overwriting what they held, and all of it is one
+  /// change.
   ///
   /// Throws a [RangeError] for a [row] or [column] outside the sheet and a
   /// [StateError] when the table does not fit on it, or as [setCell] does;

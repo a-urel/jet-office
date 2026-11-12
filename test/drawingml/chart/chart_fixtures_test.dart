@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:jet_office/jet_office.dart';
+import 'package:jet_office/src/drawingml/chart/chart_reader.dart';
 import 'package:jet_office/src/drawingml/chart/chart_space.dart';
 import 'package:jet_office/src/drawingml/chart/chart_writer.dart';
 import 'package:jet_office/src/xlsx/chart.dart'
@@ -97,16 +98,35 @@ void main() {
     }
   });
 
-  test('each C2 part has the ids its part number gives', () {
+  test('each saved C2 part holds the ids its part number gives', () {
     for (final Fixture fixture in c2Fixtures()) {
+      final Map<String, Uint8List> parts = readXlsxBytes(fixture.build());
       final List<C1Chart> charts = c2Charts(fixture.name);
-      for (int i = 0; i < charts.length; i++) {
-        final Chart chart = charts[i].space.chart;
-        expect(
-          charts[i].space.ids,
-          xlsxChartPartIds(i + 1, chart.series.length),
-          reason: '${fixture.name} chart ${i + 1}',
-        );
+      for (int n = 1; n <= charts.length; n++) {
+        final String reason = '${fixture.name} chart$n.xml';
+        final Chart chart = charts[n - 1].space.chart;
+        final DrawingChartIds want = xlsxChartPartIds(n, chart.series.length);
+        final DrawingChartIds got = readDrawingChartSpace(
+          parts['xl/charts/chart$n.xml']!,
+          theme: charts[n - 1].theme,
+        ).typed!.ids;
+        expect(got.series, want.series, reason: reason);
+        if (!_axisless(chart)) {
+          expect(got.categoryAxis, want.categoryAxis, reason: reason);
+          expect(got.valueAxis, want.valueAxis, reason: reason);
+        }
+        if (_secondary(chart)) {
+          expect(
+            got.secondaryCategoryAxis,
+            want.secondaryCategoryAxis,
+            reason: reason,
+          );
+          expect(
+            got.secondaryValueAxis,
+            want.secondaryValueAxis,
+            reason: reason,
+          );
+        }
       }
     }
   });

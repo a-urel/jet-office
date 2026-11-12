@@ -7,7 +7,8 @@
 /// part it lives in (`xl/charts/chartN.xml`) is the DrawingML layer's. A
 /// chart read from a part carries the part's axis and series ids privately,
 /// so writing its typed form again keeps them; the model reads them through
-/// [xlsxChartIds], which `lib/jet_office.dart` does not export.
+/// [xlsxChartIds], and [xlsxChartWithIds] gives a chart ids of its own (for
+/// fixtures), neither of which `lib/jet_office.dart` exports.
 ///
 /// @docImport 'model/xlsx_sheet.dart';
 library;
@@ -75,7 +76,8 @@ final class XlsxChart {
   /// title.
   final bool autoTitle;
 
-  /// The ids of the part this chart was read from, or `null`.
+  /// The ids of the part this chart was read from, or given by
+  /// [xlsxChartWithIds], or `null`.
   final DrawingChartIds? _ids;
 
   @override
