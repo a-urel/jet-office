@@ -81,6 +81,16 @@ dart test -p chrome
 (cd packages/jet_charts_flutter/example && flutter test)
 ```
 
+`tool/gate.sh` runs these commands in order, every one even after a failure,
+and exits 1 if any failed (`test/tool/gate_script_test.dart` keeps its list
+equal to the block above). Before each it runs `flutter --version`. Flutter's
+launcher deletes `bin/cache/flutter.version.json` from the SDK when its tool
+stamp does not match, for instance when another process runs Flutter's `dart`
+while git cannot read the SDK; until a `flutter` command writes the file back,
+`dart test` fails with "Because jet_charts_gallery requires the Flutter SDK,
+version solving failed." If you run the commands by hand and see that, run
+`flutter --version` and run the command again.
+
 The workspace has a Flutter package, so resolving it (`flutter pub get` or
 Flutter's `dart pub get` at the root) needs Flutter's SDK, 3.50.0 in CI, and
 `dart` must be Flutter's (decision 0016). `jet_charts_flutter`'s tests need
