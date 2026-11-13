@@ -389,9 +389,11 @@ checks what it shows. What it showed, each now what the writer writes:
 - **Not typed: chart 13 (`Satışlar`).** Its title's run is `lang="en-US"`
   while `c:lang` and every other text are `tr-TR`: Office.js set the text.
   The typed form carries one language (ruling R3 of C1), so the chart gives a
-  view only and its bytes are kept. A title typed in Excel's own window may
-  carry the part's language; a chart made by hand would tell (a step of the
-  owner's C2 check).
+  view only and its bytes are kept. A title typed in Excel's own window
+  carries the part's language: the owner's `chart_title_tr.xlsx` (C2 check,
+  step 7, 2026-11-14) has `lang="tr-TR"` on the run as on `c:lang`, and its
+  `c:title` is byte for byte the writer's for the same text. Only Office.js
+  writes the mismatch.
 - **Names.** Chart 23 used the name `Tutarlar` (`Veri!$B$2:$B$5`) as its
   first series' values, but Office.js resolved it: the part's `c:f` is
   `Veri!$B$2:$B$5`. Whether Excel writes `[0]!Tutarlar` for a name stays
@@ -474,8 +476,6 @@ Each item C1 left open for C2, and where it went:
   unchanged, and structural edits and renames leave it alone
   (`test/xlsx/model/chart_names_test.dart`); `writeChartData` never writes
   one.
-- Whether a title typed in Excel carries the part's language (chart 13):
-  pending a step of the owner's C2 check.
 - A cap on a chart part's size: `XlsxReadLimits.maxChartPartBytes`, 32 MiB by
   default, checked on the entry's declared size before it is read; a part
   over it lists with no view, warns and is kept byte for byte.

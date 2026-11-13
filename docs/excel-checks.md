@@ -1539,7 +1539,10 @@ The owner's result, filled by the owner only (and a row per file under
 | 2026-11-13 | not given | Step 5: `c2_edited` and the undone twins | Pass | Every edit as expected; the `_undone` files look as the owner's. |
 | 2026-11-14 | 16.0300 (`AppVersion`) | Step 6: E3 | Pass, with differences | The owner's `chart_reference_e3.xlsx`, its two charts made by Excel's menus, compared as XML with the writer's (`packages/jet_charts_core/docs/excel-checks.md`, "E3"): the secondary value axis and the numeric scatter as the writer writes them. Two differences, not visible, now Excel's: the deleted secondary category axis has no tick marks and no `c:crosses`; a scatter's numeric x axis has a linked `General` `c:numFmt`. |
 
-Step 7 (the title typed in Excel) is open.
+| 2026-11-14 | 16.0300 (`AppVersion`) | Step 6: E3, the screenshot | Pass | The two charts as the XML says: the secondary axis 0 to 160 on the right; the scatter's point at x -4 drawn left of the y axis, x axis -10 to 20. The combination's category labels sit under the plot (below -10), as the writer's `low` draws them. |
+| 2026-11-14 | 16.0300 (`AppVersion`) | Step 7: `chart_title_tr.xlsx`, the title typed in Excel | Pass | `Satışlar` typed on chart 1: the run is `lang="tr-TR"`, the part's language, and the `c:title` is byte for byte the writer's for the same text; Excel's own window does not write chart 13's mismatch (that was Office.js). The optional name step (`Tutarlar`) was not done: whether Excel writes `[0]!Tutarlar` stays open. |
+
+Every step is done; C2's owner check is complete.
 
 ## Open issues
 

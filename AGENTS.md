@@ -53,10 +53,9 @@ owner's `chart_reference.xlsx` but one reads typed.
 Milestone C2 (the XLSX chart host: `XlsxSheet.charts`, `addChart`,
 `replaceChartAt`, `moveChartAt`, `removeChartAt`, `writeChartData`, and the
 pie, donut, scatter, combination and secondary axis in the DrawingML layer;
-`docs/xlsx-model.md`, "What C2 adds") is built; the owner's Excel check
+`docs/xlsx-model.md`, "What C2 adds") is done: the owner's Excel check
 (`tool/write_c2_check.dart`, `test/fixtures/owner/charts/TALIMATLAR_C2.md`) is
-open, and its result goes in `docs/excel-checks.md`, "C2", from the owner
-only.
+recorded in `docs/excel-checks.md`, "C2" (2026-11-14), with E3.
 `packages/jet_charts_flutter` is its Flutter backend (decision 0016), with its
 own `AGENTS.md`; milestones J3 and J4 are done. This
 package never depends on it. `packages/jet_charts_flutter/docs/app-themes.md`
