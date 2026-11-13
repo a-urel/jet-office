@@ -5,6 +5,7 @@ import 'package:test/test.dart';
 
 import '../fixtures/m4_fixtures.dart' show png4x2;
 import '../support/event_loop.dart';
+import '../support/timing.dart';
 import 'support/docx_fuzz.dart';
 import 'support/drawings_document.dart';
 import 'support/table_document.dart';
@@ -258,10 +259,19 @@ void main() {
         } on Object catch (e) {
           failures.add('seed ${c.seed} case ${c.index} (${c.mutation}): $e');
         }
-        if (watch.elapsed > const Duration(seconds: 5)) {
+        // A case over the bound runs again, as a busy machine can slow one
+        // run; only a case slow in every run is a hang.
+        final Duration? hang = confirmedHang(watch.elapsed, () {
+          try {
+            exerciseDocx(c.bytes);
+          } on Object {
+            // Reported by the first run.
+          }
+        });
+        if (hang != null) {
           failures.add(
             'seed ${c.seed} case ${c.index} (${c.mutation}): hang, '
-            '${watch.elapsedMilliseconds} ms',
+            '${hang.inMilliseconds} ms',
           );
         }
         // Chrome runs every suite on this thread: give the others a turn.

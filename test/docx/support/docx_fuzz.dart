@@ -14,7 +14,10 @@
 ///
 /// The 5 s hang bound is checked after a case returns, so a real infinite
 /// loop is not reported as a hang: the test's timeout stops it and names no
-/// case. `tool/fuzz_docx.dart --verbose` writes each case to stderr before
+/// case. In `test/docx/fuzz_test.dart` a case over the bound runs up to
+/// twice more and is a hang only when every run is over it
+/// (`confirmedHang`, `test/support/timing.dart`), as a busy machine once
+/// slowed one case to 20 s. `tool/fuzz_docx.dart --verbose` writes each case to stderr before
 /// it runs, so the last line names it.
 library;
 
