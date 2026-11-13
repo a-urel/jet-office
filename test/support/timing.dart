@@ -34,3 +34,27 @@ void expectWithinRatio(
     reason: 'took $measured, baseline $baseline: limit $limit',
   );
 }
+
+/// Expects [measured] to run within [expectWithinRatio]'s bound of
+/// [baseline], each timed by [bestOfThree], in one of [attempts] attempts.
+///
+/// A busy machine can slow one side's runs and not the other's, and a load
+/// spike of a few hundred milliseconds is enough to fail a single
+/// comparison; a new attempt times both sides again. A quadratic slowdown
+/// of [measured] exceeds the bound in every attempt, so it still fails.
+void expectScales(
+  void Function() measured,
+  void Function() baseline, {
+  int attempts = 3,
+  int factor = 4,
+  Duration slack = const Duration(milliseconds: 250),
+}) {
+  for (int attempt = 1; ; attempt++) {
+    final Duration many = bestOfThree(measured);
+    final Duration one = bestOfThree(baseline);
+    if (attempt == attempts || many <= one * factor + slack) {
+      expectWithinRatio(many, one, factor: factor, slack: slack);
+      return;
+    }
+  }
+}

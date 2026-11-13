@@ -334,29 +334,27 @@ void main() {
 
     test('binary search over many ranges', () {
       int wrong = -1;
-      final Duration many = bestOfThree(() {
+      expectScales(() {
         wrong = manyRanges(Iterable<int>.generate(columns));
-      });
+      }, singleRange);
       expect(wrong, 0);
-      expectWithinRatio(many, bestOfThree(singleRange));
     });
 
     test('ranges inserted right to left stay a binary search', () {
       int wrong = -1;
-      final Duration many = bestOfThree(() {
+      expectScales(() {
         wrong = manyRanges(
           Iterable<int>.generate(columns, (int i) => columns - 1 - i),
         );
-      });
+      }, singleRange);
       expect(wrong, 0);
-      expectWithinRatio(many, bestOfThree(singleRange));
     });
 
     test('one wide range after many ended ones', () {
       const int ended = 10000;
       FormulaGroupResult? wide;
       XlsxFormulaGroup? covered;
-      final Duration many = bestOfThree(() {
+      void many() {
         final FormulaGroups groups = FormulaGroups();
         for (int r = 0; r < ended; r++) {
           groups.startRow(r);
@@ -381,7 +379,18 @@ void main() {
         if (groups.coveredBy(ended, 9999) == null) {
           fail('column 9999 is not covered');
         }
-      });
+      }
+
+      // A tree that holds one range, with as many lookups.
+      void one() {
+        final FormulaGroups groups = FormulaGroups()..startRow(0);
+        groups.master(FormulaType.array, row: 0, column: 0, ref: 'A1:XFD1');
+        for (int r = 0; r < ended; r++) {
+          groups.coveredBy(0, r % columns);
+        }
+      }
+
+      expectScales(many, one);
       expect(
         wide,
         _master(XlsxFormulaGroupKind.array, 'A${ended + 1}:XFD${ended + 1}'),
@@ -394,15 +403,6 @@ void main() {
           isMaster: false,
         ),
       );
-      // A tree that holds one range, with as many lookups.
-      final Duration one = bestOfThree(() {
-        final FormulaGroups groups = FormulaGroups()..startRow(0);
-        groups.master(FormulaType.array, row: 0, column: 0, ref: 'A1:XFD1');
-        for (int r = 0; r < ended; r++) {
-          groups.coveredBy(0, r % columns);
-        }
-      });
-      expectWithinRatio(many, one);
     });
   });
 }
