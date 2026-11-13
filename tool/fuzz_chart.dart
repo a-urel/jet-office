@@ -11,7 +11,8 @@
 /// `test/drawingml/chart/support/chart_fuzz.dart` describes and checks each
 /// one with `exerciseChartCase`: the reader throws nothing, a typed form
 /// writes a part that reads typed again, and an opened part encodes its
-/// bytes. Anything thrown, and any case taking more than 5 s, is a failure
+/// bytes. Anything thrown, and any case taking more than 5 s in each of
+/// three runs, is a failure
 /// and printed as `seed <s> case <i> (<mutation>): <error>`, which
 /// `chartFuzzCases(s, i + 1)` reproduces. A summary line follows; the exit
 /// code is 1 on any failure and 2 on bad arguments.

@@ -70,6 +70,50 @@ void main() {
       expect(out.toString(), matches(RegExp(r'^seed 1 case 1 \(.+\): .*boom')));
     });
 
+    test('a case slow once is run again and is no hang', () {
+      int runs = 0;
+      final StringBuffer out = StringBuffer();
+      final FuzzRunResult r = runFuzz(
+        first: 1,
+        last: 1,
+        cases: 1,
+        verbose: false,
+        out: out,
+        err: StringBuffer(),
+        hangBound: const Duration(milliseconds: 20),
+        exercise: (Uint8List bytes) {
+          runs++;
+          if (runs == 1) _busy(const Duration(milliseconds: 30));
+        },
+      );
+      expect(runs, 2);
+      expect(r.failures, 0);
+      expect(out.toString(), isEmpty);
+    });
+
+    test('a case slow in every run is a hang, counted once', () {
+      int runs = 0;
+      final StringBuffer out = StringBuffer();
+      final FuzzRunResult r = runFuzz(
+        first: 1,
+        last: 1,
+        cases: 1,
+        verbose: false,
+        out: out,
+        err: StringBuffer(),
+        hangBound: const Duration(milliseconds: 20),
+        exercise: (Uint8List bytes) {
+          runs++;
+          _busy(const Duration(milliseconds: 30));
+          throw XlsxReadException(XlsxReadFailure.notZip, 'no');
+        },
+      );
+      expect(runs, 3);
+      expect(r.refused, 1);
+      expect(r.failures, 1);
+      expect(out.toString(), matches(RegExp(r'^seed 1 case 0 \(.+\): hang, ')));
+    });
+
     test('the DOCX cases and refusal are used when given', () {
       int n = 0;
       final StringBuffer out = StringBuffer();
@@ -120,4 +164,10 @@ final class _Log implements StringSink {
 
   @override
   void writeCharCode(int charCode) => throw UnimplementedError();
+}
+
+/// Holds the thread for [duration], so a run takes at least that long.
+void _busy(Duration duration) {
+  final Stopwatch watch = Stopwatch()..start();
+  while (watch.elapsed < duration) {}
 }

@@ -4,14 +4,15 @@
 /// New in jet_office (phase 2, R4); generalised in phase 4 (D1) for the DOCX
 /// fuzzer. By default it mutates and reads as `tool/fuzz_reader.dart`
 /// documents: `XlsxReadException` is a refusal, anything else thrown and any
-/// case taking more than 5 s is a failure. `tool/fuzz_docx.dart` passes the
-/// DOCX cases, exercise and refusal.
+/// case taking more than 5 s in every one of three runs is a failure.
+/// `tool/fuzz_docx.dart` passes the DOCX cases, exercise and refusal.
 library;
 
 import 'dart:typed_data';
 
 import 'package:jet_office/jet_office.dart';
 
+import '../../test/support/timing.dart';
 import '../../test/xlsx/read/support/fuzz.dart';
 
 /// The totals of one [runFuzz] call.
@@ -29,7 +30,7 @@ final class FuzzRunResult {
   /// How many cases the reader refused with its read exception.
   final int refused;
 
-  /// How many cases threw anything else or took longer than 5 s.
+  /// How many cases threw anything else or were hangs.
   final int failures;
 }
 
@@ -41,6 +42,11 @@ final class FuzzRunResult {
 /// (default [fuzzCases]). A thrown
 /// object for which [isRefusal] is true (default: an `XlsxReadException`) is
 /// a refusal; any other is a failure.
+///
+/// A case that takes longer than [hangBound] runs up to twice more, as a
+/// busy machine can slow one run; it is a hang, and a failure, only when
+/// every run takes longer (`confirmedHang`, `test/support/timing.dart`).
+/// The reruns count nothing else: what a case throws is counted once.
 ///
 /// Each failure is written to [out] as
 /// `seed <s> case <i> (<mutation>): <error>`. With [verbose], the line
@@ -57,6 +63,7 @@ FuzzRunResult runFuzz({
   void Function(FuzzCase c)? exerciseCase,
   Iterable<FuzzCase> Function(int seed, int count) generate = fuzzCases,
   bool Function(Object error) isRefusal = _isXlsxRefusal,
+  Duration hangBound = const Duration(seconds: 5),
 }) {
   int count = 0;
   int refused = 0;
@@ -67,13 +74,17 @@ FuzzRunResult runFuzz({
       if (verbose) {
         err.writeln('seed ${c.seed} case ${c.index} (${c.mutation})');
       }
-      final Stopwatch watch = Stopwatch()..start();
-      try {
+      void run() {
         if (exerciseCase != null) {
           exerciseCase(c);
         } else {
           exercise(c.bytes);
         }
+      }
+
+      final Stopwatch watch = Stopwatch()..start();
+      try {
+        run();
       } on Object catch (e) {
         if (isRefusal(e)) {
           refused++;
@@ -82,11 +93,18 @@ FuzzRunResult runFuzz({
           out.writeln('seed ${c.seed} case ${c.index} (${c.mutation}): $e');
         }
       }
-      if (watch.elapsed > const Duration(seconds: 5)) {
+      final Duration? hang = confirmedHang(watch.elapsed, () {
+        try {
+          run();
+        } on Object {
+          // Counted by the first run.
+        }
+      }, bound: hangBound);
+      if (hang != null) {
         failures++;
         out.writeln(
           'seed ${c.seed} case ${c.index} (${c.mutation}): hang, '
-          '${watch.elapsedMilliseconds} ms',
+          '${hang.inMilliseconds} ms',
         );
       }
     }

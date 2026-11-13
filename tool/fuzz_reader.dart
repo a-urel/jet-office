@@ -10,10 +10,10 @@
 /// single seed such as `7`) it mutates `--cases` (default 500) corpus files
 /// as `test/xlsx/read/support/fuzz.dart` describes and reads each one with
 /// `exerciseReader`. Anything thrown other than an `XlsxReadException`, and
-/// any case taking more than 5 s, is a failure and printed as
-/// `seed <s> case <i> (<mutation>): <error>`, which `fuzzCases(s, i + 1)`
-/// reproduces. A summary line follows; the exit code is 1 on any failure
-/// and 64 on bad arguments.
+/// any case taking more than 5 s in each of three runs, is a failure and
+/// printed as `seed <s> case <i> (<mutation>): <error>`, which
+/// `fuzzCases(s, i + 1)` reproduces. A summary line follows; the exit code is
+/// 1 on any failure and 64 on bad arguments.
 ///
 /// A hang is measured after a case returns, so a real infinite loop is not
 /// reported by this tool; it stops only when killed. With `--verbose` each
