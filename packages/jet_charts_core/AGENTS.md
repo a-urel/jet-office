@@ -289,6 +289,13 @@ by hand, then fix it.
 - Unchecked in Excel: the gap Excel leaves between an area chart's last
   category label and its chart area's edge; this package keeps the padding
   there (`docs/parity.md`, "Areas"), and the owner's look settles it.
+- Seen in the owner's C2 check (2026-11-13, the root's
+  `docs/excel-checks.md`, "C2"), kept for later as minor: a pie or donut is
+  about 25% larger than Excel's in the same chart area; the legend keys are
+  larger than Excel's; Excel draws every data label of a donut of two
+  series, overlapping, where the layout hides the ones that collide; Excel
+  writes a pie's values smaller (about 9 pt) and nearer the outer edge (its
+  best fit), where the layout writes them larger at the slice's middle.
 
 ## Reference
 

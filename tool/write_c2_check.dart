@@ -293,7 +293,9 @@ List<(Chart, ChartTheme)> _dashboardCharts() => <(Chart, ChartTheme)>[
 
 /// `c2_dashboard.xlsx`: each chart's data in a block of eight rows of
 /// `Veri`, the charts on `Pano`, two across, each 8 columns by 15 rows with
-/// a free column and row between them.
+/// a free column and row between them. No chart asks for Excel's automatic
+/// title: a chart without a title shows none, as the app draws it (Excel
+/// would show `Grafik Başlığı` on the combination of two series).
 Uint8List _dashboard() {
   final XlsxWorkbook book = XlsxWorkbook();
   final XlsxSheet data = book.addSheet('Veri');
@@ -312,7 +314,6 @@ Uint8List _dashboard() {
         name: _chartNames[i],
         theme: theme,
         language: 'tr-TR',
-        autoTitle: chart.title == null,
       ),
     );
   }

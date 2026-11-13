@@ -1531,6 +1531,13 @@ The owner's result, filled by the owner only (and a row per file under
 
 | Date | Excel version | File or step | Result | Notes |
 |---|---|---|---|---|
+| 2026-11-13 | not given | Step 2: the nine files | Pass | All nine opened without a repair prompt. |
+| 2026-11-13 | not given | Step 3: `Pano` beside the gallery | Pass, with differences | Compared on a page of the eight pairs at Excel's size (520 by 240 pt, Aptos Narrow). No difference in kind, data, colours, axes or legend place. Differences, kept for later (the owner: minor): the app's pie and donut are about 25% larger than Excel's, which leaves more room around them; the app's legend keys are larger (every kind); on the donut of two series Excel draws every data label, overlapping, where the app hides the labels that collide (its rule); on the pie Excel writes each value smaller (about 9 pt) and nearer the slice's outer edge (best fit), where the app writes it larger at the slice's middle. `combo_column_line` showed Excel's automatic title `Grafik Başlığı` where the app shows none: the check tool asked for the automatic title; it now writes no chart of `Pano` with it, as Monépro's export would. |
+
+| 2026-11-13 | not given | Step 4: the data the charts follow | Pass | `Veri!B2` and `Veri!C58` changed: `column_clustered` and `combo_column_line` followed; the series read `Veri`. `combo_column_line` shows no title after the fix. |
+
+Steps 5 to 7 (the edited files and their undone twins, E3, the title typed
+in Excel) are open.
 
 ## Open issues
 

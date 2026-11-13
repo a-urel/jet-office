@@ -114,6 +114,14 @@ void main() {
       expect((veri.cellAt(1, 1)?.value as XlsxDecimal?)?.toIntOrNull(), 12);
     });
 
+    test('no chart asks for the automatic title, so a chart without a '
+        'title shows none, as the app draws it', () {
+      for (final XlsxSheetChart c in book.sheet('Pano').charts) {
+        expect(c.typed?.autoTitle, isNot(isTrue), reason: c.name);
+      }
+      expect(book.sheet('Pano').charts[7].view!.title, isNull);
+    });
+
     test('every chart but the app theme one lists typed in the Office '
         'theme', () {
       final List<XlsxSheetChart> charts = book.sheet('Pano').charts;
