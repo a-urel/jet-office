@@ -83,7 +83,8 @@ dart test -p chrome
 
 `tool/gate.sh` runs these commands in order, every one even after a failure,
 and exits 1 if any failed (`test/tool/gate_script_test.dart` keeps its list
-equal to the block above). Before each it runs `flutter --version`. Flutter's
+equal to the block above). Before every `dart` of a command, the second `dart
+test` of a package's leg too, it runs `flutter --version`. Flutter's
 launcher deletes `bin/cache/flutter.version.json` from the SDK when its tool
 stamp does not match, for instance when another process runs Flutter's `dart`
 while git cannot read the SDK; until a `flutter` command writes the file back,

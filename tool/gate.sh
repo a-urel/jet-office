@@ -5,7 +5,9 @@
 # when any leg failed. test/tool/gate_script_test.dart keeps the legs equal
 # to AGENTS.md's.
 #
-# Before each leg it runs `flutter --version`. Flutter's launcher
+# Every `dart` of a leg, the second of `(cd packages/jet_core && dart test
+# && dart test -p chrome)` too, runs after `flutter --version`: a shell
+# function named `dart` shadows the command in each leg. Flutter's launcher
 # (bin/internal/shared.sh) deletes bin/cache/flutter.version.json whenever
 # its tool stamp does not match, for instance when another process runs
 # Flutter's `dart` while git cannot read the SDK, and only the next
@@ -19,11 +21,15 @@ cd "$(dirname "$0")/.."
 
 failed=()
 
+# Runs `flutter --version` before the real `dart`. Single quotes keep "$@"
+# for the leg's shell.
+wrapper='dart() { flutter --version >/dev/null 2>&1; command dart "$@"; }'
+
 leg() {
   local command="$1"
   echo "== $command"
-  flutter --version >/dev/null 2>&1 || true
-  if bash -c "$command"; then
+  if bash -c "$wrapper
+$command"; then
     echo "== ok: $command"
   else
     echo "== FAILED: $command"

@@ -32,8 +32,17 @@ void main() {
     expect(_scriptLegs(), gate);
   });
 
-  test('tool/gate.sh writes Flutter\'s version file back before each leg', () {
+  test('tool/gate.sh writes Flutter\'s version file back before each dart '
+      'command, the second of a leg too', () {
     final String script = File('tool/gate.sh').readAsStringSync();
-    expect(script, contains('flutter --version'));
+    // A shell function shadows `dart` in every leg, so each `dart` of a
+    // leg such as `(cd packages/jet_core && dart test && dart test -p
+    // chrome)` runs after `flutter --version`.
+    expect(
+      script,
+      contains(
+        'dart() { flutter --version >/dev/null 2>&1; command dart "\$@"; }',
+      ),
+    );
   });
 }
