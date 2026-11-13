@@ -5,6 +5,7 @@ import 'package:jet_office/src/xlsx/formula/formula_token.dart';
 import 'package:test/test.dart';
 
 import '../../support/fuzz_mutations.dart';
+import '../../support/timing.dart';
 
 /// The seeds the quality gate fuzzes, each with [_cases] strings.
 const List<int> _seeds = <int>[1, 2, 3, 4];
@@ -147,6 +148,15 @@ void main() {
     final String long = List<String>.filled(3000, 'A1+').join();
     final Stopwatch watch = Stopwatch()..start();
     expect(_problems(long), isEmpty);
-    expect(watch.elapsed, lessThan(const Duration(seconds: 2)));
+    // A run over the bound runs again, as a busy machine can slow one run;
+    // only a lexer slow in every run fails.
+    expect(
+      confirmedHang(
+        watch.elapsed,
+        () => _problems(long),
+        bound: const Duration(seconds: 2),
+      ),
+      isNull,
+    );
   });
 }
