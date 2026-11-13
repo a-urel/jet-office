@@ -481,9 +481,9 @@ Each item C1 left open for C2, and where it went:
   content changed (a structural edit's rewrite, an undo), so `charts` gives
   what the part holds. Caches stay as written after `setCell` or a
   structural edit (the owner's decision 5).
-- Still open: a part name a content type override declares but no part has
-  is skipped by `addChart`, while drawings and tables (W4 code) may still
-  take such a name; a general fix in the OPC layer is a follow-up outside C2.
+- A part name a content type override declares but no part has is skipped
+  by `addChart`, and, since the follow-up to C2, by every part the model adds
+  (`OpcPackage.freePartName`; `docs/xlsx-model.md`, "Untrusted input").
 
 ## Open for C3
 

@@ -711,12 +711,9 @@ mixin _SheetCharts {
   /// would lose it.
   int _freeChartNumber() {
     final OpcPackage package = _host.reader.package;
-    final Set<String> declared = <String>{
-      for (final String name in package.overridePartNames) name.toLowerCase(),
-    };
     int n = 1;
     while (package.hasPart('xl/charts/chart$n.xml') ||
-        declared.contains('/xl/charts/chart$n.xml')) {
+        package.declaresPart('xl/charts/chart$n.xml')) {
       n++;
     }
     return n;

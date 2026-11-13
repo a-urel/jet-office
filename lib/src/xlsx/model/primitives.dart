@@ -634,6 +634,11 @@ final class RemovePartChange implements Change {
 /// Adds a part as [OpcPackage.addPart] does, records the change in [log] and
 /// returns the part's name.
 ///
+/// The name is [OpcPackage.freePartName] of [preferredName]: a name that a
+/// content type override declares, though the file lacks its part, is taken
+/// too, so undoing the change, which removes the new part's override, keeps
+/// the file's own.
+///
 /// Must run inside `log.transaction`. Throws as [OpcPackage.addPart] does,
 /// with nothing changed; if recording throws, the part is taken out again
 /// before the error leaves. Undoing the change removes the part and the
@@ -657,7 +662,7 @@ String addStoredPart(
   final String name;
   try {
     name = package.addPart(
-      preferredName,
+      package.freePartName(preferredName),
       contentType,
       content,
       byExtension: byExtension,

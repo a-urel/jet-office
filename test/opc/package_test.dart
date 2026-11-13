@@ -417,6 +417,32 @@ void main() {
       );
     });
 
+    test('freePartName skips parts and names an override of no part '
+        'declares', () {
+      final OpcPackage p = _package(<(String, String)>[
+        (
+          '[Content_Types].xml',
+          '<Types xmlns="$_typesNs">'
+              '<Override PartName="/xl/Charts/Chart2.xml" ContentType="x/c"/>'
+              '<Override PartName="/xl/charts/chart3.xml" ContentType="x/c"/>'
+              '<Override PartName="/xl/new.xml" ContentType="x/n"/>'
+              '</Types>',
+        ),
+        ('xl/charts/chart1.xml', '<c/>'),
+        ('xl/charts/chart3.xml', '<c/>'),
+      ]);
+      expect(p.declaresPart('/xl/charts/chart2.xml'), isTrue);
+      expect(p.declaresPart('xl/CHARTS/chart3.xml'), isTrue);
+      expect(p.declaresPart('/xl/charts/chart1.xml'), isFalse);
+      expect(p.freePartName('/xl/charts/chart1.xml'), '/xl/charts/chart4.xml');
+      expect(p.freePartName('/xl/charts/chart5.xml'), '/xl/charts/chart5.xml');
+      expect(p.freePartName('xl/new.xml'), '/xl/new2.xml');
+      expect(p.freePartName('/xl/other.xml'), '/xl/other.xml');
+      // addPart itself still takes a declared name, so a part created at a
+      // dangling relationship's target keeps that target.
+      expect(p.addPart('/xl/new.xml', 'x/n', _Text('<n/>')), '/xl/new.xml');
+    });
+
     test('addRelationship uses a given id', () {
       final OpcPackage p = OpcPackage.empty();
       p.addPart('/a.xml', 'x/a', _Text('<a/>'));

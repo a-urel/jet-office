@@ -204,6 +204,26 @@ final class OpcPackage {
   /// Whether the package has a part named [name].
   bool hasPart(String name) => _parts.containsKey(_key(name));
 
+  /// Whether a content type override declares the name [name] (matched
+  /// without regard to case or slash direction), whether or not a part has
+  /// it.
+  bool declaresPart(String name) => _contentTypes.overrideTypeOf(name) != null;
+
+  /// [preferredName] (absolute) when no part has it and no override
+  /// declares it, else the first name past it, numbered as [addPart] numbers
+  /// a taken name, that neither a part has nor an override declares.
+  ///
+  /// A new part made at this name never takes over the declaration of a
+  /// part the file lacks, so taking the new part out again, which removes
+  /// its override, leaves the file's own declarations as they were.
+  String freePartName(String preferredName) {
+    final String name = _raised(
+      _plain(preferredName),
+      (String key) => _parts.containsKey(key) || declaresPart(key),
+    );
+    return '/$name';
+  }
+
   /// The part's name spelled as stored, or `null` when there is no such part.
   String? canonicalPartName(String name) => _parts[_key(name)]?.name;
 
@@ -409,23 +429,7 @@ final class OpcPackage {
         'Must name a part, not a folder or package metadata.',
       );
     }
-    String name = plain;
-    if (_parts.containsKey(name.toLowerCase())) {
-      final int slash = name.lastIndexOf('/') + 1;
-      final int dot = name.lastIndexOf('.');
-      final int end = dot > slash ? dot : name.length;
-      int digits = end;
-      while (digits > slash && _isDigit(name.codeUnitAt(digits - 1))) {
-        digits--;
-      }
-      final String stem = name.substring(0, digits);
-      final String ext = name.substring(end);
-      int n = digits == end ? 2 : int.parse(name.substring(digits, end)) + 1;
-      while (_parts.containsKey('$stem$n$ext'.toLowerCase())) {
-        n++;
-      }
-      name = '$stem$n$ext';
-    }
+    final String name = _raised(plain, _parts.containsKey);
     final _Part part = _Part('/$name', null)..content = content;
     final int dot = name.lastIndexOf('.');
     final String extension = dot > name.lastIndexOf('/') + 1
@@ -802,6 +806,28 @@ final class OpcPackage {
   }
 
   static bool _isDigit(int unit) => unit >= 0x30 && unit <= 0x39;
+
+  /// [name] (no leading slash) when [taken] refuses its lower-cased form,
+  /// else [name] with its number raised until [taken] refuses it:
+  /// `xl/worksheets/sheet3.xml` becomes `sheet4.xml`, and a name without a
+  /// number gets `2`, `3` and so on.
+  static String _raised(String name, bool Function(String key) taken) {
+    if (!taken(name.toLowerCase())) return name;
+    final int slash = name.lastIndexOf('/') + 1;
+    final int dot = name.lastIndexOf('.');
+    final int end = dot > slash ? dot : name.length;
+    int digits = end;
+    while (digits > slash && _isDigit(name.codeUnitAt(digits - 1))) {
+      digits--;
+    }
+    final String stem = name.substring(0, digits);
+    final String ext = name.substring(end);
+    int n = digits == end ? 2 : int.parse(name.substring(digits, end)) + 1;
+    while (taken('$stem$n$ext'.toLowerCase())) {
+      n++;
+    }
+    return '$stem$n$ext';
+  }
 
   /// [name] with `/` separators and no leading `/`.
   static String _plain(String name) =>
