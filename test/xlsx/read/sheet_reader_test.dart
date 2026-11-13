@@ -300,7 +300,8 @@ void main() {
   test('sorts a full row written right to left without quadratic cost', () {
     // Inserting each cell in place costs O(n²) on such a row: 16,384 cells
     // in 8 rows took seconds. Appending and sorting once takes milliseconds.
-    // The bound is a ratio to the same sheet written left to right.
+    // The bound is a ratio to the same sheet written left to right, timed
+    // again when a busy machine slows one side (expectScales).
     String sheet({required bool reversed}) {
       final StringBuffer rows = StringBuffer();
       for (int r = 1; r <= 8; r++) {
@@ -324,8 +325,7 @@ void main() {
     final String forward = sheet(reversed: false);
     final String backward = sheet(reversed: true);
     late List<XlsxReadRow> read;
-    final Duration baseline = bestOfThree(() => readAll(forward));
-    final Duration measured = bestOfThree(() => read = readAll(backward));
+    expectScales(() => read = readAll(backward), () => readAll(forward));
     expect(read, hasLength(8));
     for (final XlsxReadRow row in read) {
       expect(row.cells, hasLength(16384));
@@ -334,7 +334,6 @@ void main() {
       }
       expect(row.cells.last.value, XlsxDecimal('16383'));
     }
-    expectWithinRatio(measured, baseline);
   });
 
   test('a duplicate among out-of-order cells keeps the last and warns', () {
