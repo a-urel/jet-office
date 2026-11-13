@@ -20,7 +20,7 @@ const int _cases = 100;
 /// browser. A change to the writer, to the C1 or C2 fixtures' charts, to the
 /// corpus or to the mutations changes it (C2 added the J4 Excel parts and
 /// `c2_kinds`).
-const int _casesDigest = 3693962540;
+const int _casesDigest = 728719077;
 
 /// Adler-32 of [data], in arithmetic that stays exact in a browser.
 int _adler32(List<int> data) {

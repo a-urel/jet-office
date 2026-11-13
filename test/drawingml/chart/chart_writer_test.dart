@@ -539,6 +539,25 @@ void main() {
       );
     });
 
+    test('numeric x values give the x axis Excel\'s linked General format '
+        '(the owner\'s E3 chart 2); text x values give it none', () {
+      String xAxis(List<Object?> xs) => RegExp(
+        '<c:valAx>.*?</c:valAx>',
+      ).firstMatch(_xml(_write(scatter(xs))))![0]!;
+      expect(
+        xAxis(const <Object?>[1.5, 2, 4]),
+        contains(
+          '</c:majorGridlines><c:numFmt formatCode="General" '
+          'sourceLinked="1"/><c:majorTickMark val="none"/>',
+        ),
+      );
+      expect(
+        xAxis(<Object?>[DateTime.utc(2026), DateTime.utc(2026, 2), null]),
+        contains('<c:numFmt formatCode="General" sourceLinked="1"/>'),
+      );
+      expect(xAxis(const <Object?>['A', 'B', 'C']), isNot(contains('numFmt')));
+    });
+
     test('a scatter series of kind line is an ArgumentError', () {
       expect(
         () => _write(
@@ -2071,12 +2090,14 @@ void main() {
       expect(secondaryCategory, startsWith('<c:catAx><c:axId val="200002"/>'));
       expect(secondaryCategory, contains('<c:delete val="1"/>'));
       expect(secondaryCategory, contains('<c:axPos val="b"/>'));
-      expect(secondaryCategory, contains('<c:majorTickMark val="out"/>'));
+      // As Excel's own combination writes it (the owner's E3 chart 1): no
+      // tick mark and no c:crosses.
+      expect(secondaryCategory, contains('<c:majorTickMark val="none"/>'));
       expect(secondaryCategory, isNot(contains('c:spPr')));
       expect(secondaryCategory, isNot(contains('c:txPr')));
       expect(
         secondaryCategory,
-        contains('<c:crossAx val="200003"/><c:crosses val="autoZero"/>'),
+        contains('<c:crossAx val="200003"/><c:auto val="1"/>'),
       );
       // The primary pair crosses as Excel's chart 5: no c:crosses.
       expect(element(xml, 'catAx'), isNot(contains('c:crosses')));

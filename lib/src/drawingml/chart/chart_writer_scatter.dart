@@ -9,12 +9,14 @@
 /// The template is the owner's `chart_reference_j4.xlsx` (Excel for Mac
 /// 16.114.4, `packages/jet_charts_core/docs/excel-checks.md`, "J4 values"),
 /// chart 4: Excel's scatter chart of markers only, whose x values were text
-/// (`c:xVal/c:strRef`). Numeric x values (`c:xVal/c:numRef`, as the gallery
-/// workbook writes them) are an estimate, not checked in Excel: E3 decides.
-/// So are a scatter chart's data labels (written as a line chart's without
-/// the leader line extension), its point colours (as a line's markers), an x
-/// axis' number format (written only when the category axis has one) and
-/// axis lines in a theme without a `scatterAxisLine` (drawn as any chart's).
+/// (`c:xVal/c:strRef`), and the owner's `chart_reference_e3.xlsx` (E3),
+/// chart 2: numeric x values (`c:xVal/c:numRef`), whose x axis Excel gives
+/// a linked `General` format (an x axis of text has none unless the
+/// category axis has a format code). A scatter chart's data labels (written
+/// as a line chart's without the leader line extension), its point colours
+/// (as a line's markers) and axis lines in a theme without a
+/// `scatterAxisLine` (drawn as any chart's) are estimates, not checked in
+/// Excel.
 part of 'chart_writer.dart';
 
 /// The width of a scatter series' line Excel writes, though it has no fill,
@@ -82,6 +84,13 @@ extension _ScatterWriting on _ChartWriter {
     w.end();
   }
 
+  /// Whether a series' x values are numbers or dates, not text: Excel
+  /// then writes `c:xVal/c:numRef` and a linked format on the x axis.
+  bool get _numericX => chart.series.any(
+    (ChartSeries s) =>
+        _SeriesWriting._categoryType(s.categories.values) != _CategoryType.text,
+  );
+
   /// The `c:valAx` of the x values ([x], at the bottom, of the category axis'
   /// options and the ids' `categoryAxis`) or of the y values (at the left, of
   /// the value axis' options and `valueAxis`): the scaling, grid lines, the
@@ -101,7 +110,10 @@ extension _ScatterWriting on _ChartWriter {
       x ? 'b' : 'l',
       value: true,
       vertical: !x,
-      numberFormat: !x,
+      // Excel gives an x axis of numbers a linked format and one of text
+      // none (`chart_reference_e3.xlsx`, chart 2; `chart_reference_j4.xlsx`,
+      // chart 4).
+      numberFormat: !x || _numericX,
     );
     if (axis.visible) {
       final ChartColor? line = theme.scatterAxisLine;

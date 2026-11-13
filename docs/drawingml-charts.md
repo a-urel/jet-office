@@ -42,11 +42,12 @@ Kinds written: column, bar, line and area, each clustered, stacked or percent
 stacked (C1), with smooth lines (J4's field), on one category axis and one
 value axis; and since C2 pie, donut, scatter of markers only, combination of
 column, line and area groups, and a secondary value axis for a column, line,
-area or combination chart. Estimates, not yet checked in Excel (the owner's C2 check,
-which holds the E3 steps, decides): the secondary axis, numeric scatter x
-values, an area group in a combination, a scatter chart's data labels
-without the `c15` leader line extension, a scatter or date x axis without
-`c:numFmt`, and a doughnut's data label position (none written).
+area or combination chart. The secondary axis and numeric scatter x values
+are as Excel writes them (E3, the owner's `chart_reference_e3.xlsx`,
+2026-11-14). Estimates, not yet checked in Excel: an area group in a
+combination, a scatter chart's data labels without the `c15` leader line
+extension, a date x axis' number format, and a doughnut's data label
+position (none written).
 
 ## Rules
 
@@ -110,19 +111,20 @@ Each rule has the test that holds it.
   its categories as `c:xVal` and its values as `c:yVal`, and `c:smooth 0`
   (a series' `smooth` draws nothing in a scatter chart and is not written);
   the x axis at the bottom with the ids' `categoryAxis` and the category
-  axis' options (grid lines when `categoryAxis.gridLines`; no `c:numFmt`
-  unless it has a format code), the y axis at the left with `valueAxis`,
+  axis' options (grid lines when `categoryAxis.gridLines`; a linked
+  `General` `c:numFmt` when the x values are numbers or dates, none for text
+  x values unless the axis has a format code), the y axis at the left with `valueAxis`,
   both with no tick marks, labels `nextTo` (though a value is negative),
   the theme's `scatterAxisLine`, crossing at `autoZero` and `midCat`. The
   reader takes a series' colour from its marker's fill. Excel's chart took
   text x values (`c:strRef`); numeric x values (`c:xVal/c:numRef`, as
-  `_writeCategories` writes numbers and dates) are an estimate, not checked
-  in Excel: E3 decides (`packages/jet_charts_core/docs/excel-checks.md`,
-  "E3"; its steps are part of the owner's C2 check).
-  So are a scatter chart's data labels (a line's, without the `c15` leader
+  `_writeCategories` writes numbers and dates) are Excel's chart 2 of the
+  owner's `chart_reference_e3.xlsx` (E3), whose x axis has a linked
+  `General` `c:numFmt`. Estimates, not checked in Excel: a scatter chart's
+  data labels (a line's, without the `c15` leader
   line extension the Open XML SDK refuses there), point colours (a line's
-  markers, the line without fill), an x axis' number format and axis lines
-  in a theme without `scatterAxisLine` (any chart's). Chart 4 reads typed
+  markers, the line without fill), a date x axis' number format and axis
+  lines in a theme without `scatterAxisLine` (any chart's). Chart 4 reads typed
   and writes its part again. `excel_reference_j4_test.dart`,
   `chart_writer_test.dart` and `chart_reader_test.dart` ("scatter charts").
 - **Combination charts and the secondary value axis are written and read
@@ -142,13 +144,14 @@ Each rule has the test that holds it.
   `secondaryValueAxis`, written after the primary pair: a `c:valAx` on the
   right (`axPos r`, `crosses max`, the options of `secondaryValueAxis`, no
   grid lines unless it asks, `0%` only when a percent stacked group is on
-  it), then a deleted `c:catAx` (`delete 1`, ticks `out`). A
+  it), then a deleted `c:catAx` (`delete 1`, no tick marks, no
+  `c:crosses`), as Excel's own combination writes them (E3). A
   `secondaryValueAxis` with no series on it, and a binding when every series
   is secondary, write no second pair (the layout shows none); a bar, pie,
-  donut or scatter chart's secondary axis is an `ArgumentError`. **E3
-  decides:** the secondary axes and a combination with an area group are
-  estimates from the gallery workbook (`excel_gallery.dart`, which the owner
-  opened in Excel in E2), not checked in Excel. The reader reads several
+  donut or scatter chart's secondary axis is an `ArgumentError`. A
+  combination with an area group is an estimate from the gallery workbook
+  (`excel_gallery.dart`, which the owner opened in Excel in E2), not checked
+  in Excel. The reader reads several
   bar, line and area groups whose axis ids name one or two pairs, the first
   group's the primary one: groups of one kind as that kind, of several as a
   combination whose series carry their group's kind (so a series of no kind
@@ -495,8 +498,8 @@ Each item C1 left open for C2, and where it went:
 ## Open for both
 
 - The other kinds (decision 0017 orders them later; the writer refuses them
-  until then). The secondary axis, a numeric scatter and a combination's area
-  group wait for the owner's C2 check (its E3 steps).
+  until then). A combination's area group is not checked in Excel (E3 had
+  none).
 - Excel's palette past 54 series: the colour cycle starts again after its
   nine variations, which `colors1.xml` does not state (unconfirmed). Series 7
   and 8 match a new chart made in Excel (the owner's check, 2026-11-09).

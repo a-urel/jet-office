@@ -1536,8 +1536,10 @@ The owner's result, filled by the owner only (and a row per file under
 
 | 2026-11-13 | not given | Step 4: the data the charts follow | Pass | `Veri!B2` and `Veri!C58` changed: `column_clustered` and `combo_column_line` followed; the series read `Veri`. `combo_column_line` shows no title after the fix. |
 
-Steps 5 to 7 (the edited files and their undone twins, E3, the title typed
-in Excel) are open.
+| 2026-11-13 | not given | Step 5: `c2_edited` and the undone twins | Pass | Every edit as expected; the `_undone` files look as the owner's. |
+| 2026-11-14 | 16.0300 (`AppVersion`) | Step 6: E3 | Pass, with differences | The owner's `chart_reference_e3.xlsx`, its two charts made by Excel's menus, compared as XML with the writer's (`packages/jet_charts_core/docs/excel-checks.md`, "E3"): the secondary value axis and the numeric scatter as the writer writes them. Two differences, not visible, now Excel's: the deleted secondary category axis has no tick marks and no `c:crosses`; a scatter's numeric x axis has a linked `General` `c:numFmt`. |
+
+Step 7 (the title typed in Excel) is open.
 
 ## Open issues
 

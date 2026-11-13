@@ -104,9 +104,10 @@ final class DrawingChartWritten {
 /// ids' `secondaryCategoryAxis` and `secondaryValueAxis`: a deleted category
 /// axis and a value axis on the right, of `chart.secondaryValueAxis` (or
 /// `ChartAxis()`), crossing at the maximum. A `secondaryValueAxis` with no
-/// series on it is not written. The secondary axes and an area group in a
-/// combination are estimates from the gallery workbook, not checked in Excel
-/// (E3 decides).
+/// series on it is not written. The secondary axes are as Excel writes them
+/// (the owner's `chart_reference_e3.xlsx`, E3); an area group in a
+/// combination is an estimate from the gallery workbook, not checked in
+/// Excel.
 ///
 /// Throws an [ArgumentError] when the chart's kind is not column, bar, line,
 /// area, pie, donut, scatter or combination, when it has centre text (a part
@@ -634,8 +635,9 @@ final class _ChartWriter {
   }
 
   /// The category axis, or the [secondary] one: Excel's deleted axis at
-  /// the bottom that the secondary value axis crosses (an estimate from the
-  /// gallery workbook, not checked in Excel: E3 decides).
+  /// the bottom that the secondary value axis crosses, without tick marks or
+  /// `c:crosses`, as Excel's own combination writes it (the owner's
+  /// `chart_reference_e3.xlsx`, chart 1).
   void _writeCategoryAxis({bool secondary = false}) {
     final ChartAxis axis = secondary
         ? const ChartAxis(visible: false)
@@ -657,7 +659,9 @@ final class _ChartWriter {
       (secondary ? space.ids.secondaryValueAxis : space.ids.valueAxis)
           .toString(),
     );
-    _writeCrosses(secondary ? 'autoZero' : null);
+    if (!secondary) {
+      _writeCrosses(null);
+    }
     _value('c:auto', '1');
     _value('c:lblAlgn', 'ctr');
     _value('c:lblOffset', '100');
@@ -667,8 +671,8 @@ final class _ChartWriter {
 
   /// The value axis, or the [secondary] one: on the right, crossing its
   /// category axis at the maximum, grid lines only when
-  /// `chart.secondaryValueAxis` asks (an estimate from the gallery workbook,
-  /// not checked in Excel: E3 decides).
+  /// `chart.secondaryValueAxis` asks, as Excel's own combination writes it
+  /// (the owner's `chart_reference_e3.xlsx`, chart 1).
   void _writeValueAxis({bool secondary = false}) {
     final ChartAxis axis = secondary
         ? chart.secondaryValueAxis ?? const ChartAxis()
@@ -710,11 +714,11 @@ final class _ChartWriter {
   ///
   /// [vertical] turns the title (by default, the value axis' except in a bar
   /// chart, where the category axis'); without [numberFormat] the axis has
-  /// no `c:numFmt` unless it has a format code (a scatter chart's x axis). A
-  /// [secondary] axis' format is `0%` only when a percent stacked group is
-  /// on it, and a secondary category axis ticks outside with its labels
-  /// next to it, as the gallery workbook writes it (an estimate: E3
-  /// decides).
+  /// no `c:numFmt` unless it has a format code (a scatter chart's x axis of
+  /// text). A [secondary] axis' format is `0%` only when a percent stacked
+  /// group is on it, and a secondary category axis has no tick marks and
+  /// its labels next to it (the owner's `chart_reference_e3.xlsx`, chart
+  /// 1).
   void _writeAxisStart(
     ChartAxis axis,
     int id,
@@ -774,7 +778,7 @@ final class _ChartWriter {
     // (`chart_reference.xlsx`, charts 10 to 12).
     _value(
       'c:majorTickMark',
-      !value && (secondary || chart.kind == ChartKind.area) ? 'out' : 'none',
+      !value && !secondary && chart.kind == ChartKind.area ? 'out' : 'none',
     );
     _value('c:minorTickMark', 'none');
     _value(

@@ -21,7 +21,7 @@ const int _cases = 100;
 /// compares it, which proves a seed gives the same cases in a browser. A
 /// changed `m3_*`, `m4_*`, `c1_kinds` or `c2_kinds` fixture changes it, and
 /// so did C2's adding `c2_kinds` and aiming the mutations at chart parts.
-const int _casesDigest = 213320251;
+const int _casesDigest = 994508872;
 
 /// Adler-32 of [data], in arithmetic that stays exact in a browser.
 int _adler32(List<int> data) {

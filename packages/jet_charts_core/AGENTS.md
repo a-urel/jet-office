@@ -9,10 +9,9 @@ The record of the design is the repository root's
 
 Milestones J1, J2, J3 and J4 are done; J4's Excel checks (E1, the owner's
 `chart_reference_j4.xlsx`, and E2, the J4 gallery side by side) are recorded
-and followed (`docs/excel-checks.md`, "J4 values"; the secondary axis and a
-numeric scatter wait for E3, `TALIMATLAR_E3.md` of the root's
-`test/fixtures/owner/charts/`, whose steps are part of the root's C2 owner
-check, `TALIMATLAR_C2.md` there), and the owner's full axis oracle run is
+and followed (`docs/excel-checks.md`, "J4 values"; E3, the secondary axis
+and a numeric scatter, is recorded there too, from the root's C2 owner
+check), and the owner's full axis oracle run is
 recorded (`docs/axis-scaling.md`, "Findings"). The package exports the model,
 the theme, the drawing primitives and the text measurer (J1), the value scale
 (`autoValueScale`), the layout (`layoutChart`) and the overlap check

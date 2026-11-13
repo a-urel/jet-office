@@ -134,8 +134,8 @@ names the value that now holds Excel's.
 | Pie label leader line, 0.75 pt, `A6A6A6` (`ChartTheme.leaderLine`) | Differed (E1, chart 7): Excel's `c:leaderLines` is 0.75 pt `tx1` at `lumMod` 0.35 and `lumOff` 0.65 (`A6A6A6`), where the app used the axis line (`D9D9D9`); now Excel's (the Office theme's `leaderLine`; the gallery workbook writes the same `c:leaderLines`) | E1 |
 | Pie and donut labels inside a slice at 0.6 of the radius (pie) or mid-ring (donut) | Differed in colour (E1, chart 7): Excel's labels are `bestFit`, 9 pt, `tx1` at `lumMod` 0.75 and `lumOff` 0.25 (`404040`) with no fill, as the gallery workbook writes, where the app drew a label inside a dark slice white; now Excel's in the Office theme (`ChartTheme.sliceLabelContrast` off; an app's theme keeps the contrast rule by default, `parity.md`). Where `bestFit` puts each label is Excel's own and not in the file | This library's choice |
 | Scatter: both axes automatic by `autoValueScale`, grid lines and an axis line on both axes, markers only | Markers only confirmed (E1, chart 4: `c:scatterStyle lineMarker`, the series line `a:noFill` 3 pt, circle markers of 5). Differed: Excel draws grid lines on both axes and both axis lines (`tx1` at `lumMod` 0.25, `lumOff` 0.75, `BFBFBF`, 0.75 pt), both crossing `midCat`, the x axis without `c:numFmt`; now Excel's: the Office theme's `scatterAxisLine` draws both lines, the galleries set `categoryAxis.gridLines` (the model's default stays off), and the gallery workbook writes both axes so. The axis ranges stay this library's rule, pending a numeric scatter | The J2 rule (verified for value axes) used on the x axis; Excel's scatter styles are not read |
-| Scatter: a text x value numbers the points 1, 2, 3 | Confirmed by the screenshot: chart 4 took the text `A2:A5` as its x values and draws the points at 1, 2, 3, 4 (x axis 0 to 4.5 by 0.5, vertical grid lines shown). A scatter of numeric x values: kontrol edilmedi (not checked; E3, in the owner's C2 check: `scatter_basic` of `c2_dashboard.xlsx` and `Ölçümler` of `c2_kinds.xlsx`) | This library's choice, from the usual behaviour of Excel with text x values |
-| Secondary value axis on the right, no grid lines | Kontrol edilmedi (not checked): chart 5 of the E1 file has no secondary axis; E3 (below) redoes it, in the owner's C2 check (`combo_column_line` of `c2_dashboard.xlsx`, `Gelir ve marj` of `c2_kinds.xlsx`) | This library's choice |
+| Scatter: a text x value numbers the points 1, 2, 3 | Confirmed by the screenshot: chart 4 took the text `A2:A5` as its x values and draws the points at 1, 2, 3, 4 (x axis 0 to 4.5 by 0.5, vertical grid lines shown). A scatter of numeric x values: confirmed by E3 (below): two `c:valAx` crossing `midCat`, grid lines on both, `c:xVal/c:numRef`; Excel gives the x axis a linked `General` `c:numFmt` (now written for numbers and dates) | This library's choice, from the usual behaviour of Excel with text x values |
+| Secondary value axis on the right, no grid lines | Confirmed by E3 (below): `c:axPos r`, no grid lines, no tick marks, `c:crosses max`, `c:crossBetween between`, labels `nextTo`, crossing a deleted `c:catAx`. Differed: Excel's deleted category axis has no tick marks and no `c:crosses`, where the writer wrote `out` and `autoZero` (not visible); now Excel's | This library's choice |
 | Combination: columns, areas, then lines; primary before secondary within a kind | Confirmed for columns then a line (E1, chart 5). Differed: its columns have `c:gapWidth 150` and no overlap (not the clustered chart's 219 and -27), its line is 2.25 pt with no marker (`c:symbol none`), where the app drew markers and the clustered gap; now Excel's (`ChartTheme.combinationGapWidthPercent` 150 with overlap 0, `combinationLineMarkers` off; the gallery workbook writes gap 150 and no overlap) | This library's choice, from Excel's usual group order |
 | Sparkline line 0.75 pt (`sparklineWidth`); area fill under it; a lone value a disc of diameter `2 * sparklineWidth` | Estimate, not checked in Excel; pending E1/E2 | This library's choice; Excel's sparkline is a cell feature (`x14`) |
 | Smooth line: Catmull-Rom spline | The file confirms only `c:smooth 1` on the series (E1, chart 6; the line keeps its circle markers of 5 and 2.25 pt); the screenshot shows the curve passing through each marker with its lowest point at Güney's marker (95); whether it overshoots a peak is covered by the About box there: kontrol edilmedi (not checked) | Excel's smoothing is not documented |
@@ -163,14 +163,36 @@ The owner's screenshot of the sheet (2026-11-10, charts 1 to 4 and part of
 6) also shows the automatic titles: the series name (`Satış`) on a chart of
 one series, `Grafik Başlığı` on a chart of two.
 
-### E3: what is left (later, owner's)
+### E3: the secondary axis and a numeric scatter
 
-J4 closes without it. Two values stay kontrol edilmedi (not checked): the
-secondary value axis and a scatter chart of numeric x values. The owner's
-steps for a later check are `test/fixtures/owner/charts/TALIMATLAR_E3.md`;
-they are part of the root's C2 owner check (`TALIMATLAR_C2.md` there, its
-result in the root's `docs/excel-checks.md`, "C2"), which also opens the
-files the DrawingML writer writes for both.
+J4 closed without it. The owner made the two charts of
+`test/fixtures/owner/charts/TALIMATLAR_E3.md` by Excel's menus (2026-11-14,
+Excel for Mac, `AppVersion` 16.0300; the file has Excel's `style` and
+`colors` parts) on `Veri!A1:C5` and saved `chart_reference_e3.xlsx`, not
+committed. Its XML was compared with what the DrawingML writer writes for
+the same data (`combo_column_line` and `scatter_basic` of the C2 check's
+`c2_dashboard.xlsx`):
+
+- Chart 1, a column and line combination with the line on the secondary
+  axis: the secondary value axis is the writer's (`r`, no tick marks, no
+  grid lines, `crosses max`, `crossBetween between`, `nextTo`). Differed,
+  not visible: Excel's deleted secondary `c:catAx` has `majorTickMark none`
+  and no `c:crosses`, where the writer wrote `out` and `autoZero`; now
+  Excel's. The primary category axis' labels are `nextTo` in Excel and `low`
+  in the writer when a value is negative: kept, the owner's J3 and J4 rule.
+  Excel's automatic title `Grafik Başlığı` is Excel's default; the writer
+  deletes the title unless asked.
+- Chart 2, a scatter of numeric x values (`B2:B5` against `C2:C5`, no
+  headers): both axes `c:valAx` crossing `midCat`, grid lines on both,
+  markers only, `c:xVal/c:numRef`, as the writer writes it. Differed, not
+  visible: Excel gives the x axis `<c:numFmt formatCode="General"
+  sourceLinked="1"/>`, which the writer left out; now written when the x
+  values are numbers or dates (text x values keep none, chart 4 of
+  `chart_reference_j4.xlsx`). One series without a name has no legend in
+  Excel, the known rule.
+
+Not exercised by E3, still not checked: an area group in a combination, a
+scatter chart's data labels, a doughnut's label position.
 
 ### E2: the J4 gallery
 

@@ -9,7 +9,8 @@ and `docs/decisions/0016-jet-charts-flutter-in-the-workspace.md`.
 
 Milestones J3 and J4 are done; J4's Excel checks E1 and E2 are recorded and
 followed (`packages/jet_charts_core/docs/excel-checks.md`, "J4 values"; the
-secondary axis and a numeric scatter wait for E3). The package
+E3, the secondary axis and a numeric scatter, recorded there too). The
+package
 exports `FlutterTextMeasurer`,
 `paintChartPrimitives`, `ChartLayoutPainter`, and the widget `JetChart` with
 `JetChartStateBuilder`, `JetChartErrorBuilder` and `JetChartStrings` (its

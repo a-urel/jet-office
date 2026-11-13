@@ -44,8 +44,8 @@ its own `AGENTS.md`; milestone J3 is done (the Flutter renderer, ids, hit
 testing, tooltip and summary), and J4 is done (the kinds pie, donut,
 sparkline, scatter, combination, the secondary axis, smooth lines), its Excel
 checks E1 and E2 recorded and their values followed
-(`packages/jet_charts_core/docs/excel-checks.md`, "J4 values"; the secondary
-axis and a numeric scatter wait for E3, whose steps are part of the owner's C2
+(`packages/jet_charts_core/docs/excel-checks.md`, "J4 values"; E3, the
+secondary axis and a numeric scatter, recorded there in the owner's C2
 check), and this package depends on it from C1.
 Milestone C1 (the DrawingML chart layer, `docs/drawingml-charts.md`) is done
 (the owner's Excel check is in `docs/excel-checks.md`); every chart of the

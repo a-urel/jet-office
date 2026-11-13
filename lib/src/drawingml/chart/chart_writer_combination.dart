@@ -11,14 +11,15 @@
 /// 16.114.4, `packages/jet_charts_core/docs/excel-checks.md`, "J4 values"),
 /// chart 5: Excel's "Clustered Column - Line" on one axis, a `c:barChart` of
 /// gap 150 without overlap, then a `c:lineChart` whose line is 2.25 pt
-/// without markers, and no `c:crosses` on either axis. Two things are
-/// estimates from the gallery workbook
-/// (`packages/jet_charts_flutter/example/lib/src/excel_gallery.dart`, which
-/// the owner opened in Excel in E2), not checked in Excel: E3 decides. The
-/// secondary axes (a deleted `c:catAx` and a `c:valAx` on the right that
-/// crosses it at the maximum, without grid lines unless the axis asks), and
-/// a combination with an area group (written first, as the layout draws
-/// areas under columns).
+/// without markers, and no `c:crosses` on either axis. The secondary axes
+/// (a deleted `c:catAx` without tick marks or `c:crosses`, and a `c:valAx`
+/// on the right that crosses it at the maximum, without grid lines unless
+/// the axis asks) are Excel's own combination of the owner's
+/// `chart_reference_e3.xlsx` (E3), chart 1. A combination with an area group
+/// (written first, as the layout draws areas under columns) is an estimate
+/// from the gallery workbook
+/// (`packages/jet_charts_flutter/example/lib/src/excel_gallery.dart`), not
+/// checked in Excel.
 part of 'chart_writer.dart';
 
 /// Whether a chart of [kind] may have a secondary value axis: column, line,
