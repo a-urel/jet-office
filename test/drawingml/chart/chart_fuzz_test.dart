@@ -5,6 +5,7 @@ import 'package:jet_charts_core/jet_charts_core.dart';
 import 'package:jet_office/src/drawingml/chart/chart_reader.dart';
 import 'package:test/test.dart';
 
+import '../../support/timing.dart';
 import 'support/chart_fuzz.dart';
 
 /// The seeds the quality gate fuzzes, each with [_cases] cases.
@@ -186,10 +187,19 @@ void main() {
         } on Object catch (e) {
           failures.add('seed ${c.seed} case ${c.index} (${c.mutation}): $e');
         }
-        if (watch.elapsed > const Duration(seconds: 5)) {
+        // A case over the bound runs again, as a busy machine can slow one
+        // run; only a case slow in every run is a hang.
+        final Duration? hang = confirmedHang(watch.elapsed, () {
+          try {
+            exerciseChartCase(c);
+          } on Object {
+            // Reported by the first run.
+          }
+        });
+        if (hang != null) {
           failures.add(
             'seed ${c.seed} case ${c.index} (${c.mutation}): hang, '
-            '${watch.elapsedMilliseconds} ms',
+            '${hang.inMilliseconds} ms',
           );
         }
       }

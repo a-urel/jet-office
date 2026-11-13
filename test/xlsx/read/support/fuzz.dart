@@ -16,7 +16,9 @@
 /// The 5 s hang bound is checked after a case returns, so a real infinite
 /// loop is not reported as a hang: the test's 4-minute timeout stops it and
 /// names no case. `tool/fuzz_reader.dart --verbose` writes each case to
-/// stderr before it runs, so the last line names it.
+/// stderr before it runs, so the last line names it. In the gate's fuzz
+/// tests a case over the bound runs up to twice more and is a hang only
+/// when every run is over it (`confirmedHang`, `test/support/timing.dart`).
 library;
 
 import 'dart:typed_data';
