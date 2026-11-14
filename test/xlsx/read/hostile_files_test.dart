@@ -2,8 +2,12 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:jet_office/jet_office.dart';
+import 'package:jet_office/src/xlsx/read/shared_strings_reader.dart'
+    show sharedStringsListHook;
+import 'package:jet_office/src/xlsx/read/sheet_reader.dart' show rowWalkHook;
 import 'package:test/test.dart';
 
+import '../../support/counting_list.dart';
 import '../../support/read_xlsx.dart';
 import 'support/workbook_builder.dart';
 import 'support/zip_builder.dart';
@@ -586,11 +590,12 @@ void main() {
 
   group('costs nothing', () {
     test('a huge dimension with 3 cells reads 3 cells', () {
-      // The reader never trusts `dimension`: a sheet costs what it holds. A
-      // reader that allocated by the dimension's 17 billion cells would run
-      // out of memory, and one that walked them would take hours, while this
-      // read takes a few milliseconds. The bound is that generous, so a busy
-      // machine cannot fail it.
+      // The reader never trusts `dimension`: a sheet costs what it holds.
+      // Counts the rows the walk handles and the cells it places instead of
+      // timing the read, so a busy machine cannot fail it: one row and three
+      // cells. A reader that padded the rows or the sheet out to the
+      // dimension's 17 billion cells would pass the budget at once, and one
+      // that allocated by it would run out of memory.
       final Uint8List zip = buildWorkbook(<String, String?>{
         'S':
             '<worksheet xmlns="$mainNs"><dimension ref="A1:XFD1048576"/>'
@@ -598,11 +603,17 @@ void main() {
             '<c r="B1"><v>2</v></c><c r="C1"><v>3</v></c></row>'
             '</sheetData></worksheet>',
       });
-      final Stopwatch watch = Stopwatch()..start();
+      const int budget = 100;
+      int steps = 0;
+      rowWalkHook = () {
+        if (++steps > budget) fail('more than $budget rows and cells walked');
+      };
+      addTearDown(() => rowWalkHook = null);
       final XlsxReader reader = XlsxReader(zip);
       final List<XlsxReadRow> rows = reader.rowsAt(0).toList();
+      rowWalkHook = null;
       expect(rows.single.cells, hasLength(3));
-      expect(watch.elapsed, lessThan(const Duration(seconds: 10)));
+      expect(steps, 4);
     });
 
     test('the last row and the last column read', () {
@@ -617,10 +628,11 @@ void main() {
     });
 
     test('an sst claiming 4294967295 strings reads its one string', () {
-      // The reader never trusts `count` or `uniqueCount`: a reader that
-      // allocated by them would run out of memory, and one that walked them
-      // would take hours, while this read takes a few milliseconds. The
-      // bound is that generous, so a busy machine cannot fail it.
+      // The reader never trusts `count` or `uniqueCount`. Counts the strings
+      // written to the table instead of timing the read, so a busy machine
+      // cannot fail it: the one string the part holds. A reader that
+      // reserved the claimed count would pass the budget at once, and one
+      // that allocated it would run out of memory.
       final Uint8List zip = buildWorkbook(
         <String, String?>{
           'S': worksheet('<row r="1"><c r="A1" t="s"><v>0</v></c></row>'),
@@ -629,12 +641,22 @@ void main() {
             '<sst xmlns="$mainNs" count="4294967295" '
             'uniqueCount="4294967295"><si><t>a</t></si></sst>',
       );
-      final Stopwatch watch = Stopwatch()..start();
+      final List<CountingList<String>> tables = <CountingList<String>>[];
+      sharedStringsListHook = () {
+        final CountingList<String> table = CountingList<String>(budget: 100);
+        tables.add(table);
+        return table;
+      };
+      addTearDown(() => sharedStringsListHook = null);
       final XlsxReader reader = XlsxReader(zip);
       final XlsxReadRow row = reader.rowsAt(0).single;
+      sharedStringsListHook = null;
       expect(row.cells.single.value, 'a');
       expect(reader.warnings, isEmpty);
-      expect(watch.elapsed, lessThan(const Duration(seconds: 10)));
+      expect(tables, isNotEmpty);
+      for (final CountingList<String> table in tables) {
+        expect(table.writes, 1);
+      }
     });
 
     test('100,000 empty rows yield no rows', () {

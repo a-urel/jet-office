@@ -312,12 +312,14 @@ The file is untrusted (decision 0007). Three tests hold that:
   formula groups the comparisons of their range tree
   (`formula_groups_test.dart`). Their relative timing bounds failed under
   load. A size that lies low is checked by the bounded stream's own
-  message, refused at the declared size (`hostile_files_test.dart`). Three
-  keep a 10 s bound, far from both sides: a huge `dimension` and an sst
-  claiming 4294967295 strings read in milliseconds (allocating by either
-  count runs out of memory), and a 100,000-digit run is decided in about
-  70 ms (without the pattern's anchor it takes minutes;
-  `cell_decoder_test.dart`).
+  message, refused at the declared size (`hostile_files_test.dart`). A huge
+  `dimension` counts the rows the walk handles and the cells it places
+  (`rowWalkHook`), and an sst claiming 4294967295 strings the strings
+  written to its table (`sharedStringsListHook`), so neither may cost more
+  than the part holds. A 100,000-digit run counts the code units the number
+  matcher reads (`matchNumberText`, which replaced a pattern that could not
+  count its work; `cell_decoder_test.dart` checks that it holds what the
+  pattern held).
 
 The spec's "a 1 KB file that claims 1 GB" is a declared size, refused before
 anything is inflated. "Inflates to 1 GB" cannot fit in 1 KB: deflate's ratio

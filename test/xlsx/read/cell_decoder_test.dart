@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:jet_core/jet_core.dart' show FormatKind;
 import 'package:jet_office/jet_office.dart' show XlsxErrorValue;
 import 'package:jet_office/src/opc/opaque_xml.dart';
@@ -440,20 +442,94 @@ void main() {
     });
 
     test('a very long digit run is decided in linear time', () {
-      // Decided in about 70 ms on the VM and 2 ms in Chrome. The number
-      // pattern is anchored at the start; without the anchor, a digit run
-      // that does not match is tried from each of its 100,000 positions,
-      // and one such string takes about 45 s on the VM. The bound is that
-      // generous, so a busy machine cannot fail it. No timeout: a test
-      // that does not await cannot be stopped by one.
-      final String digits = '1' * 100000;
-      final Stopwatch watch = Stopwatch()..start();
-      for (final String tail in <String>['x', '.5x', 'e5x', 'e']) {
-        expect(_num('$digits$tail'), XlsxWarningCode.numberInvalid);
+      // Counts the code units the number matcher reads instead of timing
+      // it, so a busy machine cannot fail it. The matcher reads each unit
+      // about once; one that tried the text from each of its positions, as
+      // the pattern did without its anchor (one such string took about 45 s
+      // on the VM), reads about n * n / 2. The count fails past its budget,
+      // so such a matcher fails at once. At least n reads proves the
+      // decoder goes through the matcher.
+      const int n = 100000;
+      final String digits = '1' * n;
+      for (final String tail in <String>['', 'x', '.5x', 'e5x', 'e']) {
+        final String text = '$digits$tail';
+        int steps = 0;
+        final int budget = 4 * text.length;
+        final String? read = normalizeNumber(
+          text,
+          onStep: () {
+            if (++steps > budget) fail('more than $budget steps on $tail');
+          },
+        );
+        expect(read, tail.isEmpty ? digits : isNull, reason: tail);
+        expect(steps, greaterThanOrEqualTo(n), reason: tail);
+        expect(
+          _num(text),
+          tail.isEmpty ? digits : XlsxWarningCode.numberInvalid,
+          reason: tail,
+        );
       }
-      expect(_num(digits), digits);
-      watch.stop();
-      expect(watch.elapsed, lessThan(const Duration(seconds: 10)));
+    });
+
+    test('the number matcher holds what the pattern it replaced held', () {
+      // The matcher replaced this pattern, which could not count its work;
+      // it must give the same groups for every text.
+      final RegExp pattern = RegExp(
+        r'^([+-]?)(?:(\d+)(?:\.(\d*))?|\.(\d+))(?:[eE]([+-]?)(\d+))?$',
+      );
+      void same(String text) {
+        final RegExpMatch? m = pattern.firstMatch(text);
+        final NumberText? got = matchNumberText(text);
+        if (m == null) {
+          expect(got, isNull, reason: text);
+          return;
+        }
+        expect(got, isNotNull, reason: text);
+        expect(
+          <String?>[
+            got!.sign,
+            got.whole,
+            got.fraction,
+            got.afterPoint,
+            got.exponentSign,
+            got.exponent,
+          ],
+          <String?>[for (int g = 1; g <= 6; g++) m.group(g)],
+          reason: text,
+        );
+      }
+
+      const List<String> alphabet = <String>[
+        '0',
+        '1',
+        '.',
+        '+',
+        '-',
+        'e',
+        'E',
+        'x',
+        ' ',
+        '٣',
+      ];
+      List<String> texts = <String>[''];
+      same('');
+      for (int length = 1; length <= 5; length++) {
+        texts = <String>[
+          for (final String t in texts)
+            for (final String c in alphabet) '$t$c',
+        ];
+        texts.forEach(same);
+      }
+      final Random random = Random(1);
+      for (int i = 0; i < 20000; i++) {
+        final int length = 6 + random.nextInt(10);
+        same(
+          <String>[
+            for (int j = 0; j < length; j++)
+              alphabet[random.nextInt(alphabet.length)],
+          ].join(),
+        );
+      }
     });
 
     test('a missing value is numberInvalid', () {

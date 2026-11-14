@@ -1,10 +1,9 @@
-import 'dart:collection';
-
 import 'package:jet_office/jet_office.dart';
 import 'package:jet_office/src/xlsx/cell_ref.dart';
 import 'package:jet_office/src/xlsx/read/sheet_reader.dart' show RowCells;
 import 'package:test/test.dart';
 
+import '../../support/counting_list.dart';
 import 'support/workbook_builder.dart';
 
 /// A reader over one sheet `S` holding [rows].
@@ -334,8 +333,8 @@ void main() {
     // lists count every element write; an insert in place shifts on average
     // half of the row, about 134 million writes per list for 16,384 cells.
     const int n = XlsxLimits.maxColumns;
-    final _CountingList<int> columns = _CountingList<int>();
-    final _CountingList<String> cells = _CountingList<String>();
+    final CountingList<int> columns = CountingList<int>();
+    final CountingList<String> cells = CountingList<String>();
     final RowCells<String> row = RowCells<String>(
       columns: columns,
       cells: cells,
@@ -831,39 +830,4 @@ void main() {
       'XlsxReadSheet(0, S, visible)',
     );
   });
-}
-
-/// A growable list that counts the writes of its elements: each element
-/// added, set or moved (an insert moves the elements after it).
-final class _CountingList<E> extends ListBase<E> {
-  final List<E> _elements = <E>[];
-
-  /// The elements written so far.
-  int writes = 0;
-
-  @override
-  int get length => _elements.length;
-
-  @override
-  set length(int value) {
-    if (value > _elements.length) {
-      throw UnsupportedError('Grows only by add.');
-    }
-    _elements.length = value;
-  }
-
-  @override
-  E operator [](int index) => _elements[index];
-
-  @override
-  void operator []=(int index, E value) {
-    writes++;
-    _elements[index] = value;
-  }
-
-  @override
-  void add(E element) {
-    writes++;
-    _elements.add(element);
-  }
 }

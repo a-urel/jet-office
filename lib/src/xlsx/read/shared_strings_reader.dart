@@ -97,6 +97,14 @@ SharedStringsRead readSharedStringsRaw(
   });
 }
 
+/// Gives the list a read of the shared strings fills, when set; `null` in
+/// normal use, for a new growable list. Not exported.
+///
+/// A test passes a list that counts its writes, to prove that a table costs
+/// the strings it holds, whatever its `count` and `uniqueCount` claim,
+/// without timing it.
+List<String> Function()? sharedStringsListHook;
+
 bool _isSi(XmlPullReader reader) =>
     reader.eventType == XmlEventType.startElement &&
     reader.depth == 2 &&
@@ -122,7 +130,7 @@ _Walked _walk(
   bool keep = false,
 }) {
   final XmlPullReader reader = package.openXml(part);
-  final List<String> strings = <String>[];
+  final List<String> strings = sharedStringsListHook?.call() ?? <String>[];
   final Set<int> rich = <int>{};
   XmlRoot? root;
   final List<OpaqueXml> trailing = <OpaqueXml>[];

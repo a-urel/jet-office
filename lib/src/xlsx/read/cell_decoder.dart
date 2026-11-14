@@ -36,11 +36,6 @@ export '../raw_cell.dart' show FormulaType;
 /// The largest exponent (in magnitude) a number may carry.
 const int _maxExponent = 400;
 
-/// Optional sign, mantissa, optional exponent.
-final RegExp _number = RegExp(
-  r'^([+-]?)(?:(\d+)(?:\.(\d*))?|\.(\d+))(?:[eE]([+-]?)(\d+))?$',
-);
-
 final RegExp _leadingZeros = RegExp('^0+');
 
 final RegExp _leadingZerosBeforeDigit = RegExp(r'^0+(?=\d)');
@@ -336,15 +331,18 @@ DecodedCell decodeCell({
 ///   negative number keeps it.
 /// * An exponent whose magnitude exceeds 400 gives `null`, so the result is
 ///   never longer than the mantissa plus 400 characters.
-String? normalizeNumber(String text) {
-  final RegExpMatch? m = _number.firstMatch(text.trim());
+///
+/// [onStep], when given, is called for each code unit the match reads (see
+/// [matchNumberText]).
+String? normalizeNumber(String text, {void Function()? onStep}) {
+  final NumberText? m = matchNumberText(text.trim(), onStep: onStep);
   if (m == null) {
     return null;
   }
-  final String sign = m.group(1) == '-' ? '-' : '';
-  final String intPart = m.group(2) ?? '';
-  final String fraction = m.group(3) ?? m.group(4) ?? '';
-  final String? exponentDigits = m.group(6);
+  final String sign = m.sign == '-' ? '-' : '';
+  final String intPart = m.whole ?? '';
+  final String fraction = m.fraction ?? m.afterPoint ?? '';
+  final String? exponentDigits = m.exponent;
 
   String whole = intPart.isEmpty ? '0' : intPart;
   String fractional = fraction;
@@ -357,7 +355,7 @@ String? normalizeNumber(String text) {
     if (magnitude > _maxExponent) {
       return null;
     }
-    final int exponent = m.group(5) == '-' ? -magnitude : magnitude;
+    final int exponent = m.exponentSign == '-' ? -magnitude : magnitude;
     final String all = intPart + fraction;
     final int point = intPart.length + exponent;
     if (point <= 0) {
@@ -375,4 +373,95 @@ String? normalizeNumber(String text) {
   final String digits = fractional.isEmpty ? whole : '$whole.$fractional';
   final bool isZero = !digits.contains(_nonZeroDigit);
   return isZero ? digits : '$sign$digits';
+}
+
+/// The parts of a number written as
+/// `[+-]?(\d+(\.\d*)?|\.\d+)([eE][+-]?\d+)?`, the whole of a text, each as
+/// that pattern's group would hold it: `null` for a part the text does not
+/// have, `''` for a sign or fraction that is there and empty.
+typedef NumberText = ({
+  String sign,
+  String? whole,
+  String? fraction,
+  String? afterPoint,
+  String? exponentSign,
+  String? exponent,
+});
+
+/// The parts of [text] when the whole of it is a number written as
+/// [NumberText] says (ASCII digits only), else `null`.
+///
+/// Read in one pass from the start, each code unit at most twice, so a long
+/// text that is not a number is decided in linear time. [onStep], when
+/// given, is called for each code unit read: a test counts the calls to
+/// prove that, without timing it.
+NumberText? matchNumberText(String text, {void Function()? onStep}) {
+  final int n = text.length;
+  int i = 0;
+  int at(int k) {
+    onStep?.call();
+    return k < n ? text.codeUnitAt(k) : -1;
+  }
+
+  bool isDigit(int c) => c >= 0x30 && c <= 0x39;
+  bool isSign(int c) => c == 0x2B || c == 0x2D;
+
+  int c = at(i);
+  String sign = '';
+  if (isSign(c)) {
+    sign = text[i];
+    c = at(++i);
+  }
+  String? whole;
+  String? fraction;
+  String? afterPoint;
+  final int wholeStart = i;
+  while (isDigit(c)) {
+    c = at(++i);
+  }
+  if (i > wholeStart) {
+    whole = text.substring(wholeStart, i);
+    if (c == 0x2E) {
+      final int start = ++i;
+      c = at(i);
+      while (isDigit(c)) {
+        c = at(++i);
+      }
+      fraction = text.substring(start, i);
+    }
+  } else {
+    if (c != 0x2E) return null;
+    final int start = ++i;
+    c = at(i);
+    while (isDigit(c)) {
+      c = at(++i);
+    }
+    if (i == start) return null;
+    afterPoint = text.substring(start, i);
+  }
+  String? exponentSign;
+  String? exponent;
+  if (c == 0x65 || c == 0x45) {
+    c = at(++i);
+    exponentSign = '';
+    if (isSign(c)) {
+      exponentSign = text[i];
+      c = at(++i);
+    }
+    final int start = i;
+    while (isDigit(c)) {
+      c = at(++i);
+    }
+    if (i == start) return null;
+    exponent = text.substring(start, i);
+  }
+  if (i < n) return null;
+  return (
+    sign: sign,
+    whole: whole,
+    fraction: fraction,
+    afterPoint: afterPoint,
+    exponentSign: exponentSign,
+    exponent: exponent,
+  );
 }

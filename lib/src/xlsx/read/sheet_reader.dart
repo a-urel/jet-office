@@ -338,6 +338,13 @@ final class _CellScratch {
   }
 }
 
+/// Called for each row the walk handles and each cell it places while set;
+/// `null` in normal use. Not exported.
+///
+/// A test counts the calls to prove that reading a sheet costs what it
+/// holds, whatever its `dimension` claims, without timing it.
+void Function()? rowWalkHook;
+
 /// The cells of one row as they are read, put in column order at the end.
 ///
 /// Cells usually come in column order and are appended. The first one that
@@ -365,8 +372,9 @@ final class RowCells<C> {
   Map<int, int>? _positions;
 
   /// Adds [cell] at [column]; returns `false` when it replaced a cell
-  /// already there (the last one wins).
+  /// already there (the last one wins). Calls [rowWalkHook] when it is set.
   bool place(int column, C cell) {
+    rowWalkHook?.call();
     Map<int, int>? positions = _positions;
     if (positions == null) {
       if (columns.isEmpty || columns.last < column) {
@@ -522,6 +530,7 @@ final class _RowWalk<C, R> {
     bool pendingInvalid = position.invalid;
     _onRow?.call(index);
 
+    rowWalkHook?.call();
     final RowCells<C> cells = RowCells<C>();
     List<OpaqueXml> rowChildren = const <OpaqueXml>[];
     if (!_reader.isEmptyElement) {
