@@ -3,6 +3,8 @@ import 'dart:typed_data';
 
 import 'package:jet_office/jet_office.dart';
 import 'package:jet_office/src/opc/change_log.dart';
+import 'package:jet_office/src/xlsx/model/xlsx_sheet.dart'
+    show setRelationshipReadHook;
 import 'package:jet_office/src/xlsx/model/xlsx_workbook.dart';
 import 'package:test/test.dart';
 
@@ -168,8 +170,15 @@ void main() {
       expect(sheet.hyperlinkAt(0, 0)?.text, 'new');
     });
 
-    test('a sheet of very many links reads in linear time', testOn: 'vm', () {
-      const int count = 300000;
+    test('a sheet of very many links reads in linear time', () {
+      // Counts the relationships read instead of timing the getter, so a busy
+      // machine cannot fail it. The getter reads the sheet's relationships
+      // once into a map of targets by id; before 5b3df96 each link searched
+      // them one by one, reading about count * count / 2 of them. The hook
+      // fails past its budget, so such a join fails at once instead of
+      // running for minutes.
+      const int count = 20000;
+      const int budget = 4 * count;
       final StringBuffer links = StringBuffer('<hyperlinks>');
       final StringBuffer rels = StringBuffer();
       for (int i = 0; i < count; i++) {
@@ -181,24 +190,19 @@ void main() {
         links.toString(),
         rels: rels.toString(),
       ).sheets.single;
-      // Loads the sheet, so that the getter alone is timed: reading the
-      // entries and joining them. A test's timeout cannot stop code that
-      // never yields, so the bound is checked after. Nothing the join does
-      // can be counted from outside, so the bound is wide on both sides, and
-      // the count is large because a quadratic join's time grows with its
-      // square: the getter took 0.67 to 0.69 s on a busy machine, while a
-      // join that searches the targets one by one for each link, the
-      // regression this guards, took 5 min 13 s. 20 s is about 30 times the
-      // slowest correct run and a fifteenth of the broken one.
-      sheet.merges;
-      final Stopwatch watch = Stopwatch()..start();
+      int reads = 0;
+      setRelationshipReadHook(sheet, () {
+        if (++reads > budget) {
+          fail('more than $budget relationships read for $count links');
+        }
+      });
       final List<({XlsxRange range, XlsxHyperlink link})> read =
           sheet.hyperlinks;
-      watch.stop();
-      printOnFailure('${watch.elapsedMilliseconds} ms');
-      expect(watch.elapsed, lessThan(const Duration(seconds: 20)));
+      setRelationshipReadHook(sheet, null);
       expect(read, hasLength(count));
       expect(read.last.link.address, 'https://a.example/${count - 1}');
+      // The hook is live: the getter read every relationship once.
+      expect(reads, count);
     });
 
     test('of two relationships with one id the first gives the address', () {

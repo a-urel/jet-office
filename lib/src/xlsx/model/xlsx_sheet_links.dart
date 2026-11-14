@@ -43,6 +43,10 @@ mixin _SheetLinks {
   void _warn(XlsxWarningCode code, String? cell, {String? detail});
   XlsxReadCell? cellAt(int row, int column);
 
+  /// Called for each relationship read from [_readRelationships], when set
+  /// ([setRelationshipReadHook]); `null` in normal use.
+  void Function()? _relationshipReadHook;
+
   /// The links of the sheet, with the cells they cover, in file order, as
   /// the sheet writer's `hyperlinks` writes them.
   ///
@@ -273,13 +277,23 @@ mixin _SheetLinks {
 
   /// The sheet part's relationships, in file order. Throws an
   /// [XlsxReadException] when they cannot be read.
-  List<OpcRelationship> _readRelationships() {
+  ///
+  /// Each relationship read from what this returns calls
+  /// [_relationshipReadHook], when it is set, so a test sees how often a
+  /// read walks them.
+  Iterable<OpcRelationship> _readRelationships() {
     final PackageReader reader = _host.reader;
     final String partName = _partName!;
-    return reader.guardXml(
+    final List<OpcRelationship> read = reader.guardXml(
       partName.substring(1),
       () => reader.package.relationshipsOf(partName),
     );
+    final void Function()? onRead = _relationshipReadHook;
+    if (onRead == null) return read;
+    return read.map((OpcRelationship r) {
+      onRead();
+      return r;
+    });
   }
 
   /// The targets of the sheet's hyperlink relationships by id, the first of
@@ -349,6 +363,15 @@ String? _linkId(GroupItem<LinkEntry> item) =>
 /// link of the sheet uses it, as `removeHyperlink` removes one. On every
 /// edit an internal `location` goes through the rewriter, on the sheet.
 /// Only the changed attributes are rewritten.
+/// Sets [hook] to be called once for each relationship of [sheet]'s part
+/// that a read of its links walks, or clears it for `null`. Not exported.
+///
+/// A test counts the calls to prove that reading the links walks the
+/// relationships once, not once per link, without timing it.
+void setRelationshipReadHook(XlsxSheet sheet, void Function()? hook) {
+  sheet._relationshipReadHook = hook;
+}
+
 final class _LinkHolder implements ReferenceHolder {
   _LinkHolder(this._sheet, this._part);
 

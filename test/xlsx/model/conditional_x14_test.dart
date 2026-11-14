@@ -1021,9 +1021,17 @@ void main() {
     });
 
     group('a file of very many rules joins in linear time', () {
-      const int count = 300000;
+      // Counts the reads of a format's ranges and a rule's priority instead of
+      // timing the getter, so a busy machine cannot fail it. Before 4886f5a
+      // each rule of the ext searched the formats for its ranges, and each
+      // format's rules for its place by priority, reading about
+      // count * count / 2 of them; the join now finds a format by a key of
+      // its ranges and places its rules in one pass. The hook fails past its
+      // budget, so such a join fails at once instead of running for minutes.
+      const int count = 20000;
+      const int budget = 4 * count;
       void joins(String name, String Function(int i) sqref, int formats) {
-        test(name, testOn: 'vm', () {
+        test(name, () {
           final StringBuffer elements = StringBuffer();
           for (int i = 0; i < count; i++) {
             elements.write(_element(sqref(i), _iconRule('{$i}', i + 1)));
@@ -1031,23 +1039,18 @@ void main() {
           final XlsxSheet sheet = _open(
             '<extLst>${_ext(elements.toString())}</extLst>',
           ).sheets.single;
-          // Loads the sheet, so that the getter alone is timed: reading the
-          // entries and joining them. A test's timeout cannot stop code that
-          // never yields, so the bound is checked after. Nothing the join
-          // does can be counted from outside, so the bound is wide on both
-          // sides, and the count is large because a quadratic join's time
-          // grows with its square: the getter took 0.65 to 0.96 s on a busy
-          // machine, while a join that scans the formats for each rule (the
-          // regression of the first test) ran past 10 minutes and one that
-          // places each rule by a scan of its format's rules (the second's)
-          // took 9 min 36 s. 20 s is 20 times the slowest correct run and
-          // under a twentieth of a broken one.
+          // Loads the sheet, so that the getter alone is counted.
           sheet.dataValidations;
-          final Stopwatch watch = Stopwatch()..start();
+          int reads = 0;
+          x14JoinReadHook = () {
+            if (++reads > budget) {
+              fail('more than $budget ranges and priorities read');
+            }
+          };
+          addTearDown(() => x14JoinReadHook = null);
           final List<XlsxConditionalFormat> read = sheet.conditionalFormats;
-          watch.stop();
-          printOnFailure('${watch.elapsedMilliseconds} ms');
-          expect(watch.elapsed, lessThan(const Duration(seconds: 20)));
+          x14JoinReadHook = null;
+          printOnFailure('$reads ranges and priorities read');
           expect(read, hasLength(formats));
           expect(
             read.fold<int>(

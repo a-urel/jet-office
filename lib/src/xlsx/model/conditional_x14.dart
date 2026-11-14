@@ -835,8 +835,12 @@ final class JoinedRule {
   /// The Excel 2010 rules: those the 2007 rule names, or the rule itself.
   final List<X14Rule> halves;
 
-  /// The rule's priority, or `null` for none.
-  int? get priority => entry?.priority ?? halves.first.priority;
+  /// The rule's priority, or `null` for none. A read calls
+  /// [x14JoinReadHook] when it is set.
+  int? get priority {
+    x14JoinReadHook?.call();
+    return entry?.priority ?? halves.first.priority;
+  }
 
   /// The value of the rule, given [plain], the 2007 rule with its style.
   XlsxConditionalRule value(XlsxConditionalRule? plain) {
@@ -853,13 +857,19 @@ final class JoinedRule {
 /// One format of the sheet, as `conditionalFormats` lists it.
 final class JoinedFormat {
   /// A format on [ranges], of the 2007 element [item] if it has one.
-  JoinedFormat(this.item, this.ranges, this.rules);
+  JoinedFormat(this.item, List<XlsxRange> ranges, this.rules)
+    : _ranges = ranges;
 
   /// The 2007 element, or `null` for a format of the `extLst` alone.
   final GroupItem<CfEntry>? item;
 
-  /// The cells.
-  final List<XlsxRange> ranges;
+  /// The cells. A read calls [x14JoinReadHook] when it is set.
+  List<XlsxRange> get ranges {
+    x14JoinReadHook?.call();
+    return _ranges;
+  }
+
+  final List<XlsxRange> _ranges;
 
   /// The rules, in the order the format lists them.
   final List<JoinedRule> rules;
@@ -902,6 +912,15 @@ final class JoinedFormat {
     _pending.clear();
   }
 }
+
+/// Called for each read of a [JoinedFormat]'s `ranges` and a [JoinedRule]'s
+/// `priority` while set; `null` in normal use. Not exported.
+///
+/// A search for a rule's format must read the formats' ranges, and a search
+/// for its place among a format's rules their priorities, so a test counts
+/// the calls to prove that [joinConditionalFormats] finds each by a key and
+/// places the rules in one pass, without timing it.
+void Function()? x14JoinReadHook;
 
 /// The formats of [block] and [x14], as the library comment says. [links]
 /// holds the ids the 2007 elements nobody lists name: their rules are halves

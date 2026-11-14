@@ -198,7 +198,7 @@ mixin _SheetNotes {
   WorksheetPart _editablePart(String what);
   Set<String> get _featureReported;
   void _warn(XlsxWarningCode code, String? cell, {String? detail});
-  List<OpcRelationship> _readRelationships();
+  Iterable<OpcRelationship> _readRelationships();
 
   /// The notes read on first use; `null` until then.
   _NotesRead? _notesRead;
