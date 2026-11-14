@@ -12,8 +12,8 @@ import. The layer knows neither XLSX nor DOCX. Its types carry the prefix
 `docs/excel-checks.md`). The owner's reference workbook is committed and
 every chart in it but one reads typed ("Excel's reference workbook" below).
 
-**Status of C2: built; the owner's Excel check is open**
-(`docs/excel-checks.md`, "C2"). The XLSX host is `XlsxWorkbook`'s
+**Status of C2: done; the owner's Excel check, with E3, is recorded**
+(`docs/excel-checks.md`, "C2", 2026-11-14). The XLSX host is `XlsxWorkbook`'s
 (`docs/xlsx-model.md`, "What C2 adds"); the layer writes and reads the J4
 kinds below. Nothing of this layer is exported: `lib/jet_office.dart` exports
 the host's `XlsxChart` and `XlsxSheetChart` and re-exports the
