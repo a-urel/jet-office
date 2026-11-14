@@ -178,20 +178,12 @@ MergeField? parseMergeField(String instruction) {
   );
 }
 
-// Word's 12-hour marker, in any case (`am/pm`), is read from a Word picture
-// here, not from an Excel format code, which only jet_core's parser scans
-// (test/architecture/format_code_test.dart); the literals are written so that
-// guard does not see a scanner of codes.
-final RegExp _meridiem = RegExp(r'[aA][mM]/[pP][mM]');
-const String _excelMeridiem =
-    'AM'
-    '/PM';
-
 /// Word's date picture as an Excel code, or `null` when it has a part Excel
 /// cannot express (an unknown letter, a 12-hour `h` without `am/pm`).
 String? _datePicture(String p) {
   final StringBuffer out = StringBuffer();
-  final bool ampm = _meridiem.hasMatch(p);
+  final String lower = p.toLowerCase();
+  final bool ampm = lower.contains('am/pm');
   bool hours24 = false;
   bool hours12 = false;
   int i = 0;
@@ -207,8 +199,8 @@ String? _datePicture(String p) {
       i = end < 0 ? p.length : end + 1;
       continue;
     }
-    if (_meridiem.matchAsPrefix(p, i) != null) {
-      out.write(_excelMeridiem);
+    if (lower.startsWith('am/pm', i)) {
+      out.write('AM/PM');
       i += 5;
       continue;
     }
@@ -271,7 +263,7 @@ String? _numberPicture(String p) {
       i = end < 0 ? p.length : end + 1;
       continue;
     }
-    if ('0#,.%; '.contains(ch)) {
+    if ('0#,.; '.contains(ch)) {
       out.write(ch);
       i++;
       continue;

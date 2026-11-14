@@ -57,7 +57,7 @@ void main() {
       );
       expect(
         parseMergeField(' MERGEFIELD T \\# "0.0%" ')!.numberFormat,
-        '0.0%',
+        '0.0"%"',
       );
       expect(
         parseMergeField(" MERGEFIELD T \\# \"0 'TL'\" ")!.numberFormat,
@@ -71,6 +71,10 @@ void main() {
         parseMergeField(' MERGEFIELD T \\# "0;(0)" ')!.numberFormat,
         '0;"("0")"',
       );
+    });
+
+    test('a percent sign is a literal, not Excel percent', () {
+      expect(parseMergeField(' MERGEFIELD T \\# "0%" ')!.numberFormat, '0"%"');
     });
 
     test('an untranslatable number picture is unsupported', () {

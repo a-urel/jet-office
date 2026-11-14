@@ -17,9 +17,16 @@ final RegExp _marker = RegExp(
   caseSensitive: false,
 );
 
+/// Files allowed to hold the markers: `merge_field.dart` translates Word date
+/// pictures into an Excel code and writes the AM/PM marker into that code. It
+/// scans no Excel format code, so decisions 0008 and 0012's single scanner
+/// stays in jet_core.
+const Set<String> _allowed = <String>{'lib/src/docx/template/merge_field.dart'};
+
 List<String> _offenders(Iterable<LibSource> sources) => <String>[
   for (final LibSource source in sources)
-    if (_marker.hasMatch(source.code)) source.path,
+    if (!_allowed.contains(source.path) && _marker.hasMatch(source.code))
+      source.path,
 ];
 
 void main() {
@@ -39,6 +46,14 @@ void main() {
       ),
       LibSource('lib/src/xlsx/other.dart', '''if (w == 'AM/PM') {}'''),
       LibSource(
+        'lib/src/docx/template/merge_field.dart',
+        '''const String _amPm = 'AM/PM';''',
+      ),
+      LibSource(
+        'lib/src/docx/template/values.dart',
+        '''const String _amPm = 'AM/PM';''',
+      ),
+      LibSource(
         'lib/src/xlsx/fine.dart',
         '''// shows AM/PM and A/P\n'''
             '''const String s = 'h:mm AM/PM';\n'''
@@ -49,6 +64,7 @@ void main() {
       'lib/src/xlsx/format_kind.dart',
       'lib/src/xlsx/number_format.dart',
       'lib/src/xlsx/other.dart',
+      'lib/src/docx/template/values.dart',
     ]);
   });
 }

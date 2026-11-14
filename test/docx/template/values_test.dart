@@ -36,6 +36,10 @@ void main() {
       expect(valueText(42, null, en).text, '42');
     });
 
+    test('a percent literal shows as text', () {
+      expect(valueText(5, '0"%"', en).text, '5%');
+    });
+
     test('a format code reaches text through the formatter', () {
       expect(valueText('Acme', '"Sn. "@', en).text, 'Sn. Acme');
     });
@@ -106,6 +110,16 @@ void main() {
       );
     });
 
+    test('a shared structure is checked once, not once per path', () {
+      Object level = <Object?>[1];
+      for (int i = 0; i < 40; i++) {
+        level = <Object?>[level, level];
+      }
+      final Stopwatch watch = Stopwatch()..start();
+      checkTemplateData(<String, Object?>{'a': level});
+      expect(watch.elapsedMilliseconds, lessThan(1000));
+    });
+
     test('throws for a non-String key', () {
       expect(
         () => checkTemplateData(<String, Object?>{
@@ -145,6 +159,20 @@ void main() {
       expect(lookupPath(data, <String>['a', 'c']), isA<Missing>());
       expect(lookupPath(data, <String>['x']), isA<Missing>());
       expect(lookupPath(data, <String>['t', 'b']), isA<Missing>());
+    });
+
+    test('lookups read any Map with String keys checkTemplateData takes', () {
+      final Map<String, Object?> data = <String, Object?>{
+        'a': <dynamic, dynamic>{'b': 1},
+        'o': <Object, Object?>{'k': null},
+      };
+      checkTemplateData(data);
+      expect((lookupPath(data, <String>['a', 'b']) as Found).value, 1);
+      expect(lookupPath(data, <String>['o', 'k']), isA<Found>());
+      expect(lookupPath(data, <String>['o', 'z']), isA<Missing>());
+      final Map<Object, Object?> root = <Object, Object?>{'x': 5};
+      expect((lookupKey(root, 'x') as Found).value, 5);
+      expect(lookupKey(root, 'y'), isA<Missing>());
     });
 
     test('lookupKey reads one key', () {

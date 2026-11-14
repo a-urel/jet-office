@@ -19,10 +19,10 @@ import '../warnings.dart';
 /// keys of such values. A `Map` or `List` that contains itself, directly or
 /// through others, is refused; one shared twice side by side is fine.
 void checkTemplateData(Map<String, Object?> data) {
-  _check(data, 'data', Set<Object>.identity());
+  _check(data, 'data', Set<Object>.identity(), Set<Object>.identity());
 }
 
-void _check(Object? value, String path, Set<Object> onPath) {
+void _check(Object? value, String path, Set<Object> onPath, Set<Object> done) {
   if (value == null ||
       value is String ||
       value is num ||
@@ -34,6 +34,7 @@ void _check(Object? value, String path, Set<Object> onPath) {
     return;
   }
   if (value is Map || value is List) {
+    if (done.contains(value)) return;
     if (!onPath.add(value)) {
       throw ArgumentError.value(
         path,
@@ -52,15 +53,16 @@ void _check(Object? value, String path, Set<Object> onPath) {
                 '(${key.runtimeType}).',
           );
         }
-        _check(entry.value, "$path['$key']", onPath);
+        _check(entry.value, "$path['$key']", onPath, done);
       }
     } else {
       final List<Object?> list = value as List<Object?>;
       for (int i = 0; i < list.length; i++) {
-        _check(list[i], '$path[$i]', onPath);
+        _check(list[i], '$path[$i]', onPath, done);
       }
     }
     onPath.remove(value);
+    done.add(value);
     return;
   }
   throw ArgumentError.value(
@@ -94,10 +96,10 @@ final class Missing extends Lookup {
 
 /// Looks [path] up in [scope], walking `Map` segments; a segment that meets
 /// a value that is not a map, or a key the map lacks, is [Missing].
-Lookup lookupPath(Map<String, Object?> scope, List<String> path) {
+Lookup lookupPath(Map<Object?, Object?> scope, List<String> path) {
   Object? current = scope;
   for (final String segment in path) {
-    if (current is! Map<String, Object?>) return const Missing();
+    if (current is! Map) return const Missing();
     if (!current.containsKey(segment)) return const Missing();
     current = current[segment];
   }
@@ -106,7 +108,7 @@ Lookup lookupPath(Map<String, Object?> scope, List<String> path) {
 
 /// Looks the one key [key] up in [scope], as a `MERGEFIELD` does: the key
 /// is the whole name, dots included.
-Lookup lookupKey(Map<String, Object?> scope, String key) =>
+Lookup lookupKey(Map<Object?, Object?> scope, String key) =>
     scope.containsKey(key) ? Found(scope[key]) : const Missing();
 
 /// A value as text, or the reason it is not text.
