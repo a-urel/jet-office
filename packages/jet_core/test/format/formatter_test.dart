@@ -1,5 +1,7 @@
 import 'package:jet_core/jet_core.dart';
 import 'package:jet_core/src/format/formatter.dart' show formatterCacheSize;
+import 'package:jet_core/src/format/value_renderer.dart'
+    show renderedTextLength;
 import 'package:test/test.dart';
 
 final NumberFormatter formatter = NumberFormatter();
@@ -530,15 +532,25 @@ void main() {
     });
 
     test('@ repeated on long text is refused before it is built', () {
+      // Building the 25.5 million characters and refusing them afterwards
+      // takes about 8 ms on the VM, so a time bound cannot tell it from a
+      // refusal. The characters the text renderer builds can: the General
+      // fallback builds the 100,000 of the value, no more.
       final String long = 'x' * 100000;
-      final Stopwatch watch = Stopwatch()..start();
+      final int before = renderedTextLength();
       final FormattedValue result = formatter.format(
         long,
         numberFormat: '@' * 255,
       );
-      expect(watch.elapsedMilliseconds, lessThan(1000));
+      expect(renderedTextLength() - before, lessThanOrEqualTo(long.length));
       expect(result.text, long);
       expect(result.warning, FormatWarning.invalidCode);
+    });
+
+    test('the text renderer counts the characters it builds', () {
+      final int before = renderedTextLength();
+      formatter.format('abc', numberFormat: '@"-"@');
+      expect(renderedTextLength() - before, 7);
     });
 
     test('literals and a second @ count toward the bound', () {

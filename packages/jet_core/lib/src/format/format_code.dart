@@ -30,6 +30,17 @@ import 'excel_number.dart';
 /// the length of [code].
 ParsedFormat parseFormatCode(String code) => _Parser(code).parse();
 
+/// How many steps [parseFormatCode] takes on [code]: the code units its
+/// scan reads.
+///
+/// A step is each position the scan stops at, each unit a search for a
+/// closing `"` or `]` reads, and each letter of a word it compares. A
+/// linear scan takes at most about 20 steps per code unit.
+///
+/// For tests: `lib/jet_core.dart` does not export this, so it is not public
+/// API.
+int formatCodeScanSteps(String code) => (_Parser(code)..parse())._steps;
+
 /// The longest code Excel accepts.
 const int _maxCodeLength = 255;
 
@@ -629,6 +640,9 @@ final class _Parser {
   int _localeTags = 0;
   String? _invalid;
 
+  /// The code units the scan has read; see [formatCodeScanSteps].
+  int _steps = 0;
+
   ParsedFormat parse() {
     if (code.length > _maxCodeLength) {
       _invalid = 'longer than $_maxCodeLength characters';
@@ -636,12 +650,14 @@ final class _Parser {
     var i = 0;
     var truncated = false;
     while (i < code.length && !truncated) {
+      _steps++;
       final String c = code[i];
       if (c == ';') {
         _endSection();
         i++;
       } else if (c == '"') {
         final int close = code.indexOf('"', i + 1);
+        _steps += _searched(i, close);
         if (close < 0) {
           truncated = true;
         } else {
@@ -665,6 +681,7 @@ final class _Parser {
         }
       } else if (c == '[') {
         final int close = code.indexOf(']', i + 1);
+        _steps += _searched(i, close);
         if (close < 0) {
           truncated = true;
         } else {
@@ -751,10 +768,17 @@ final class _Parser {
     return code[i];
   }
 
+  /// How many code units a search from [i] for a closing character reads:
+  /// up to [close] when found, else to the end.
+  int _searched(int i, int close) =>
+      close < 0 ? code.length - i - 1 : close - i;
+
   /// Whether [code] holds the lowercase [word] at [i], in any case.
-  bool _isWordAt(int i, String word) =>
-      i + word.length <= code.length &&
-      code.substring(i, i + word.length).toLowerCase() == word;
+  bool _isWordAt(int i, String word) {
+    if (i + word.length > code.length) return false;
+    _steps += word.length;
+    return code.substring(i, i + word.length).toLowerCase() == word;
+  }
 
   /// Whether the `/` at [i] follows a digit placeholder and precedes a
   /// placeholder or a digit.

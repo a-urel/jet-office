@@ -218,6 +218,16 @@ int addedTextLength(FormatSection section, int length) {
   return ats > 1 ? added + (ats - 1) * length : added;
 }
 
+/// The characters [_renderText] has built in this isolate.
+int _renderedTextLength = 0;
+
+/// How many characters the text renderer has built in this isolate, so a
+/// test can prove a text was refused before it was built.
+///
+/// For tests: `lib/jet_core.dart` does not export this, so it is not public
+/// API.
+int renderedTextLength() => _renderedTextLength;
+
 /// Lays [text] out in the text [section]: `@` shows [text], literals,
 /// padding and fill are kept, and adjacent text is merged.
 List<FormatPart> _renderText(FormatSection section, String text) {
@@ -225,6 +235,7 @@ List<FormatPart> _renderText(FormatSection section, String text) {
   final StringBuffer run = StringBuffer();
   void flush() {
     if (run.isEmpty) return;
+    _renderedTextLength += run.length;
     parts.add(FormatText(run.toString()));
     run.clear();
   }

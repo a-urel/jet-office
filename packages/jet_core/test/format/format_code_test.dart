@@ -842,16 +842,23 @@ void main() {
       expect(parseFormatCode('0' * 255).invalidReason, isNull);
     });
 
+    // The scan's steps (formatCodeScanSteps) count the code units it reads:
+    // one per position it stops at, each unit a search for a closing `"` or
+    // `]` passes, and the letters of each word it compares. A linear scan
+    // reads at most 16 units per position (the words General, AM/PM and A/P)
+    // plus each unit once more in a search, so 20 per character is a bound
+    // no machine's load changes.
     test('255 [ parse in linear time', () {
-      final Stopwatch watch = Stopwatch()..start();
-      final ParsedFormat parsed = parseFormatCode('[' * 255);
-      watch.stop();
+      final String code = '[' * 255;
+      final ParsedFormat parsed = parseFormatCode(code);
       expect(parsed.truncated, isTrue);
-      expect(watch.elapsedMilliseconds, lessThan(50));
-    }, testOn: 'vm');
+      // The first unterminated `[` ends the scan after one search of 254
+      // units: 255 steps. Taking it as a literal and scanning on searches
+      // from every `[` to the end, about 32,000 steps.
+      expect(formatCodeScanSteps(code), lessThanOrEqualTo(20 * code.length));
+    });
 
-    test('long hostile codes parse quickly', () {
-      final Stopwatch watch = Stopwatch()..start();
+    test('long hostile codes parse in linear time', () {
       for (final String code in <String>[
         '[' * 100000,
         '[]' * 50000,
@@ -859,11 +866,25 @@ void main() {
         'general' * 20000,
         ';' * 100000,
       ]) {
-        parseFormatCode(code);
+        expect(
+          formatCodeScanSteps(code),
+          lessThanOrEqualTo(20 * code.length),
+          reason: code.substring(0, 8),
+        );
       }
-      watch.stop();
-      expect(watch.elapsedMilliseconds, lessThan(2000));
-    }, testOn: 'vm');
+    });
+
+    test('the scan counts its steps by what it reads', () {
+      expect(formatCodeScanSteps(''), 0);
+      // One stop; the words do not fit in one character.
+      expect(formatCodeScanSteps('0'), 1);
+      // One stop and a search that reads the `]`.
+      expect(formatCodeScanSteps('[]'), 2);
+      // One stop and the seven letters of General.
+      expect(formatCodeScanSteps('general'), 8);
+      // One stop and a search over the 254 units after it.
+      expect(formatCodeScanSteps('[' * 255), 255);
+    });
   });
 
   group('values', () {
