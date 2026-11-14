@@ -1182,14 +1182,33 @@ What it shows:
   (1,466 ms then, 1,681 ms now); the 2026-11-11 run already showed it, so it
   is not new.
 - **The model's load and save and the DOCX phases are 30 to 66% slower** than
-  their records of 2026-11-02 to 2026-11-08, on the VM and in Chrome alike.
-  Each file run alone the same day gives the same (model: load 2,072 ms, save
-  1,730 ms; DOCX table: build 10,000 rows 436 ms, open 1,300 ms; DOCX
-  document: load 2,546 ms, save 1,283 ms), so the shared process is not the
-  cause. The Dart SDK moved from 3.13.7 to 3.14.0 since, but the model
-  generation, recorded on 3.13.7, did not slow, so the SDK alone does not
-  explain it either; the work merged since those dates (W3 to W6, C1 and C2,
-  D3 to D6, T1) may. Not investigated yet.
+  their records of 2026-11-02 to 2026-11-08, on the VM and in Chrome alike,
+  and each file run alone the same day gives the same. The code is not the
+  cause, but for one phase. Each recording commit, checked out again and run
+  with its own benchmark file on the day's SDK (3.14.0), three runs each
+  (VM, ms):
+
+  | Phase | Recorded | Old code, 3.14.0 | Today's code |
+  |---|---|---|---|
+  | Model: load the sheet (`5cbf3f6`) | 1,524 | 2,357 to 2,385 | 2,063 to 2,088 |
+  | Model: save, loaded and edited (`5cbf3f6`) | 1,285 | 1,773 to 1,809 | 1,757 to 1,816 |
+  | DOCX document: load the body (`8df66e6`) | 1,995 | 2,758 to 2,946 | 2,690 to 3,020 |
+  | DOCX document: save (`8df66e6`) | 932 | 1,337 to 1,425 | 1,285 to 1,421 |
+  | DOCX table: open 10,000 rows (`663059e`) | 936 | 1,250 to 1,265 | 1,278 to 1,300 |
+  | DOCX table: save 10,000 rows (`663059e`) | 566 | 640 to 657 | 689 to 743 |
+  | DOCX table: build 10,000 rows (`663059e`) | 262 | 287 to 328 | 388 to 425 |
+
+  The old code is as slow as today's on the day's SDK and machine (the
+  model's load slower), so the change since the records lies there: the SDK
+  moved from 3.13.7 to 3.14.0, and the machine's state is not controlled.
+  Only the table's build is slower by code, about 25%, and its save about
+  10%. A bisection of the build (its benchmark file of `663059e` kept fixed)
+  found `8168c3d`, "Read complex fields" (2026-11-07): since then every
+  inline added to a paragraph goes through `isInField` and a `visitInlines`
+  closure, to resolve its styles and record where it reads in, where a
+  `DocxRun` test did before; with 120,000 cells that is about 60 to 80 ms.
+  Today's table benchmark also builds 2,500 rows before the 10,000, so its
+  10,000-row figures are not measured as the record's were.
 - **Links and rules stay quadratic**, as recorded: 20,000 rules take 460 s on
   the VM and 828 s in Chrome.
 - The stores' estimates are unchanged to the byte (33,868,294 and 23,736,316
