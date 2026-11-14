@@ -407,15 +407,23 @@ void main() {
   });
 
   group('hostile', () {
-    test('a size that lies low is corruptZip and costs under 2 s', () {
+    test('a size that lies low is corruptZip, refused at that size', () {
+      // The entry inflates to over 1 MiB and declares 1000 bytes. The
+      // bounded stream refuses the first byte past the declared size, with
+      // this message; inflating the whole entry and comparing its length
+      // afterwards would give another ("inflates to N bytes but declares").
+      // Checked by the message, not timed, so a busy machine cannot fail it.
       final Uint8List zip = patchDeclaredSize(
         buildZip(_entries(rows: '<!--${'a' * (1024 * 1024)}-->')),
         'xl/worksheets/sheet1.xml',
         1000,
       );
-      final Stopwatch watch = Stopwatch()..start();
-      _expectRefused(zip, XlsxReadFailure.corruptZip, model: _Model.open);
-      expect(watch.elapsedMilliseconds, lessThan(2000));
+      _expectRefused(
+        zip,
+        XlsxReadFailure.corruptZip,
+        model: _Model.open,
+        limit: 'inflates to more than the 1000 bytes it declares',
+      );
     });
 
     test('a CRC mismatch is corruptZip', () {
@@ -577,7 +585,12 @@ void main() {
   });
 
   group('costs nothing', () {
-    test('a huge dimension with 3 cells reads 3 cells in under 1 s', () {
+    test('a huge dimension with 3 cells reads 3 cells', () {
+      // The reader never trusts `dimension`: a sheet costs what it holds. A
+      // reader that allocated by the dimension's 17 billion cells would run
+      // out of memory, and one that walked them would take hours, while this
+      // read takes a few milliseconds. The bound is that generous, so a busy
+      // machine cannot fail it.
       final Uint8List zip = buildWorkbook(<String, String?>{
         'S':
             '<worksheet xmlns="$mainNs"><dimension ref="A1:XFD1048576"/>'
@@ -589,7 +602,7 @@ void main() {
       final XlsxReader reader = XlsxReader(zip);
       final List<XlsxReadRow> rows = reader.rowsAt(0).toList();
       expect(rows.single.cells, hasLength(3));
-      expect(watch.elapsedMilliseconds, lessThan(1000));
+      expect(watch.elapsed, lessThan(const Duration(seconds: 10)));
     });
 
     test('the last row and the last column read', () {
@@ -604,6 +617,10 @@ void main() {
     });
 
     test('an sst claiming 4294967295 strings reads its one string', () {
+      // The reader never trusts `count` or `uniqueCount`: a reader that
+      // allocated by them would run out of memory, and one that walked them
+      // would take hours, while this read takes a few milliseconds. The
+      // bound is that generous, so a busy machine cannot fail it.
       final Uint8List zip = buildWorkbook(
         <String, String?>{
           'S': worksheet('<row r="1"><c r="A1" t="s"><v>0</v></c></row>'),
@@ -617,7 +634,7 @@ void main() {
       final XlsxReadRow row = reader.rowsAt(0).single;
       expect(row.cells.single.value, 'a');
       expect(reader.warnings, isEmpty);
-      expect(watch.elapsedMilliseconds, lessThan(1000));
+      expect(watch.elapsed, lessThan(const Duration(seconds: 10)));
     });
 
     test('100,000 empty rows yield no rows', () {

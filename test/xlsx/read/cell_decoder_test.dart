@@ -440,6 +440,12 @@ void main() {
     });
 
     test('a very long digit run is decided in linear time', () {
+      // Decided in about 70 ms on the VM and 2 ms in Chrome. The number
+      // pattern is anchored at the start; without the anchor, a digit run
+      // that does not match is tried from each of its 100,000 positions,
+      // and one such string takes about 45 s on the VM. The bound is that
+      // generous, so a busy machine cannot fail it. No timeout: a test
+      // that does not await cannot be stopped by one.
       final String digits = '1' * 100000;
       final Stopwatch watch = Stopwatch()..start();
       for (final String tail in <String>['x', '.5x', 'e5x', 'e']) {
@@ -447,8 +453,8 @@ void main() {
       }
       expect(_num(digits), digits);
       watch.stop();
-      expect(watch.elapsed, lessThan(const Duration(seconds: 2)));
-    }, timeout: const Timeout(Duration(seconds: 20)));
+      expect(watch.elapsed, lessThan(const Duration(seconds: 10)));
+    });
 
     test('a missing value is numberInvalid', () {
       expect(_decode().warning, XlsxWarningCode.numberInvalid);
