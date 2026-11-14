@@ -90,9 +90,9 @@ void main() {
     '{{#a:x}}',
     '{{a..b}}',
     '{{.a}}',
-    '{{a￼b}}',
+    '{{a\u{FFFC}b}}',
   ]) {
-    test('malformed ${input.replaceAll('￼', '<FFFC>')}', () {
+    test('malformed ${input.replaceAll('\u{FFFC}', '<FFFC>')}', () {
       final matches = scanTags(input);
       expect(matches, hasLength(1));
       _malformed(matches.single, input, 0, input.length);

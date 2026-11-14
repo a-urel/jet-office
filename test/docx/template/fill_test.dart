@@ -309,9 +309,27 @@ void main() {
       final List<DocxWarning> warnings = fillTemplate(doc, data, _en);
       expect(
         _one(warnings, DocxWarningCode.templateTagMalformed).detail,
-        '{{a￼b}}',
+        '{{a b}}',
       );
       expect(_texts(_reopen(doc)), <String>['{{a\tb}}']);
+    });
+
+    test('no detail or listed text holds U+FFFC', () {
+      final DocxDocument doc = _open(
+        templateDocument(<String>[
+          '<w:r><w:t>{{a</w:t><w:br/><w:t>b}} {{c</w:t>'
+              '<w:sym w:font="Wingdings" w:char="F04A"/><w:t>d}}</w:t></w:r>',
+        ]),
+      );
+      expect(listTemplateTags(doc).map((FoundTag t) => t.text), <String>[
+        '{{a b}}',
+        '{{cd}}',
+      ]);
+      final List<DocxWarning> warnings = fillTemplate(doc, data, _en);
+      expect(warnings.map((DocxWarning w) => w.detail), <String>[
+        '{{a b}}',
+        '{{cd}}',
+      ]);
     });
 
     test('inside w:ins', () {
@@ -333,6 +351,23 @@ void main() {
       final List<DocxWarning> warnings = fillTemplate(doc, data, _en);
       _one(warnings, DocxWarningCode.templatePlaceholderInContentControl);
       expect(_texts(_reopen(doc)), <String>['{{a}}']);
+    });
+
+    test('a tag over a page boundary fills', () {
+      final DocxDocument doc = _open(
+        templateDocument(<String>[
+          '<w:r><w:lastRenderedPageBreak/><w:t>x{{a</w:t></w:r>'
+              '<w:r><w:lastRenderedPageBreak/><w:t>}}y</w:t>'
+              '<w:lastRenderedPageBreak/></w:r>',
+        ]),
+      );
+      expect(fillTemplate(doc, data, _en), isEmpty);
+      expect(_texts(doc), <String>['xXy']);
+      final String xml = readDocxText(doc.save().bytes)['word/document.xml']!;
+      // The marks outside the tag stay; the one inside it goes with the run
+      // text it stood in (Word computes it again).
+      expect('<w:lastRenderedPageBreak/>'.allMatches(xml), hasLength(2));
+      expect(_texts(_reopen(doc)), <String>['xXy']);
     });
 
     test('in a PAGE result', () {

@@ -205,13 +205,16 @@ void _walkBlocks(
   }
 }
 
-/// The entry for [text], a tag or a `MERGEFIELD` instruction found in opaque
-/// content, which cannot be filled: [problem].
+/// The entry for [written], a tag or a `MERGEFIELD` instruction found in
+/// opaque content, which cannot be filled: [problem]. Its text is [written]
+/// without U+FFFC.
 TemplateEntry placeholderEntry(
-  String text,
+  String written,
   DocxWarningCode problem, {
   int offset = 0,
 }) {
+  // A warning's detail and a listed tag never hold U+FFFC.
+  final String text = written.replaceAll(nonText, '');
   final MergeField? merge = parseMergeField(text);
   if (merge != null) {
     return TemplateEntry._(
@@ -296,7 +299,7 @@ TemplateEntry _tagEntry(ParagraphText map, TagMatch m) {
   }
   return TemplateEntry._(
     offset: m.start,
-    text: m.text,
+    text: map.shownText(m.start, m.end),
     kind: tag?.kind,
     mergeField: false,
     path: tag?.path ?? const <String>[],
@@ -359,6 +362,11 @@ final class _InlineWalk {
         case DocxFieldInstruction():
           // Loose instruction runs: a field the model could not pair.
           if (direct && parseMergeField(c.text) != null) _notTyped(c.text);
+        case DocxOpaqueRunContent()
+            when c.namespaceUri == Ns.w &&
+                c.localName == 'lastRenderedPageBreak':
+          // No position in the paragraph's text (`paragraphTextOf`).
+          break;
         case DocxOpaqueRunContent():
           for (final String s in placeholdersIn(
             opaqueRunContentXml(c),
@@ -408,7 +416,7 @@ final class _InlineWalk {
     DocxInline field,
   ) => TemplateEntry._(
     offset: offset,
-    text: instruction,
+    text: instruction.replaceAll(nonText, ''),
     kind: null,
     mergeField: true,
     path: merge == null ? const <String>[] : <String>[merge.name],

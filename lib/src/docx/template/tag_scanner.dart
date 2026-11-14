@@ -84,7 +84,7 @@ String _trim(String s) {
 /// Returns `null` when the body is malformed: an empty or invalid path, a
 /// `:` with an empty format, a format on a section tag, or a U+FFFC.
 ParsedTag? parseTagBody(String body) {
-  if (body.contains('￼')) return null;
+  if (body.contains('\u{FFFC}')) return null;
   var rest = _trim(body);
   if (rest.isEmpty) return null;
   var kind = TagKind.value;

@@ -17,7 +17,7 @@ import '../model/run_content.dart';
 /// The character standing for a position that holds no text of its own: a tab,
 /// a break, a picture, a field mark or opaque run content. No tag body may
 /// hold it, so a tag that meets it is malformed.
-const String nonText = '￼';
+const String nonText = '\u{FFFC}';
 
 /// What a stretch of the paragraph's text is.
 enum Region {
@@ -72,7 +72,7 @@ final class TextPosition {
 
 /// The text of a paragraph a tag scan reads, and where each character is.
 final class ParagraphText {
-  ParagraphText._(this.text, this.positions);
+  ParagraphText._(this.text, this.positions, this._standIns);
 
   /// The scanned text: every visible character of the paragraph's inlines in
   /// order, [nonText] for a position without text of its own.
@@ -81,6 +81,32 @@ final class ParagraphText {
   /// One entry for each UTF-16 unit of [text], so
   /// `positions.length == text.length`.
   final List<TextPosition> positions;
+
+  /// What each [nonText] position stands for when shown, by its index: a
+  /// space for a tab, a break or a carriage return; nothing for anything
+  /// else.
+  final Map<int, String> _standIns;
+
+  /// The span `[start, end)` of [text] as written, for a warning's detail or
+  /// a listed tag: each [nonText] position shown as what it stands for (a
+  /// tab, a break or a carriage return as a space, which a warning's detail
+  /// keeps where it would replace a control character) or dropped, so the
+  /// result never holds U+FFFC.
+  ///
+  /// Throws [RangeError] when the span is not inside [text].
+  String shownText(int start, int end) {
+    RangeError.checkValidRange(start, end, text.length, 'start', 'end');
+    final StringBuffer out = StringBuffer();
+    for (int i = start; i < end; i++) {
+      final String char = text[i];
+      if (char != nonText) {
+        out.write(char);
+      } else {
+        out.write(_standIns[i] ?? '');
+      }
+    }
+    return out.toString();
+  }
 
   /// What stops the span `[start, end)` of [text] from being filled in place.
   ///
@@ -132,12 +158,13 @@ const Set<String> _transparent = <String>{
 ParagraphText paragraphTextOf(DocxParagraph paragraph) {
   final _Builder b = _Builder();
   b.walk(paragraph.inlines, Region.fillable);
-  return ParagraphText._(b.buffer.toString(), b.positions);
+  return ParagraphText._(b.buffer.toString(), b.positions, b.standIns);
 }
 
 final class _Builder {
   final StringBuffer buffer = StringBuffer();
   final List<TextPosition> positions = <TextPosition>[];
+  final Map<int, String> standIns = <int, String>{};
   int _segment = 0;
 
   void _cut() => _segment++;
@@ -200,10 +227,23 @@ final class _Builder {
           // Instruction text is never visible, but a tag may not span it:
           // replacing the span would remove the run that holds it.
           _cut();
+        case DocxOpaqueRunContent()
+            when c.namespaceUri == Ns.w &&
+                c.localName == 'lastRenderedPageBreak':
+          // Word writes one where a page started when it last laid the
+          // document out: no text, no cut, so a tag over a page boundary
+          // fills. A replacement may drop it; Word computes it again.
+          break;
         default:
           // A tab, break, picture, field mark or opaque content: one
           // position of its own, which ends the segment on both sides.
           _cut();
+          switch (c) {
+            case DocxTab() || DocxBreak() || DocxCarriageReturn():
+              standIns[positions.length] = ' ';
+            default:
+              break;
+          }
           _add(nonText, null, -1, -1, region);
           _cut();
       }

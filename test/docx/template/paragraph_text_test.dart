@@ -47,6 +47,28 @@ void main() {
       expect(t.spanOf(0, t.text.length).crossesBoundary, isTrue);
     });
 
+    test('a last rendered page break adds no position and no cut', () {
+      final ParagraphText t = _text(
+        '<w:r><w:t>{{a</w:t></w:r>'
+        '<w:r><w:lastRenderedPageBreak/><w:t>}}</w:t></w:r>',
+      );
+      expect(t.text, '{{a}}');
+      expect(t.spanOf(0, 5), (region: Region.fillable, crossesBoundary: false));
+    });
+
+    test(
+      'shownText shows a tab and a break as a space and drops other stand-ins',
+      () {
+        final ParagraphText t = _text(
+          '<w:r><w:t>{{a</w:t><w:tab/><w:t>b</w:t><w:br/><w:t>c</w:t>'
+          '<w:sym w:font="Wingdings" w:char="F04A"/><w:t>d}}</w:t></w:r>',
+        );
+        expect(t.text, '{{a${nonText}b${nonText}c${nonText}d}}');
+        expect(t.shownText(0, t.text.length), '{{a b cd}}');
+        expect(t.shownText(0, 3), '{{a');
+      },
+    );
+
     test('a hyperlink starts and ends a segment', () {
       final ParagraphText t = _text(tagInHyperlink('{{', <String>['x'], '}}'));
       expect(t.text, '{{x}}');
