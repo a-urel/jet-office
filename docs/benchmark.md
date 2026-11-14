@@ -1203,10 +1203,14 @@ What it shows:
   moved from 3.13.7 to 3.14.0, and the machine's state is not controlled.
   Only the table's build is slower by code, about 25%, and its save about
   10%. A bisection of the build (its benchmark file of `663059e` kept fixed)
-  found `8168c3d`, "Read complex fields" (2026-11-07): since then every
-  inline added to a paragraph goes through `isInField` and a `visitInlines`
-  closure, to resolve its styles and record where it reads in, where a
-  `DocxRun` test did before; with 120,000 cells that is about 60 to 80 ms.
+  found `8168c3d`, "Read complex fields" (2026-11-07), about 60 to 80 ms
+  over 120,000 cells. Its `visitInlines` closures are not the cost: a fast
+  path that skips them for a plain `DocxRun`, measured against `main` in
+  seven alternating runs, gave no measurable gain (median 431 ms against
+  407 ms, within the noise of a loaded machine) and was not kept. What is
+  left of the commit on that path is diffuse (a `_field` slot on every
+  inline, a few checks per insert); a CPU profile on a quiet machine would
+  say which, and none has been taken.
   Today's table benchmark also builds 2,500 rows before the 10,000, so its
   10,000-row figures are not measured as the record's were.
 - **Links and rules stay quadratic**, as recorded: 20,000 rules take 460 s on
