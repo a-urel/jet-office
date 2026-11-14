@@ -10,6 +10,7 @@ import 'package:jet_office/jet_office.dart';
 import 'package:test/test.dart';
 
 import '../../../tool/src/part_compare.dart';
+import '../../../tool/src/text_compare.dart' show docxFullText, docxStoriesText;
 import '../../fixtures/docx_fixtures.dart';
 import '../support/styles_documents.dart' show readDocxText;
 import '../support/template_documents.dart';
@@ -100,6 +101,81 @@ void main() {
         reason: fixture.name,
       );
     }
+  });
+
+  test('t1_values: the fixed data fills the split, formatted, coloured, '
+      'header, footer and table tags, and leaves {{yok}}', () {
+    final DocxFixture fixture = docxFixtures().singleWhere(
+      (DocxFixture f) => f.name == 't1_values',
+    );
+    final DocxResult result = fixture.build();
+    final DocxDocument doc = DocxDocument.open(result.bytes);
+    final String text = docxFullText(doc);
+    expect(text, fixture.expectedText);
+    expect(text, contains('Firma: Acme A.Ş.'));
+    expect(text, contains('Tarih: 14.11.2026'));
+    expect(text, contains('Tutar: 1.234,56 ₺'));
+    expect(text, contains('14.11.2026\t1.234,56 ₺'));
+    expect(text, contains('Eksik: {{yok}}'));
+    expect(text, isNot(contains('{{firma')));
+    expect(docxStoriesText(doc), fixture.headerFooterText);
+    expect(
+      result.warnings.map((DocxWarning w) => (w.code, w.detail)).toList(),
+      <(DocxWarningCode, String?)>[
+        (DocxWarningCode.templateValueMissing, '{{yok}}'),
+      ],
+    );
+    // The first brace's bold run keeps the filled value; the coloured tag
+    // keeps its colour.
+    final List<DocxParagraph> paragraphs = doc.body.blocks
+        .whereType<DocxParagraph>()
+        .toList();
+    final DocxRun firma = paragraphs[0].inlines.whereType<DocxRun>().firstWhere(
+      (DocxRun r) => r.text.contains('Acme'),
+    );
+    expect(firma.properties.bold, isTrue);
+    final DocxRun musteri = paragraphs[4].inlines
+        .whereType<DocxRun>()
+        .firstWhere((DocxRun r) => r.text.contains('Ayşe'));
+    expect(musteri.properties.color, DocxColor.rgb('C00000'));
+  });
+
+  test('t1_template lists its tags; t1_merge_fields fills every field', () {
+    DocxFixture fixture(String name) =>
+        docxFixtures().singleWhere((DocxFixture f) => f.name == name);
+    final DocxTemplate template = DocxTemplate(
+      fixture('t1_template').build().bytes,
+    );
+    expect(
+      template.tags.map((DocxTemplateTag t) => (t.name, t.part)).toList(),
+      <(String?, String)>[
+        ('firma.unvan', '/word/document.xml'),
+        ('firma.adres', '/word/document.xml'),
+        ('tarih', '/word/document.xml'),
+        ('tutar', '/word/document.xml'),
+        ('musteri.ad', '/word/document.xml'),
+        ('miktar', '/word/document.xml'),
+        ('firma.unvan', '/word/document.xml'),
+        ('musteri.ad', '/word/document.xml'),
+        ('tarih', '/word/document.xml'),
+        ('tutar', '/word/document.xml'),
+        ('miktar', '/word/document.xml'),
+        ('firma.adres', '/word/document.xml'),
+        ('yok', '/word/document.xml'),
+        ('firma.unvan', '/word/header1.xml'),
+        ('tarih', '/word/footer1.xml'),
+      ],
+    );
+    expect(
+      template.tags.every((DocxTemplateTag t) => t.problem == null),
+      isTrue,
+    );
+    final DocxFixture merge = fixture('t1_merge_fields');
+    final DocxResult filled = merge.build();
+    expect(filled.warnings, isEmpty);
+    final DocxDocument doc = DocxDocument.open(filled.bytes);
+    expect(docxFullText(doc), merge.expectedText);
+    expect(DocxTemplate.tagsOf(doc), isEmpty);
   });
 
   test('fill warnings are the fill\'s, then the save\'s', () {

@@ -2,17 +2,26 @@
 /// text (D1), with run and paragraph formatting, styles and lists (D2), with
 /// tables (D3), with sections, headers, footers and fields (D4) and with
 /// pictures, hyperlinks, bookmarks and document properties (D5) and with
-/// lists written by `DocxListExport` (D6).
+/// lists written by `DocxListExport` (D6); and the template fill's of T1
+/// (decision 0024): a template filled by `DocxTemplate` (`t1_values`,
+/// `t1_merge_fields`) and that template unfilled (`t1_template`).
 ///
-/// New in jet_office. Every fixture starts from `DocxDocument()`, the blank
+/// New in jet_office. Every D fixture starts from `DocxDocument()`, the blank
 /// document, so what LibreOffice and the Open XML SDK see is what the model
-/// writes. `tool/write_fixtures.dart` writes each as `<name>.docx` with its
+/// writes. A T1 template is written by hand
+/// (`test/docx/support/template_documents.dart`), as Word for Mac writes one,
+/// with its tags split over runs, so the fill meets them as it would in a
+/// user's file; a filled one is what `DocxTemplate.fill` saves. `tool/write_fixtures.dart` writes each as `<name>.docx` with its
 /// `<name>.expected.txt`; `test/docx/round_trip_test.dart` checks them.
 library;
 
+import 'dart:typed_data';
+
 import 'package:jet_office/jet_office.dart';
 
+import '../../tool/src/fill_data.dart';
 import '../../tool/src/text_compare.dart' show docxFullText, docxStoriesText;
+import '../docx/support/template_documents.dart';
 import 'docx_fixture.dart';
 import 'm4_fixtures.dart' show jpeg3x5, png4x2;
 
@@ -164,6 +173,27 @@ List<DocxFixture> docxFixtures() => <DocxFixture>[
   DocxFixture('d5_properties', _propertiesText, () => _build(_fillProperties)),
   _listFixture('d6_list', _tr, _trRows(), _trTotals),
   _listFixture('d6_list_landscape', _landscape, _landscapeRows(), null),
+  DocxFixture(
+    't1_values',
+    t1ValuesText.join('\n'),
+    () => _filled(t1ValuesTemplate()),
+    headerFooterText: _t1ValuesStories.join('\n'),
+    expectedWarnings: const <DocxWarningCode, int>{
+      DocxWarningCode.templateValueMissing: 1,
+    },
+  ),
+  DocxFixture(
+    't1_merge_fields',
+    _t1MergeFieldsText.join('\n'),
+    () => _filled(t1MergeFieldsTemplate()),
+    headerFooterText: '1 header: Teklif\n1 footer: Sayfa altı',
+  ),
+  DocxFixture(
+    't1_template',
+    _t1TemplateText.join('\n'),
+    () => DocxDocument.open(t1ValuesTemplate()).save(),
+    headerFooterText: _t1TemplateStories.join('\n'),
+  ),
 ];
 
 /// The text of `d3_basic`, written by hand from what `_fillBasic` adds: the
@@ -1057,3 +1087,162 @@ DocxFixture _listFixture(
     headerFooterText: docxStoriesText(doc),
   );
 }
+
+/// [template] filled with `fillDocxData()` in Turkish, as
+/// `tool/fill_docx.dart` fills every document.
+DocxResult _filled(Uint8List template) => DocxTemplate(template).fill(
+  fillDocxData(),
+  options: const DocxTemplateOptions(locale: FormatLocale.trTR),
+);
+
+/// The format of the date tags of `t1_values`.
+const String _t1Date = '{{tarih:dd.mm.yyyy}}';
+
+/// The format of the amount tags of `t1_values`.
+const String _t1Amount = '{{tutar:#,##0.00 ₺}}';
+
+/// A paragraph of [inner] runs.
+String _p(String inner) => templateParagraph(inner);
+
+/// A table cell of one paragraph of [inner] runs, 4536 twentieths wide.
+String _tc(String inner) =>
+    '<w:tc><w:tcPr><w:tcW w:w="4536" w:type="dxa"/></w:tcPr>${_p(inner)}'
+    '</w:tc>';
+
+/// The template of `t1_values` and `t1_template`, as Word for Mac writes it:
+/// `{{firma.unvan}}` split over runs with its first brace bold, a date and an
+/// amount tag with a format, each split after its name, a coloured
+/// `{{musteri.ad}}` split at its dot, a table of three rows of two cells with
+/// a tag in each, the missing `{{yok}}`, and a header and a footer with a tag.
+/// The body ends in a paragraph.
+Uint8List t1ValuesTemplate() {
+  const String red = '<w:color w:val="C00000"/>';
+  return templateWithStories(
+    body: <String>[
+      _p(
+        templateRun('Firma: ') +
+            wordSplitTag('{{firma.unvan}}', boldFirstBrace: true),
+      ),
+      _p(templateRun('Adres: {{firma.adres}}')),
+      _p(
+        templateRun('Tarih: ') +
+            templateRun('{{tarih') +
+            templateRun(':dd.mm.yyyy}}'),
+      ),
+      _p(
+        templateRun('Tutar: ') +
+            templateRun('{{tutar') +
+            templateRun(':#,##0.00 ₺}}'),
+      ),
+      _p(
+        templateRun('Müşteri: ') +
+            templateRun('{{musteri', rPr: red) +
+            templateRun('.ad}}', rPr: red),
+      ),
+      _p(templateRun('Miktar: {{miktar}}')),
+      '<w:tbl><w:tblPr><w:tblW w:w="9072" w:type="dxa"/></w:tblPr>'
+          '<w:tblGrid><w:gridCol w:w="4536"/><w:gridCol w:w="4536"/>'
+          '</w:tblGrid>'
+          '<w:tr>${_tc(templateRun('{{firma.unvan}}'))}'
+          '${_tc(templateRun('{{musteri.ad}}'))}</w:tr>'
+          '<w:tr>${_tc(templateRun(_t1Date))}'
+          '${_tc(templateRun(_t1Amount))}</w:tr>'
+          '<w:tr>${_tc(templateRun('{{miktar}}'))}'
+          '${_tc(templateRun('{{firma.adres}}'))}</w:tr></w:tbl>',
+      _p(templateRun('Eksik: {{yok}}')),
+      _p(templateRun('Saygılarımızla.')),
+    ].join(),
+    header: _p(
+      templateRun('Teklif: ') +
+          templateRun('{{firma') +
+          templateRun('.unvan}}'),
+    ),
+    footer: _p(templateRun('Tarih: ') + templateRun(_t1Date)),
+  );
+}
+
+/// The text of `t1_values`, written by hand from `fillDocxData()` in Turkish:
+/// the date as `dd.mm.yyyy`, the amount with Turkish separators, `2,5` for
+/// `miktar` in General, and `{{yok}}`, which the data lacks, as written.
+const List<String> t1ValuesText = <String>[
+  'Firma: Acme A.Ş.',
+  'Adres: Atatürk Bulvarı No: 1, Çankaya / Ankara',
+  'Tarih: 14.11.2026',
+  'Tutar: 1.234,56 ₺',
+  'Müşteri: Ayşe Yılmaz',
+  'Miktar: 2,5',
+  'Acme A.Ş.\tAyşe Yılmaz',
+  '14.11.2026\t1.234,56 ₺',
+  '2,5\tAtatürk Bulvarı No: 1, Çankaya / Ankara',
+  'Eksik: {{yok}}',
+  'Saygılarımızla.',
+];
+
+/// What the header and footer of `t1_values` show, filled.
+const List<String> _t1ValuesStories = <String>[
+  '1 header: Teklif: Acme A.Ş.',
+  '1 footer: Tarih: 14.11.2026',
+];
+
+/// The text of `t1_template`: the tags as written.
+const List<String> _t1TemplateText = <String>[
+  'Firma: {{firma.unvan}}',
+  'Adres: {{firma.adres}}',
+  'Tarih: $_t1Date',
+  'Tutar: $_t1Amount',
+  'Müşteri: {{musteri.ad}}',
+  'Miktar: {{miktar}}',
+  '{{firma.unvan}}\t{{musteri.ad}}',
+  '$_t1Date\t$_t1Amount',
+  '{{miktar}}\t{{firma.adres}}',
+  'Eksik: {{yok}}',
+  'Saygılarımızla.',
+];
+
+/// What the header and footer of `t1_template` show: the tags as written.
+const List<String> _t1TemplateStories = <String>[
+  '1 header: Teklif: {{firma.unvan}}',
+  '1 footer: Tarih: $_t1Date',
+];
+
+/// The template of `t1_merge_fields`, as Word writes merge fields: complex
+/// `MERGEFIELD`s with a text before and after (`\b`, `\f`), a casing (`\*
+/// Upper` beside `\* MERGEFORMAT`) and a date picture (`\@`), a `w:fldSimple`,
+/// and a field inside a sentence. The body ends in a paragraph.
+Uint8List t1MergeFieldsTemplate() => templateWithStories(
+  body: <String>[
+    _p(complexMergeField(' MERGEFIELD Ad \\b "Sayın " \\f "," ', '«Ad»')),
+    _p(
+      templateRun('Müşteri: ') +
+          complexMergeField(
+            ' MERGEFIELD "Müşteri Adı" \\* Upper \\* MERGEFORMAT ',
+            '«Müşteri Adı»',
+          ),
+    ),
+    _p(
+      templateRun('Tarih: ') +
+          complexMergeField(' MERGEFIELD Tarih \\@ "dd.MM.yyyy" ', '«Tarih»'),
+    ),
+    _p(
+      templateRun('Eski alan: ') + simpleMergeField(' MERGEFIELD Ad ', '«Ad»'),
+    ),
+    _p(
+      templateRun('Değerli ') +
+          complexMergeField(' MERGEFIELD Ad ', '«Ad»') +
+          templateRun(', teklifimiz ektedir.'),
+    ),
+    _p(templateRun('Saygılarımızla.')),
+  ].join(),
+  header: _p(templateRun('Teklif')),
+  footer: _p(templateRun('Sayfa altı')),
+);
+
+/// The text of `t1_merge_fields`, written by hand from `fillDocxData()`.
+const List<String> _t1MergeFieldsText = <String>[
+  'Sayın Ayşe,',
+  'Müşteri: AYŞE YILMAZ',
+  'Tarih: 14.11.2026',
+  'Eski alan: Ayşe',
+  'Değerli Ayşe, teklifimiz ektedir.',
+  'Saygılarımızla.',
+];

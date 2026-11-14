@@ -154,6 +154,14 @@ final List<String> _tokens = <String>[
   '<w:r>' * 300,
 ];
 
+/// The tokens of the insert mutation, for the other DOCX fuzzers (the
+/// template fuzz, `test/docx/support/template_fuzz.dart`).
+List<String> get docxFuzzTokens => List<String>.unmodifiable(_tokens);
+
+/// The attribute mutation (`_replaceAttributeValue`), for the other DOCX
+/// fuzzers.
+const PartMutation docxAttributeMutation = _replaceAttributeValue;
+
 /// How many of the operations of a case, out of eight plus this many, are
 /// the attribute mutation: a share of about one in three, so that every
 /// seed of the gate reaches the styles and numbering parts.

@@ -2,7 +2,8 @@
 /// quality gate's.
 ///
 /// ```bash
-/// dart run tool/fuzz_docx.dart [--seeds 1-20] [--cases 500] [--verbose]
+/// dart run tool/fuzz_docx.dart [--template] [--seeds 1-20] [--cases 500]
+///     [--verbose]
 /// ```
 ///
 /// For every seed of the inclusive range `--seeds` (default `1-20`, or a
@@ -21,6 +22,13 @@
 ///
 /// The quality gate runs seeds 1 to 4 with 900 cases each
 /// (`test/docx/fuzz_test.dart`).
+///
+/// With `--template` it fuzzes `DocxTemplate` instead (decision 0024, T1): the
+/// cases of `templateFuzzCases` (`test/docx/support/template_fuzz.dart`, the
+/// T1 templates and Word's split tags, with tags and switches inserted into
+/// their text), each run through `exerciseTemplate`, which `templateFuzzCases(s,
+/// i + 1)` reproduces. The quality gate runs seeds 1 to 4 with 300 cases each
+/// (`test/docx/template/template_fuzz_test.dart`).
 library;
 
 import 'dart:io';
@@ -28,16 +36,17 @@ import 'dart:io';
 import 'package:jet_office/jet_office.dart';
 
 import '../test/docx/support/docx_fuzz.dart';
+import '../test/docx/support/template_fuzz.dart'
+    show exerciseTemplate, templateFuzzCases;
 import 'src/fuzz_run.dart';
 
 void main(List<String> args) {
-  final ({int first, int last, int cases, bool verbose})? options = _parse(
-    args,
-  );
+  final ({int first, int last, int cases, bool verbose, bool template})?
+  options = _parse(args);
   if (options == null) {
     stderr.writeln(
-      'Usage: dart run tool/fuzz_docx.dart [--seeds 1-20] [--cases 500] '
-      '[--verbose]',
+      'Usage: dart run tool/fuzz_docx.dart [--template] [--seeds 1-20] '
+      '[--cases 500] [--verbose]',
     );
     exitCode = 64;
     return;
@@ -48,8 +57,8 @@ void main(List<String> args) {
     last: options.last,
     cases: options.cases,
     verbose: options.verbose,
-    exercise: exerciseDocx,
-    generate: docxFuzzCases,
+    exercise: options.template ? exerciseTemplate : exerciseDocx,
+    generate: options.template ? templateFuzzCases : docxFuzzCases,
     isRefusal: (Object e) => e is DocxReadException,
     out: stdout,
     err: stderr,
@@ -65,14 +74,18 @@ void main(List<String> args) {
 
 /// The seed range and case count of [args], or `null` when they are not
 /// understood.
-({int first, int last, int cases, bool verbose})? _parse(List<String> args) {
+({int first, int last, int cases, bool verbose, bool template})? _parse(
+  List<String> args,
+) {
   int first = 1;
   int last = 20;
   int cases = 500;
   bool verbose = false;
+  bool template = false;
   for (int i = 0; i < args.length; i += 2) {
-    if (args[i] == '--verbose') {
-      verbose = true;
+    if (args[i] == '--verbose' || args[i] == '--template') {
+      if (args[i] == '--verbose') verbose = true;
+      if (args[i] == '--template') template = true;
       i--;
       continue;
     }
@@ -95,5 +108,11 @@ void main(List<String> args) {
         return null;
     }
   }
-  return (first: first, last: last, cases: cases, verbose: verbose);
+  return (
+    first: first,
+    last: last,
+    cases: cases,
+    verbose: verbose,
+    template: template,
+  );
 }

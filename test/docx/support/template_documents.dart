@@ -12,8 +12,10 @@ library;
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:jet_office/jet_office.dart';
 import 'package:jet_office/src/opc/ooxml.dart';
 
+import '../../support/read_xlsx.dart';
 import 'docx_builder.dart';
 
 const String _rsid = 'w:rsidR="00A1B2C3"';
@@ -134,6 +136,84 @@ Uint8List templateWithHeader({
     ),
   },
 );
+
+/// A DOCX whose body is [body] (block XML: paragraphs and tables, ending in
+/// a paragraph), with a header part of [header] and a footer part of [footer]
+/// (block XML too) that its only section references as `default`, A4 with
+/// Word's margins, columns and document grid, with their relationships and
+/// content types.
+///
+/// The other parts are those of `DocxDocument()`, the blank document (styles,
+/// settings, web settings, font table and theme), so LibreOffice reads the
+/// document as it reads the D fixtures: without the styles' defaults, its
+/// re-save writes `w:charSpace="4294963199"`, which the Open XML SDK refuses.
+Uint8List templateWithStories({
+  required String body,
+  required String header,
+  required String footer,
+}) {
+  final Map<String, Uint8List> blank = readXlsxBytes(
+    DocxDocument().save().bytes,
+  );
+  String text(String name) => utf8.decode(blank[name]!);
+  return buildZip(<String, List<int>>{
+    ...blank,
+    '[Content_Types].xml': utf8.encode(
+      text('[Content_Types].xml').replaceFirst(
+        '</Types>',
+        '<Override PartName="/word/header1.xml" '
+            'ContentType="${ContentType.wmlHeader}"/>'
+            '<Override PartName="/word/footer1.xml" '
+            'ContentType="${ContentType.wmlFooter}"/></Types>',
+      ),
+    ),
+    'word/_rels/document.xml.rels': utf8.encode(
+      text('word/_rels/document.xml.rels').replaceFirst(
+        '</Relationships>',
+        '<Relationship Id="rId11" Type="${RelType.header}" '
+            'Target="header1.xml"/>'
+            '<Relationship Id="rId12" Type="${RelType.footer}" '
+            'Target="footer1.xml"/></Relationships>',
+      ),
+    ),
+    'word/document.xml': utf8.encode(
+      _documentXml(
+        body,
+        '<w:sectPr><w:headerReference w:type="default" r:id="rId11"/>'
+        '<w:footerReference w:type="default" r:id="rId12"/>'
+        '<w:pgSz w:w="11906" w:h="16838"/>'
+        '<w:pgMar w:top="1417" w:right="1417" w:bottom="1417" w:left="1417" '
+        'w:header="708" w:footer="708" w:gutter="0"/><w:cols w:space="708"/>'
+        '<w:docGrid w:linePitch="360"/></w:sectPr>',
+      ),
+    ),
+    'word/header1.xml': utf8.encode(
+      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\r\n'
+      '<w:hdr xmlns:w="${Ns.w}" xmlns:r="${Ns.rel}">$header</w:hdr>',
+    ),
+    'word/footer1.xml': utf8.encode(
+      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\r\n'
+      '<w:ftr xmlns:w="${Ns.w}" xmlns:r="${Ns.rel}">$footer</w:ftr>',
+    ),
+  });
+}
+
+/// A complex field of [instruction] whose cached result is [result], as Word
+/// writes a merge field (`«Ad»`): begin, instruction, separate, result and end,
+/// each in a run of its own with `w:rsidR`.
+String complexMergeField(String instruction, String result) =>
+    tagInFieldResult(result, instruction: instruction);
+
+/// A `w:fldSimple` of [instruction] whose cached result is [result], as Word
+/// writes a merge field inserted by an older version.
+String simpleMergeField(String instruction, String result) =>
+    '<w:fldSimple w:instr="$instruction">${_run(result)}</w:fldSimple>';
+
+/// [text] in a run of its own, with Word's `w:rsidR`; [rPr] is the content of
+/// its `w:rPr` (such as `<w:color w:val="C00000"/>`), none when empty.
+String templateRun(String text, {String rPr = ''}) =>
+    '<w:r $_rsid>${rPr.isEmpty ? '' : '<w:rPr>$rPr</w:rPr>'}'
+    '<w:t xml:space="preserve">$text</w:t></w:r>';
 
 const String _wps =
     'http://schemas.microsoft.com/office/word/2010/wordprocessingShape';

@@ -149,6 +149,10 @@ dart run tool/edit_docx.dart test/fixtures/owner/docx build/edited-docx-owner
 dotnet run --project tool/ooxml_validate -- build/edited-docx-fixtures
 dotnet run --project tool/ooxml_validate -- --libreoffice-resave build/edited-docx
 dotnet run --project tool/ooxml_validate -- build/edited-docx-owner
+dart run tool/fill_docx.dart build/fixtures build/filled-docx-fixtures
+dart run tool/fill_docx.dart test/fixtures/owner/docx build/filled-docx-owner
+dotnet run --project tool/ooxml_validate -- build/filled-docx-fixtures
+dotnet run --project tool/ooxml_validate -- build/filled-docx-owner
 dart run packages/jet_charts_flutter/example/tool/write_excel_gallery.dart build/excel_gallery
 dotnet run --project tool/ooxml_validate -- build/excel_gallery
 ```
@@ -182,9 +186,19 @@ dotnet run --project tool/ooxml_validate -- build/excel_gallery
   application) and the D6 lists written by `DocxListExport` (`d6_list`, Turkish
   with a logo, a caption, a date, an amount and a share column, 120 rows over
   three A4 pages and a totals row; `d6_list_landscape`, English on landscape A4
-  with 1.27 cm margins, twelve columns and 40 rows). A fixture with a
+  with 1.27 cm margins, twelve columns and 40 rows) and the T1 template fill's
+  (`t1_values`, a Turkish template written by hand as Word for Mac splits its
+  tags, with `{{firma.unvan}}` split over runs and its first brace bold, a date
+  and an amount tag with formats, a coloured tag, a header and a footer tag, a
+  table of three rows with a tag per cell and the missing `{{yok}}` left
+  visible, filled by `DocxTemplate.fill` with `fillDocxData()` in Turkish;
+  `t1_merge_fields`, complex `MERGEFIELD`s with `\b`, `\f`, `\*` and `\@`, a
+  `w:fldSimple` and a field inside a sentence, filled the same way;
+  `t1_template`, the template of `t1_values` unfilled, so LibreOffice and the
+  SDK see the tags as written). A fixture with a
   `DocxFixture.headerFooterText` (`d4_headers`, `d4_fields`, `d5_pictures`,
-  `d5_links`, `d6_list`, `d6_list_landscape`) also gets `<name>.stories.txt`,
+  `d5_links`, `d6_list`, `d6_list_landscape`, the three `t1_*`) also gets
+  `<name>.stories.txt`,
   what its headers and footers show. No fixture ends in a table, because
   LibreOffice's text export of one never ends (see below), or in a section
   break, as the model adds no block after one.
@@ -453,6 +467,24 @@ dotnet run --project tool/ooxml_validate -- build/excel_gallery
   arguments. CI runs it on the fixtures, on LibreOffice's re-save and on the
   owner's Word files, and validates the three outputs with the Open XML SDK;
   the owner opens the edited owner files in Word (`docs/word-checks.md`).
+- `tool/fill_docx.dart` opens every `.docx` of a directory with `DocxTemplate`
+  (decision 0024, T1), lists its tags and fills it with `fillDocxData()`
+  (`tool/src/fill_data.dart`, the data the `t1_*` fixtures are filled with:
+  `firma.unvan`, `firma.adres`, `tarih` 2026-11-14, `musteri.ad`, `tutar`
+  1234.56, `miktar` 2.5 and the merge field keys `Ad`, `Müşteri Adı` and
+  `Tarih`) in Turkish, saves to the second directory and reads the result back
+  with `DocxDocument`: no fillable tag (a value tag of the body, a header or a
+  footer whose form raises no warning) whose name the data has may be left,
+  listed or in its part's text; every fillable tag and merge field the data
+  lacks must still be there and warned `templateValueMissing`; no
+  `MERGEFIELD` the data names may be left; `comparePackages` must find
+  differences only in the main part and in the header and footer parts that
+  held a tag the data names, never in `[Content_Types].xml`; and `fill({})`
+  must give the input back, with no difference at all. It prints each problem
+  as `<file>: <problem>` and exits 1 on any (a file that cannot be read is
+  one), 2 on unusable arguments. CI runs it on the fixtures and on the owner's
+  Word files and validates both outputs with the Open XML SDK.
+  `test/tool/fill_docx_test.dart` (VM) tests it.
 - `tool/draft_expected_docx.dart` drafts the `<name>.expected.txt` of an owner
   file from the model's own reading and prints a review list; it never
   overwrites an existing text.
@@ -638,8 +670,8 @@ past the length limit must lex in bounded time. Pin a failure as a unit test
 in `test/xlsx/formula/formula_lexer_test.dart` first.
 
 `test/docx/fuzz_test.dart` does the same for `DocxDocument` (seeds 1 to 4, 900
-cases each, over the fixtures (the `d3_*`, `d4_*`, `d5_*` and `d6_*` ones among
-them), a hand-made table with every element of the table values, a hand-made
+cases each, over the fixtures (the `d3_*`, `d4_*`, `d5_*`, `d6_*` and `t1_*`
+ones among them), a hand-made table with every element of the table values, a hand-made
 `sections_by_hand` (every section child, six stories, broken references and
 broken fields), a hand-made `drawings_by_hand` (inline, anchored, linked and
 broken pictures, external, anchor and broken hyperlinks, bookmarks with bad ids,
@@ -684,6 +716,33 @@ so the cases must between them mutate every part name of the corpus
 with the D6 ones, 750 left `word/_rels/footer1.xml.rels` unmutated).
 When a new part name or corpus entry joins the corpus, run that test and raise
 the count again if it fails.
+
+`test/docx/template/template_fuzz_test.dart` fuzzes `DocxTemplate` (T1,
+decision 0024; seeds 1 to 4, 300 cases each, the same cases on the VM and in
+Chrome, which a digest of the cases proves; a change to the corpus or the
+mutations changes it). Its corpus (`test/docx/support/template_fuzz.dart`) is
+the template of `t1_values` (`t1_template`), the template of
+`t1_merge_fields`, a `wordSplitTag` header document and a document of the fill's
+hard cases (a tag over a hyperlink's edge, around a tab, in a field result, in a
+tracked insertion, in a content control, a section and a malformed tag). The
+mutations are the DOCX fuzz's (the archive and byte mutations with its tokens,
+and the attribute mutation) and, on the main, header and footer parts, `{{`,
+`}}`, `{{a}}`, `{{#a}}` or a random tag body inserted into a `w:t` text and a
+switch (`\* Upper`, `\@ "`, `\v`, a lone `\`, `MERGEFIELD Ad` and the like)
+into a `w:instrText` text. Only `DocxReadException` may come out of
+`DocxTemplate(...)` or a fill; the tags read, the filled file must read back
+(body and every story), and `fill({})` must change nothing: `comparePackages`
+finds no difference from the template opened, its stories loaded and saved
+unchanged, which is the template itself unless the model's own save rewrites a
+mutated package part (`exact` for the unmutated corpus: the template itself).
+Longer runs, by hand:
+
+```bash
+dart run tool/fuzz_docx.dart --template --seeds 1-200 --cases 1000
+```
+
+It prints failures as the DOCX run does. Pin a failure as a unit test in the
+owning `test/docx/template/*_test.dart` first.
 
 In Chrome the runner loads every suite in a same-origin iframe of one page,
 so all suites share one thread. A test that holds it for over 30 seconds makes

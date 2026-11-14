@@ -237,6 +237,19 @@ jobs:
           dotnet run --project tool/ooxml_validate -- --libreoffice-resave build/edited-docx
           dotnet run --project tool/ooxml_validate -- build/edited-docx-owner
 
+      # What the template fill saves must be valid too (decision 0024, T1):
+      # every document filled with the fixed Turkish data. Only the main part
+      # and the headers and footers that held a filled tag may differ.
+      - name: Fill the documents as templates
+        run: |
+          dart run tool/fill_docx.dart build/fixtures build/filled-docx-fixtures
+          dart run tool/fill_docx.dart test/fixtures/owner/docx build/filled-docx-owner
+
+      - name: Validate the filled documents
+        run: |
+          dotnet run --project tool/ooxml_validate -- build/filled-docx-fixtures
+          dotnet run --project tool/ooxml_validate -- build/filled-docx-owner
+
       # The chart gallery's workbook, the owner's side-by-side check against
       # Excel (packages/jet_charts_flutter/example/TALIMATLAR.md).
       - name: Write and validate the chart gallery's workbook
