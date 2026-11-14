@@ -138,5 +138,83 @@ String formatDocxWarning(DocxWarning w, OfficeLocale locale) {
                 'düzeltildi$named.'
           : '$part içindeki $count yer işareti adı Word kurallarına '
                 'uymuyordu ve düzeltildi$named.',
+    (DocxWarningCode.templateValueMissing, OfficeLocale.en) =>
+      'The data has no value for $detail in $part$locations; the tag was left as written.',
+    (DocxWarningCode.templateValueMissing, OfficeLocale.de) =>
+      'Die Daten enthalten keinen Wert für $detail in $part$locations; das Tag blieb unverändert.',
+    (DocxWarningCode.templateValueMissing, OfficeLocale.tr) =>
+      '$part$locations içindeki $detail için veride değer yok; etiket olduğu gibi bırakıldı.',
+    (DocxWarningCode.templateTagMalformed, OfficeLocale.en) =>
+      '$detail in $part$locations is not a valid tag; it was left as text.',
+    (DocxWarningCode.templateTagMalformed, OfficeLocale.de) =>
+      '$detail in $part$locations ist kein gültiges Tag; es blieb als Text stehen.',
+    (DocxWarningCode.templateTagMalformed, OfficeLocale.tr) =>
+      '$part$locations içindeki $detail geçerli bir etiket değil; metin olarak bırakıldı.',
+    (DocxWarningCode.templateSectionMalformed, OfficeLocale.en) =>
+      'A section tag in $part$locations was left as written: sections are not filled yet ($detail).',
+    (DocxWarningCode.templateSectionMalformed, OfficeLocale.de) =>
+      'Ein Abschnitts-Tag in $part$locations blieb unverändert: Abschnitte werden noch nicht gefüllt ($detail).',
+    (DocxWarningCode.templateSectionMalformed, OfficeLocale.tr) =>
+      '$part$locations içindeki bir bölüm etiketi olduğu gibi bırakıldı: bölümler henüz doldurulmuyor ($detail).',
+    (DocxWarningCode.templateValueNotText, OfficeLocale.en) =>
+      'The value for $detail in $part$locations is a list or a map, not text; the tag was left as written.',
+    (DocxWarningCode.templateValueNotText, OfficeLocale.de) =>
+      'Der Wert für $detail in $part$locations ist eine Liste oder Zuordnung, kein Text; das Tag blieb unverändert.',
+    (DocxWarningCode.templateValueNotText, OfficeLocale.tr) =>
+      '$part$locations içindeki $detail için değer metin değil, liste veya harita; etiket olduğu gibi bırakıldı.',
+    (DocxWarningCode.templateValueNotPicture, OfficeLocale.en) =>
+      'The value for $detail in $part$locations is not a picture; the placeholder picture was kept.',
+    (DocxWarningCode.templateValueNotPicture, OfficeLocale.de) =>
+      'Der Wert für $detail in $part$locations ist kein Bild; das Platzhalterbild blieb erhalten.',
+    (DocxWarningCode.templateValueNotPicture, OfficeLocale.tr) =>
+      '$part$locations içindeki $detail için değer bir resim değil; yer tutucu resim korundu.',
+    (DocxWarningCode.templateFormatWarning, OfficeLocale.en) =>
+      'The format code of $detail in $part$locations raised a warning from the number format engine.',
+    (DocxWarningCode.templateFormatWarning, OfficeLocale.de) =>
+      'Der Formatcode von $detail in $part$locations löste eine Warnung der Zahlenformat-Engine aus.',
+    (DocxWarningCode.templateFormatWarning, OfficeLocale.tr) =>
+      '$part$locations içindeki $detail biçim kodu, sayı biçimi motorundan bir uyarı verdi.',
+    (DocxWarningCode.templateSwitchUnsupported, OfficeLocale.en) =>
+      'A switch of $detail in $part$locations is not supported; the default format was used.',
+    (DocxWarningCode.templateSwitchUnsupported, OfficeLocale.de) =>
+      'Ein Schalter von $detail in $part$locations wird nicht unterstützt; das Standardformat wurde verwendet.',
+    (DocxWarningCode.templateSwitchUnsupported, OfficeLocale.tr) =>
+      '$part$locations içindeki $detail alanının bir anahtarı desteklenmiyor; varsayılan biçim kullanıldı.',
+    (DocxWarningCode.templateFieldNotTyped, OfficeLocale.en) =>
+      'The merge field $detail in $part$locations is kept as loose runs, not as a field, and was left as it is.',
+    (DocxWarningCode.templateFieldNotTyped, OfficeLocale.de) =>
+      'Das Seriendruckfeld $detail in $part$locations liegt als lose Abschnitte vor, nicht als Feld, und blieb unverändert.',
+    (DocxWarningCode.templateFieldNotTyped, OfficeLocale.tr) =>
+      '$part$locations içindeki $detail birleştirme alanı alan olarak değil, ayrı parçalar olarak tutuluyor ve olduğu gibi bırakıldı.',
+    (DocxWarningCode.templatePlaceholderInRevision, OfficeLocale.en) =>
+      '$detail in $part$locations lies inside a tracked change; it was left as written.',
+    (DocxWarningCode.templatePlaceholderInRevision, OfficeLocale.de) =>
+      '$detail in $part$locations liegt in einer Änderungsnachverfolgung; es blieb unverändert.',
+    (DocxWarningCode.templatePlaceholderInRevision, OfficeLocale.tr) =>
+      '$part$locations içindeki $detail izlenen bir değişikliğin içinde; olduğu gibi bırakıldı.',
+    (DocxWarningCode.templatePlaceholderInContentControl, OfficeLocale.en) =>
+      '$detail in $part$locations lies inside a content control; it was left as written.',
+    (DocxWarningCode.templatePlaceholderInContentControl, OfficeLocale.de) =>
+      '$detail in $part$locations liegt in einem Inhaltssteuerelement; es blieb unverändert.',
+    (DocxWarningCode.templatePlaceholderInContentControl, OfficeLocale.tr) =>
+      '$part$locations içindeki $detail bir içerik denetiminin içinde; olduğu gibi bırakıldı.',
+    (DocxWarningCode.templatePlaceholderNotTyped, OfficeLocale.en) =>
+      '$detail in $part$locations lies where the model keeps content opaque; it was left as written.',
+    (DocxWarningCode.templatePlaceholderNotTyped, OfficeLocale.de) =>
+      '$detail in $part$locations liegt in einem Bereich, den das Modell nicht auswertet; es blieb unverändert.',
+    (DocxWarningCode.templatePlaceholderNotTyped, OfficeLocale.tr) =>
+      '$part$locations içindeki $detail, modelin içeriği opak tuttuğu bir yerde; olduğu gibi bırakıldı.',
+    (DocxWarningCode.templateRepeatDroppedAnnotation, OfficeLocale.en) =>
+      'A comment, note reference or bookmark in the section $detail of $part$locations was kept in the first copy only.',
+    (DocxWarningCode.templateRepeatDroppedAnnotation, OfficeLocale.de) =>
+      'Ein Kommentar, Notizverweis oder eine Textmarke im Abschnitt $detail von $part$locations blieb nur in der ersten Kopie erhalten.',
+    (DocxWarningCode.templateRepeatDroppedAnnotation, OfficeLocale.tr) =>
+      '$part$locations içindeki $detail bölümündeki bir açıklama, not başvurusu veya yer işareti yalnızca ilk kopyada korundu.',
+    (DocxWarningCode.templateRemovalDroppedAnnotation, OfficeLocale.en) =>
+      'Half of a comment, note reference or bookmark was removed with the section $detail in $part$locations.',
+    (DocxWarningCode.templateRemovalDroppedAnnotation, OfficeLocale.de) =>
+      'Die Hälfte eines Kommentars, Notizverweises oder einer Textmarke wurde mit dem Abschnitt $detail in $part$locations entfernt.',
+    (DocxWarningCode.templateRemovalDroppedAnnotation, OfficeLocale.tr) =>
+      '$part$locations içindeki $detail bölümüyle birlikte bir açıklamanın, not başvurusunun veya yer işaretinin yarısı kaldırıldı.',
   };
 }

@@ -130,7 +130,8 @@ XlsxWarning _sample(
 /// The sample DOCX warning of [code]: part `/word/document.xml`, locations
 /// `body/p[0]` and `body/p[1]`, count 2, and for the two content type codes
 /// the detail they name; `numberingNotFound` names the list `7` and
-/// `styleNotFound` the style `Foo`; `bookmarkNameRepaired` names `2 Totals!`.
+/// `styleNotFound` the style `Foo`; `bookmarkNameRepaired` names `2 Totals!`;
+/// each `template` code counts 1 at `body/p[0]` and names `{{musteri.unvan}}`.
 /// With [one], `invalidCharactersRemoved`, `numberingNotFound`,
 /// `styleNotFound` and `bookmarkNameRepaired` count 1 at `body/p[0]`, for their
 /// singular text.
@@ -179,6 +180,25 @@ DocxWarning _docxSample(DocxWarningCode code, {bool one = false}) {
           detail: '2 Totals!',
         );
       }
+    case DocxWarningCode.templateValueMissing:
+    case DocxWarningCode.templateTagMalformed:
+    case DocxWarningCode.templateSectionMalformed:
+    case DocxWarningCode.templateValueNotText:
+    case DocxWarningCode.templateValueNotPicture:
+    case DocxWarningCode.templateFormatWarning:
+    case DocxWarningCode.templateSwitchUnsupported:
+    case DocxWarningCode.templateFieldNotTyped:
+    case DocxWarningCode.templatePlaceholderInRevision:
+    case DocxWarningCode.templatePlaceholderInContentControl:
+    case DocxWarningCode.templatePlaceholderNotTyped:
+    case DocxWarningCode.templateRepeatDroppedAnnotation:
+    case DocxWarningCode.templateRemovalDroppedAnnotation:
+      collector.add(
+        code,
+        part: '/word/document.xml',
+        location: 'body/p[0]',
+        detail: '{{musteri.unvan}}',
+      );
   }
   return collector.warnings.single;
 }
@@ -262,7 +282,8 @@ String warningMessagesMarkdown() {
     ..writeln('`2 Totals!`. The second `invalidCharactersRemoved`,')
     ..writeln('`numberingNotFound`, `styleNotFound` and')
     ..writeln('`bookmarkNameRepaired` rows count 1 and name `body/p[0]`, for')
-    ..writeln('the singular.')
+    ..writeln('the singular. Each `template` code counts 1, names `body/p[0]`')
+    ..writeln('and the tag `{{musteri.unvan}}`.')
     ..writeln()
     ..writeln('| Code | en | de | tr |')
     ..writeln('|---|---|---|---|');

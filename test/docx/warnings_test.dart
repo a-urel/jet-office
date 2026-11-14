@@ -348,4 +348,35 @@ void main() {
       expect(w.message(OfficeLocale.tr), contains('/docProps/core.xml'));
     },
   );
+
+  group('template codes', () {
+    test('every template code has a message naming the part and the tag', () {
+      for (final DocxWarningCode code in DocxWarningCode.values.where(
+        (DocxWarningCode c) => c.name.startsWith('template'),
+      )) {
+        final DocxWarningCollector c = DocxWarningCollector()
+          ..add(
+            code,
+            part: '/word/document.xml',
+            location: 'body/p[0]',
+            detail: '{{musteri.unvan}}',
+          );
+        for (final OfficeLocale l in OfficeLocale.values) {
+          final String m = c.warnings.single.message(l);
+          expect(m, contains('/word/document.xml'), reason: '$code $l');
+          expect(m, contains('{{musteri.unvan}}'), reason: '$code $l');
+        }
+      }
+    });
+
+    test(
+      'thirteen template codes',
+      () => expect(
+        DocxWarningCode.values.where(
+          (DocxWarningCode c) => c.name.startsWith('template'),
+        ),
+        hasLength(13),
+      ),
+    );
+  });
 }

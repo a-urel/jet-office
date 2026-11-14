@@ -58,6 +58,67 @@ enum DocxWarningCode {
   /// Every save of a document that holds the repaired start reports it. A
   /// name read from a file is kept and never reported.
   bookmarkNameRepaired,
+
+  /// A template tag names a value the data lacks (a value, section or picture
+  /// tag); the tag stays as written and [DocxWarning.detail] is the tag as
+  /// written, such as `{{musteri.unvan}}`.
+  templateValueMissing,
+
+  /// A `{{` in a template is not a tag, or a tag runs across non-text
+  /// content; it stays as text and [DocxWarning.detail] is the tag as
+  /// written.
+  templateTagMalformed,
+
+  /// Section tags in a template do not pair or nest, or a repeat crosses a
+  /// vertical merge, or sections were used before they are filled (T2); the
+  /// section tags were left as written and [DocxWarning.detail] is the tag as
+  /// written.
+  templateSectionMalformed,
+
+  /// A list or map was given for a value tag; the tag stays as written and
+  /// [DocxWarning.detail] is the tag as written.
+  templateValueNotText,
+
+  /// Something that is not a picture was given for a picture placeholder; the
+  /// placeholder picture stays and [DocxWarning.detail] is the tag as
+  /// written. Raised from T2.
+  templateValueNotPicture,
+
+  /// The number format engine warned about a format code on a tag;
+  /// [DocxWarning.detail] is the tag as written, with its code.
+  templateFormatWarning,
+
+  /// A `MERGEFIELD` switch is not honoured and the default format was used;
+  /// [DocxWarning.detail] is the field instruction as written.
+  templateSwitchUnsupported,
+
+  /// A `MERGEFIELD` is kept by the model as loose runs, not as a typed field,
+  /// and stays as it is; [DocxWarning.detail] is the field instruction as
+  /// written.
+  templateFieldNotTyped,
+
+  /// A tag lies inside a tracked change and was left as written;
+  /// [DocxWarning.detail] is the tag as written.
+  templatePlaceholderInRevision,
+
+  /// A tag lies inside a content control and was left as written;
+  /// [DocxWarning.detail] is the tag as written.
+  templatePlaceholderInContentControl,
+
+  /// A tag lies where the model keeps content opaque (footnotes, endnotes,
+  /// comments, text boxes, `mc:AlternateContent`, an anchored picture's alt
+  /// text) and was left as written; [DocxWarning.detail] is the tag as
+  /// written.
+  templatePlaceholderNotTyped,
+
+  /// A comment, note reference or bookmark was kept in the first copy of a
+  /// repeated section only; [DocxWarning.detail] is the section tag as
+  /// written. Raised from T3.
+  templateRepeatDroppedAnnotation,
+
+  /// Half of an annotation was removed with a section; [DocxWarning.detail]
+  /// is the section tag as written. Raised from T3.
+  templateRemovalDroppedAnnotation,
 }
 
 /// One data problem found while reading or writing a DOCX file, possibly
@@ -84,7 +145,9 @@ final class DocxWarning {
   /// carries the id of the list; [DocxWarningCode.styleNotFound] carries the
   /// id of the style; [DocxWarningCode.propertyValueInvalid] carries the
   /// name of the property's element; [DocxWarningCode.bookmarkNameRepaired]
-  /// carries the name as given.
+  /// carries the name as given. Every `template` code carries the tag or
+  /// field instruction as written in the document, such as
+  /// `{{musteri.unvan}}`.
   String? get detail => _entry.detail;
 
   /// How many times the problem occurred in [part].
