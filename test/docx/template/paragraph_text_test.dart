@@ -167,6 +167,20 @@ void main() {
       expect(() => t.spanOf(0, 3), throwsRangeError);
     });
 
+    test('a run holding only an instruction cuts the segment', () {
+      final ParagraphText t = _text(
+        '<w:r><w:t>{{a</w:t></w:r>'
+        '<w:r><w:instrText xml:space="preserve"> PAGE </w:instrText></w:r>'
+        '<w:r><w:t>}}</w:t></w:r>',
+      );
+      expect(t.text, '{{a}}');
+      expect(
+        t.positions.map((TextPosition p) => p.segment).toSet(),
+        hasLength(2),
+      );
+      expect(t.spanOf(0, 5).crossesBoundary, isTrue);
+    });
+
     test('a header holds the split tag', () {
       final DocxDocument doc = DocxDocument.open(templateWithHeader());
       final DocxParagraph p = doc.sections.first.header.blocks

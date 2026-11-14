@@ -197,7 +197,9 @@ final class _Builder {
         case DocxText():
           _addText(c.text, region, run: run, index: i);
         case DocxFieldInstruction():
-          break;
+          // Instruction text is never visible, but a tag may not span it:
+          // replacing the span would remove the run that holds it.
+          _cut();
         default:
           // A tab, break, picture, field mark or opaque content: one
           // position of its own, which ends the segment on both sides.
