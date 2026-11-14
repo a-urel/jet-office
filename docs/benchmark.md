@@ -59,6 +59,15 @@ dart test -p chrome benchmark/xlsx_model_generate_benchmark_test.dart
 The quality gate does not run it. `dart_test.yaml` starts Chrome with
 `--enable-precise-memory-info`, which makes `performance.memory` exact.
 
+`dart test benchmark` runs several suites at once, so their times compete
+for the processor and their memory shares one process: on 2026-11-14 the
+writers came out 20 to 36% slower that way and the read's memory/N 8.94
+instead of about 2. Figures to record come from `dart test -j 1 benchmark`
+(one suite at a time) or from each file alone. Even with `-j 1` the suites
+share one VM process, whose peak RSS never falls, so a "peak RSS" line
+holds the peaks of the suites before it; the sampled "above baseline"
+figures do not.
+
 ## Method
 
 The write benchmark:
@@ -1123,3 +1132,264 @@ chrome | read back | block 20405 | "Changed by the benchmark"
 - Every figure here is one run on one machine, so the figures show the order
   of magnitude and not a precise ratio, and the VM and Chrome memory figures
   measure different things and must not be compared.
+
+## Run of 2026-11-14
+
+Every benchmark again, after the day's test changes: the scale tests count
+work instead of timing it, and the reader decides a number with
+`matchNumberText`, a one-pass matcher, in place of a pattern. Nothing else in
+the benchmarked paths changed that day.
+
+- Date: 2026-11-14.
+- Machine: Mac15,7, Apple M3 Pro, 36 GiB RAM (38,654,705,664 bytes).
+- OS: macOS 27.2.1 (26B131).
+- Dart SDK 3.14.0 (stable); the VM runs the JIT, Chrome runs dart2js output.
+- Chrome 157.0.8103.52.
+- `dart test -j 1 benchmark` and `dart test -j 1 -p chrome benchmark`: 22
+  tests each, all passed (15 min and 28 min).
+
+| Benchmark (VM ms / Chrome ms) | Recorded | 2026-11-14 | Change (VM) |
+|---|---|---|---|
+| `XlsxWriter`, write and close (2026-11-11) | 1,670 / 3,911 | 1,727 / 4,010 | +3% |
+| `XlsxStreamWriter`, write and close (2026-11-11) | 1,666 / 3,917 | 1,713 / 4,014 | +3% |
+| `XlsxWriter`, median (2026-10-29) | 1,466 / 3,143 | 1,681 / 3,829 | +15% |
+| `XlsxStreamWriter`, median (2026-10-29) | 1,465 / 3,150 | 1,710 / 3,795 | +17% |
+| `XlsxReader`, median (2026-10-29) | 2,677 / 3,349 | 2,424 / 3,411 | -9% |
+| First rows pass (2026-10-29) | 2,684 / 3,338 | 2,420 / 3,400 | -10% |
+| Worst case read (2026-10-29) | 18,460 / 19,269 | 15,520 / 20,498 | -16% |
+| `formatCell`, ns per cell (2026-10-30) | 1,371 / 2,337 | 1,212 / 2,288 | -12% |
+| Model: load the sheet (2026-11-02) | 1,524 / 2,333 | 2,112 / 3,150 | +39% |
+| Model: save, loaded and edited (2026-11-02) | 1,285 / 2,709 | 1,769 / 3,667 | +38% |
+| Model: open, set one cell, save (2026-11-02) | 2,916 / 5,559 | 4,007 / 7,517 | +37% |
+| Model generation: fill and save (2026-11-11) | 3,734 / 6,759 | 3,753 / 6,956 | +1% |
+| 1,000,000 rows: fill and save (2026-11-11) | 38,594 / 72,091 | 38,748 / 73,134 | 0% |
+| 20,000 rules (2026-11-11) | 445,625 / 772,172 | 460,160 / 827,975 | +3% |
+| `insertRows(1)` (2026-11-11) | 4,301 / 5,111 | 4,314 / 5,460 | 0% |
+| DOCX table: build 10,000 rows (2026-11-07) | 262 / 243 | 435 / 369 | +66% |
+| DOCX table: save 10,000 rows (2026-11-07) | 566 / 1,157 | 818 / 1,634 | +45% |
+| DOCX table: open 10,000 rows (2026-11-07) | 936 / 1,589 | 1,268 / 2,083 | +35% |
+| DOCX document: load the body (2026-11-08) | 1,995 / 2,971 | 2,654 / 3,836 | +33% |
+| DOCX document: save (2026-11-08) | 932 / 2,128 | 1,233 / 2,902 | +32% |
+
+What it shows:
+
+- **The new number matcher costs nothing.** The read, whose every numeric cell
+  goes through it, is 9 to 10% faster on the VM and within 2% in Chrome; the
+  worst case is 16% faster on the VM. Run alone the same day, the read took
+  2,493 ms (first pass 2,444 ms).
+- **The writers and the model generation hold their 2026-11-11 figures**
+  within 3%. Against 2026-10-29 the writer benchmark is 15 to 17% slower
+  (1,466 ms then, 1,681 ms now); the 2026-11-11 run already showed it, so it
+  is not new.
+- **The model's load and save and the DOCX phases are 30 to 66% slower** than
+  their records of 2026-11-02 to 2026-11-08, on the VM and in Chrome alike.
+  Each file run alone the same day gives the same (model: load 2,072 ms, save
+  1,730 ms; DOCX table: build 10,000 rows 436 ms, open 1,300 ms; DOCX
+  document: load 2,546 ms, save 1,283 ms), so the shared process is not the
+  cause. The Dart SDK moved from 3.13.7 to 3.14.0 since, but the model
+  generation, recorded on 3.13.7, did not slow, so the SDK alone does not
+  explain it either; the work merged since those dates (W3 to W6, C1 and C2,
+  D3 to D6, T1) may. Not investigated yet.
+- **Links and rules stay quadratic**, as recorded: 20,000 rules take 460 s on
+  the VM and 828 s in Chrome.
+- The stores' estimates are unchanged to the byte (33,868,294 and 23,736,316
+  bytes; 35,789,130 for the generated sheet; 349,076,820 at 1,000,000 rows), as
+  are the files' sizes.
+- Memory: the sampled figures are near their records (read 2.10 N on the VM
+  and 1.74 N in Chrome; worst case 2.12 N on the VM; model 1.21 N and 2.94 N).
+  The VM's "peak RSS" lines hold the suites run before them (one shows 39.76
+  N) and the worst case's Chrome baseline caught a collection (-2.85 N), so
+  neither is a figure of its own benchmark (see "Run it").
+
+Every line of the run:
+
+```text
+vm | phase | 2500 rows | build | 187.4 ms | RSS before 195641344 | after 279855104 | peak RSS 279855104 (was 199753728)
+vm | phase | 2500 rows | save | 309.6 ms | RSS before 279871488 | after 302972928 | peak RSS 302972928 (was 279871488)
+vm | 2500 rows | file | 477133 bytes
+vm | phase | 2500 rows | open (and load the body) | 382.7 ms | RSS before 302972928 | after 362430464 | peak RSS 362741760 (was 302972928)
+vm | phase | 2500 rows | read every cell | 25.3 ms | RSS before 362430464 | after 364544000 | peak RSS 366657536 (was 362741760)
+vm | 2500 rows | cells | 30012 | 1282185 characters | 28232 distinct texts | first data row 21 to 73 characters
+vm | phase | 10000 rows | build | 435.4 ms | RSS before 368771072 | after 447348736 | peak RSS 447348736 (was 368787456)
+vm | phase | 10000 rows | save | 818.4 ms | RSS before 447348736 | after 513753088 | peak RSS 513753088 (was 447348736)
+vm | 10000 rows | file | 1882736 bytes
+vm | phase | 10000 rows | open (and load the body) | 1267.7 ms | RSS before 513753088 | after 760659968 | peak RSS 760659968 (was 513753088)
+vm | phase | 10000 rows | read every cell | 72.6 ms | RSS before 760659968 | after 761741312 | peak RSS 763166720 (was 760659968)
+vm | 10000 rows | cells | 120012 | 5145557 characters | 109337 distinct texts | first data row 21 to 73 characters
+vm | input | built in 2329 ms | 2052084 bytes | xl/worksheets/sheet1.xml 2050864 bytes deflated, 262143983 bytes XML | ratio 127.8 | k n/a (no row varied) | rows 1372481
+vm | XlsxReader | 15520 ms | 2052084 bytes | RSS peak 792985600 bytes | baseline 236126208 bytes | above 556859392 bytes (2.12 N) | after the first row above 556859392 bytes (2.12 N) | rows 1048576 | cells 12582912 | warnings 1 (cellOutsideSheet ×3886860)
+vm | peak RSS | before 765870080 bytes | after 792985600 bytes | above the baseline 556859392 bytes (2.12 N) | rose during the read: yes
+vm | input | 6958168 bytes | xl/worksheets/sheet1.xml 43580479 bytes XML | 1166679 cells
+vm | retained store | 33868294 bytes | 29.0 bytes/cell | store/N 0.777 | N 43580479 bytes
+vm | retained store, formulas | 50000 x 12 | 23736316 bytes | 39.6 bytes/cell | store/N 0.733 | N 32377917 bytes
+vm | model | warm-up | RSS baseline 329269248 | after open 291700736 | after load 361840640 | above baseline 32571392 bytes | peak RSS 792985600 (was 792985600)
+vm | model | run 1 | RSS baseline 361840640 | after open 322764800 | after load 409894912 | above baseline 48054272 bytes | peak RSS 792985600 (was 792985600)
+vm | model | run 2 | RSS baseline 409894912 | after open 428310528 | after load 449003520 | above baseline 39108608 bytes | peak RSS 792985600 (was 792985600)
+vm | model | run 3 | RSS baseline 449003520 | after open 471629824 | after load 501645312 | above baseline 52641792 bytes | peak RSS 792985600 (was 792985600)
+vm | process | 52641792 bytes above baseline (largest of 4) | 45.1 bytes/cell | memory/N 1.21 | N 43580479 bytes
+vm | process peak | peak RSS above baseline 463716352 bytes | memory/N 10.64
+vm | phase | open (verifies every entry) | 156.7 ms
+vm | phase | load the sheet (cellAt) | 2112.1 ms
+vm | phase | read every row (rows, sheet loaded) | 1189.9 ms
+vm | phase | set one cell (sheet loaded) | 0.3 ms
+vm | phase | save (sheet loaded and edited) | 1769.2 ms | 6995589 bytes
+vm | phase | save (sheet never loaded) | 686.6 ms
+vm | phase | open, set one cell, save | 4006.9 ms
+vm | XlsxStreamWriter | warm-up | 1850 ms | 6958168 bytes | peak RSS 792985600 bytes
+vm | XlsxStreamWriter | run 1 | 1710 ms | 6958168 bytes | peak RSS 792985600 bytes
+vm | XlsxStreamWriter | run 2 | 1751 ms | 6958168 bytes | peak RSS 792985600 bytes
+vm | XlsxStreamWriter | run 3 | 1700 ms | 6958168 bytes | peak RSS 792985600 bytes
+vm | XlsxStreamWriter | median 1710 ms
+vm | XlsxWriter | warm-up | 1673 ms | 6958168 bytes | peak RSS 792985600 bytes
+vm | XlsxWriter | run 1 | 1679 ms | 6958168 bytes | peak RSS 792985600 bytes
+vm | XlsxWriter | run 2 | 1681 ms | 6958168 bytes | peak RSS 792985600 bytes
+vm | XlsxWriter | run 3 | 1686 ms | 6958168 bytes | peak RSS 792985600 bytes
+vm | XlsxWriter | median 1681 ms
+vm | generate | run 1 | fill 2161.4 ms | save 1810.2 ms | 6995545 bytes
+vm | generate | run 2 | fill 1952.6 ms | save 1797.6 ms | 6995545 bytes
+vm | generate | run 3 | fill 1983.6 ms | save 1769.2 ms | 6995545 bytes
+vm | phase | generate: fill (setCell of every cell) | 1983.6 ms
+vm | phase | generate: save | 1797.6 ms
+vm | phase | generate: fill and save | 3752.8 ms | 6995545 bytes
+vm | retained store | 35789130 bytes | 30.7 bytes/cell | 1166679 cells
+vm | check | the saved file holds row 100000
+vm | model | warm-up | RSS baseline 414941184 | after fill 334266368 | after save 479346688 | above baseline 64405504 bytes
+vm | model | run 1 | RSS baseline 479346688 | after fill 407912448 | after save 529186816 | above baseline 49840128 bytes
+vm | model | run 2 | RSS baseline 529186816 | after fill 462241792 | after save 579993600 | above baseline 50806784 bytes
+vm | model | run 3 | RSS baseline 579993600 | after fill 508248064 | after save 631160832 | above baseline 51167232 bytes
+vm | process | 64405504 bytes above baseline (largest of 4) | 55.2 bytes/cell
+vm | phase | XlsxWriter, write and close | 1726.6 ms | 6958168 bytes
+vm | phase | XlsxStreamWriter, write and close | 1713.0 ms | 6958168 bytes
+vm | phase | 1000 links (setCell) | 90.1 ms
+vm | phase | 1000 rules (addConditionalFormat) | 1155.5 ms
+vm | phase | 5000 links (setCell) | 1226.0 ms
+vm | phase | 5000 rules (addConditionalFormat) | 28687.7 ms
+vm | phase | 20000 links (setCell) | 22663.6 ms (1 run)
+vm | phase | 20000 rules (addConditionalFormat) | 460159.7 ms (1 run)
+vm | phase | insertRows(1) | 4313.6 ms
+vm | phase | undo of insertRows | 27.9 ms
+vm | phase | deleteColumns(0) | 4371.0 ms
+vm | phase | undo of deleteColumns | 151.2 ms
+vm | check | after the undos the saved file holds row 100000
+vm | 1m | fill 20532.3 ms | save 18215.6 ms | total 38747.9 ms | 70875501 bytes | retained store 349076820 bytes | 11666679 cells
+vm | 1m | sheet XML | 468436661 bytes
+vm | 1m | check | the saved file holds row 1000000
+vm | input | 6958168 bytes | xl/worksheets/sheet1.xml 6688565 bytes deflated, 43580479 bytes XML
+vm | XlsxReader | warm-up | 2616 ms | 6958168 bytes | RSS peak 287621120 bytes | baseline 196247552 bytes | above 91373568 bytes | cells 1166679 | warnings 1 (formulaWithoutValue) | peak RSS 1929003008 bytes
+vm | XlsxReader | run 1 | 2431 ms | 6958168 bytes | RSS peak 292421632 bytes | baseline 244039680 bytes | above 48381952 bytes | cells 1166679 | warnings 1 (formulaWithoutValue) | peak RSS 1929003008 bytes
+vm | XlsxReader | run 2 | 2424 ms | 6958168 bytes | RSS peak 291258368 bytes | baseline 244006912 bytes | above 47251456 bytes | cells 1166679 | warnings 1 (formulaWithoutValue) | peak RSS 1929003008 bytes
+vm | XlsxReader | run 3 | 2410 ms | 6958168 bytes | RSS peak 291225600 bytes | baseline 244006912 bytes | above 47218688 bytes | cells 1166679 | warnings 1 (formulaWithoutValue) | peak RSS 1929003008 bytes
+vm | XlsxReader | median 2424 ms
+vm | phase | open | 0.8 ms
+vm | phase | ZipReader.read (pure-Dart inflate) | 145.6 ms | N 43580479 bytes
+vm | phase | platform inflate | 40.4 ms
+vm | phase | first rows pass | 2420.0 ms
+vm | phase | second rows pass (shared strings cached) | 2369.9 ms
+vm | phase | mergesAt(0) after rows | 580.4 ms
+vm | memory/N | 2.10 | largest sampled peak above baseline 91373568 bytes | N 43580479 bytes
+vm | memory/N (peak RSS) | 39.76 | peak RSS after the warm-up above its baseline 1732755456 bytes | reached in the warm-up: no (before: 1929003008 bytes)
+vm | input | equals an in-process XlsxWriter write
+vm | input | 6958168 bytes | 1166679 cells
+vm | formatCell | median 1413.7 ms | 1166679 cells | 1212 ns/cell | warnings 0
+vm | input | long.docx 36524 bytes, 104 paragraphs | scaled file 4854346 bytes | word/document.xml 34981100 bytes XML
+vm | phase | open | 125.0 ms | RSS before 688635904 | after 445448192 | peak RSS 1929003008 (was 1929003008)
+vm | phase | load the body | 2653.8 ms | RSS before 445448192 | after 892370944 | peak RSS 1929003008 (was 1929003008)
+vm | body | 40810 blocks | 40040 paragraphs
+vm | phase | set the text of block 20405 | 1.3 ms | RSS before 892420096 | after 892420096 | peak RSS 1929003008 (was 1929003008)
+vm | phase | save | 1233.3 ms | RSS before 892420096 | after 990167040 | peak RSS 1929003008 (was 1929003008)
+vm | output | saved file 3813003 bytes
+vm | phase | reopen (and load the body) | 2730.7 ms | RSS before 990167040 | after 1354661888 | peak RSS 1929003008 (was 1929003008)
+vm | read back | block 20405 | "Changed by the benchmark"
+chrome | phase | 2500 rows | build | 114.3 ms | peak JS heap before 23524230 | after 54989450 | peak JS heap 54989466 (was 23525726)
+chrome | phase | 2500 rows | save | 448.5 ms | peak JS heap before 55008931 | after 99135116 | peak JS heap 98848988 (was 55008947)
+chrome | 2500 rows | file | 486769 bytes
+chrome | phase | 2500 rows | open (and load the body) | 551.3 ms | peak JS heap before 98853664 | after 131690913 | peak JS heap 131690929 (was 98854252)
+chrome | phase | 2500 rows | read every cell | 15.1 ms | peak JS heap before 131696401 | after 137237469 | peak JS heap 137237485 (was 131696417)
+chrome | 2500 rows | cells | 30012 | 1282185 characters | 28232 distinct texts | first data row 21 to 73 characters
+chrome | phase | 10000 rows | build | 369.3 ms | peak JS heap before 173326281 | after 269320108 | peak JS heap 269320124 (was 173326297)
+chrome | phase | 10000 rows | save | 1633.7 ms | peak JS heap before 269322572 | after 348972854 | peak JS heap 349235866 (was 269322588)
+chrome | 10000 rows | file | 1923649 bytes
+chrome | phase | 10000 rows | open (and load the body) | 2083.1 ms | peak JS heap before 349292178 | after 487304364 | peak JS heap 487304380 (was 349292194)
+chrome | phase | 10000 rows | read every cell | 30.4 ms | peak JS heap before 487308820 | after 509002444 | peak JS heap 509002460 (was 487308836)
+chrome | 10000 rows | cells | 120012 | 5145557 characters | 109337 distinct texts | first data row 21 to 73 characters
+chrome | input | built in 2387 ms | 1965137 bytes | xl/worksheets/sheet1.xml 1963917 bytes deflated, 262143983 bytes XML | ratio 133.5 | k n/a (no row varied) | rows 1372481
+chrome | XlsxReader | 20498 ms | 1965137 bytes | peak JS heap peak 595616201 bytes | baseline 1341847198 bytes | above -746230997 bytes (-2.85 N) | after the first row above -779615043 bytes (-2.97 N) | rows 1048576 | cells 12582912 | warnings 1 (cellOutsideSheet ×3886860)
+chrome | input | 6981925 bytes | xl/worksheets/sheet1.xml 43580479 bytes XML | 1166679 cells
+chrome | retained store | 33868294 bytes | 29.0 bytes/cell | store/N 0.777 | N 43580479 bytes
+chrome | retained store, formulas | 50000 x 12 | 23736316 bytes | 39.6 bytes/cell | store/N 0.733 | N 32377917 bytes
+chrome | model | warm-up | peak JS heap baseline 254134079 | after open 311425175 | after load 215756651 | above baseline -38377428 bytes
+chrome | model | run 1 | peak JS heap baseline 215761907 | after open 231496400 | after load 247943667 | above baseline 32181760 bytes
+chrome | model | run 2 | peak JS heap baseline 247948115 | after open 349875208 | after load 313802490 | above baseline 65854375 bytes
+chrome | model | run 3 | peak JS heap baseline 313806102 | after open 346659782 | after load 441952614 | above baseline 128146512 bytes
+chrome | process | 128146512 bytes above baseline (largest of 4) | 109.8 bytes/cell | memory/N 2.94 | N 43580479 bytes
+chrome | phase | open (verifies every entry) | 615.7 ms
+chrome | phase | load the sheet (cellAt) | 3149.6 ms
+chrome | phase | read every row (rows, sheet loaded) | 1124.3 ms
+chrome | phase | set one cell (sheet loaded) | 0.2 ms
+chrome | phase | save (sheet loaded and edited) | 3667.4 ms | 7018358 bytes
+chrome | phase | save (sheet never loaded) | 2972.2 ms
+chrome | phase | open, set one cell, save | 7516.9 ms
+chrome | XlsxStreamWriter | warm-up | 4283 ms | 6981925 bytes | peak JS heap 165484997 bytes
+chrome | XlsxStreamWriter | run 1 | 3778 ms | 6981925 bytes | peak JS heap 128054793 bytes
+chrome | XlsxStreamWriter | run 2 | 3807 ms | 6981925 bytes | peak JS heap 199653836 bytes
+chrome | XlsxStreamWriter | run 3 | 3795 ms | 6981925 bytes | peak JS heap 212957976 bytes
+chrome | XlsxStreamWriter | median 3795 ms
+chrome | XlsxWriter | warm-up | 3790 ms | 6981925 bytes | peak JS heap 216266294 bytes
+chrome | XlsxWriter | run 1 | 3839 ms | 6981925 bytes | peak JS heap 214871938 bytes
+chrome | XlsxWriter | run 2 | 3829 ms | 6981925 bytes | peak JS heap 242409929 bytes
+chrome | XlsxWriter | run 3 | 3801 ms | 6981925 bytes | peak JS heap 242755971 bytes
+chrome | XlsxWriter | median 3829 ms
+chrome | generate | run 1 | fill 3282.6 ms | save 4090.0 ms | 7018313 bytes
+chrome | generate | run 2 | fill 3200.5 ms | save 3694.8 ms | 7018313 bytes
+chrome | generate | run 3 | fill 3188.3 ms | save 3767.5 ms | 7018313 bytes
+chrome | phase | generate: fill (setCell of every cell) | 3200.5 ms
+chrome | phase | generate: save | 3767.5 ms
+chrome | phase | generate: fill and save | 6955.8 ms | 7018313 bytes
+chrome | retained store | 35789130 bytes | 30.7 bytes/cell | 1166679 cells
+chrome | check | the saved file holds row 100000
+chrome | model | warm-up | peak JS heap baseline 1803797826 | after fill 1862148590 | after save 1991860394 | above baseline 188062568 bytes
+chrome | model | run 1 | peak JS heap baseline 1991869566 | after fill 2013962648 | after save 2125502878 | above baseline 133633312 bytes
+chrome | model | run 2 | peak JS heap baseline 2125505374 | after fill 2151637186 | after save 2245443158 | above baseline 119937784 bytes
+chrome | model | run 3 | peak JS heap baseline 2245445142 | after fill 2276604180 | after save 2387937177 | above baseline 142492035 bytes
+chrome | process | 188062568 bytes above baseline (largest of 4) | 161.2 bytes/cell
+chrome | phase | XlsxWriter, write and close | 4009.5 ms | 6981925 bytes
+chrome | phase | XlsxStreamWriter, write and close | 4014.1 ms | 6981925 bytes
+chrome | phase | 1000 links (setCell) | 149.6 ms
+chrome | phase | 1000 rules (addConditionalFormat) | 2061.7 ms
+chrome | phase | 5000 links (setCell) | 3096.4 ms
+chrome | phase | 5000 rules (addConditionalFormat) | 51690.8 ms
+chrome | phase | 20000 links (setCell) | 54416.3 ms (1 run)
+chrome | phase | 20000 rules (addConditionalFormat) | 827975.2 ms (1 run)
+chrome | phase | insertRows(1) | 5459.8 ms
+chrome | phase | undo of insertRows | 37.5 ms
+chrome | phase | deleteColumns(0) | 5492.8 ms
+chrome | phase | undo of deleteColumns | 199.7 ms
+chrome | check | after the undos the saved file holds row 100000
+chrome | 1m | fill 34387.2 ms | save 38746.8 ms | total 73134.0 ms | 71058248 bytes | retained store 349076820 bytes | 11666679 cells
+chrome | 1m | sheet XML | 468436661 bytes
+chrome | 1m | check | the saved file holds row 1000000
+chrome | input | 6981925 bytes | xl/worksheets/sheet1.xml 6712845 bytes deflated, 43580479 bytes XML
+chrome | XlsxReader | warm-up | 3438 ms | 6981925 bytes | peak JS heap peak 157693669 bytes | baseline 83815888 bytes | above 73877781 bytes | cells 1166679 | warnings 1 (formulaWithoutValue)
+chrome | XlsxReader | run 1 | 3416 ms | 6981925 bytes | peak JS heap peak 154102344 bytes | baseline 154607160 bytes | above -504816 bytes | cells 1166679 | warnings 1 (formulaWithoutValue)
+chrome | XlsxReader | run 2 | 3411 ms | 6981925 bytes | peak JS heap peak 186005594 bytes | baseline 137179712 bytes | above 48825882 bytes | cells 1166679 | warnings 1 (formulaWithoutValue)
+chrome | XlsxReader | run 3 | 3395 ms | 6981925 bytes | peak JS heap peak 153812072 bytes | baseline 78091532 bytes | above 75720540 bytes | cells 1166679 | warnings 1 (formulaWithoutValue)
+chrome | XlsxReader | median 3411 ms
+chrome | phase | open | 0.6 ms
+chrome | phase | ZipReader.read (pure-Dart inflate) | 555.3 ms | N 43580479 bytes
+chrome | phase | platform inflate | n/a
+chrome | phase | first rows pass | 3399.6 ms
+chrome | phase | second rows pass (shared strings cached) | 3304.5 ms
+chrome | phase | mergesAt(0) after rows | 1480.5 ms
+chrome | memory/N | 1.74 | largest sampled peak above baseline 75720540 bytes | N 43580479 bytes
+chrome | input | 6981925 bytes | 1166679 cells
+chrome | formatCell | median 2669.8 ms | 1166679 cells | 2288 ns/cell | warnings 0
+chrome | input | long.docx 36524 bytes, 104 paragraphs | scaled file 5061552 bytes | word/document.xml 34981100 bytes XML
+chrome | phase | open | 399.2 ms | peak JS heap before 359945918 | after 144858355 | peak JS heap 144858371 (was 359946554)
+chrome | phase | load the body | 3836.3 ms | peak JS heap before 144864071 | after 426999119 | peak JS heap 426999135 (was 144864087)
+chrome | body | 40810 blocks | 40040 paragraphs
+chrome | phase | set the text of block 20405 | 0.4 ms | peak JS heap before 427043931 | after 427066335 | peak JS heap 427066351 (was 427044519)
+chrome | phase | save | 2901.8 ms | peak JS heap before 427069295 | after 590519754 | peak JS heap 590519770 (was 427069311)
+chrome | output | saved file 3828909 bytes
+chrome | phase | reopen (and load the body) | 4072.6 ms | peak JS heap before 590529222 | after 1044427755 | peak JS heap 1044427771 (was 590529238)
+chrome | read back | block 20405 | "Changed by the benchmark"
+```
