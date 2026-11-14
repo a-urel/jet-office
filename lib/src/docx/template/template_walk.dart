@@ -435,16 +435,25 @@ final class _InlineWalk {
             'sdt' => DocxWarningCode.templatePlaceholderInContentControl,
             _ => DocxWarningCode.templatePlaceholderNotTyped,
           };
-    // The tags of visible text are the paragraph text's; only what is not
-    // visible is added here: every placeholder of an element without text,
-    // the merge fields of one with text.
+    // The tags of visible text are the paragraph text's; the text outside
+    // any w:p of an element with text is that visible text, so only its
+    // paragraphs (a text box's) are scanned for tags. A tag found here is
+    // out of the paragraph's text, so not typed whatever holds it; a merge
+    // field takes the holder's code.
     final bool visible = inline.text.isNotEmpty;
     for (final String s in placeholdersIn(
       opaqueInlineXml(inline),
       maxDepth: maxDepth,
+      outsideParagraphs: !visible,
     )) {
-      if (visible && parseMergeField(s) == null) continue;
-      entries.add(placeholderEntry(s, code, offset: offset));
+      final bool merge = parseMergeField(s) != null;
+      entries.add(
+        placeholderEntry(
+          s,
+          merge ? code : DocxWarningCode.templatePlaceholderNotTyped,
+          offset: offset,
+        ),
+      );
     }
     if (counting) offset += inline.text.length;
   }

@@ -22,13 +22,22 @@ import 'tag_scanner.dart';
 /// the text of each `w:instrText`, and each `w:fldSimple`'s `w:instr`, that
 /// `parseMergeField` reads as a `MERGEFIELD`.
 ///
-/// `mc:Fallback` is skipped: it repeats its `mc:Choice`. [xml] is read again,
-/// nested at most [maxDepth] deep; anything that cannot be read gives an
-/// empty list.
-List<String> placeholdersIn(OpaqueXml xml, {int maxDepth = 256}) {
+/// Without [outsideParagraphs], text outside any `w:p` is not scanned: for an
+/// inline whose visible text the paragraph's own scan reads already, so only
+/// what it holds out of sight (a text box's paragraphs) is found here.
+///
+/// `mc:Fallback` is skipped: it repeats its `mc:Choice`. A `w:instrText` or a
+/// `w:p` nested in another, which the schema forbids but a file may hold, is
+/// read without failing. [xml] is read again, nested at most [maxDepth] deep;
+/// anything that cannot be read gives an empty list.
+List<String> placeholdersIn(
+  OpaqueXml xml, {
+  int maxDepth = 256,
+  bool outsideParagraphs = true,
+}) {
   try {
     final XmlPullReader r = readerOfCaptured(xml, maxDepth);
-    return _scan(r);
+    return _scan(r, outsideParagraphs: outsideParagraphs);
   } on Exception {
     return const <String>[];
   }
@@ -55,13 +64,16 @@ List<String> placeholdersInPart(DocxPackage package, String part) {
 enum _Open { paragraph, text, instruction, skipped, other }
 
 /// Scans the element [r] is on, from its start tag to its end.
-List<String> _scan(XmlPullReader r) {
+List<String> _scan(XmlPullReader r, {bool outsideParagraphs = true}) {
   final List<String> found = <String>[];
   final List<_Open> open = <_Open>[];
   // The text of the paragraphs open, innermost last; the first is the text
   // outside any paragraph.
   final List<StringBuffer> paragraphs = <StringBuffer>[StringBuffer()];
-  StringBuffer? instruction;
+  // The text of the outermost `w:instrText` open; one nested in it, which a
+  // file may hold, adds to it.
+  StringBuffer instruction = StringBuffer();
+  int instructions = 0;
   int skipping = 0;
 
   void flush(StringBuffer text) {
@@ -90,7 +102,7 @@ List<String> _scan(XmlPullReader r) {
           kind = _Open.text;
         } else if (w && name == 'instrText') {
           kind = _Open.instruction;
-          instruction = StringBuffer();
+          if (instructions++ == 0) instruction = StringBuffer();
         } else {
           kind = _Open.other;
           if (w && name == 'fldSimple') {
@@ -107,8 +119,7 @@ List<String> _scan(XmlPullReader r) {
           case _Open.paragraph:
             flush(paragraphs.removeLast());
           case _Open.instruction:
-            addInstruction(instruction.toString());
-            instruction = null;
+            if (--instructions == 0) addInstruction(instruction.toString());
           case _Open.text || _Open.other:
             break;
         }
@@ -118,7 +129,7 @@ List<String> _scan(XmlPullReader r) {
           case _Open.text:
             paragraphs.last.write(r.text);
           case _Open.instruction:
-            instruction!.write(r.text);
+            instruction.write(r.text);
           default:
             break;
         }
@@ -127,6 +138,6 @@ List<String> _scan(XmlPullReader r) {
     }
     if (open.isEmpty || !r.next()) break;
   }
-  flush(paragraphs.first);
+  if (outsideParagraphs) flush(paragraphs.first);
   return found;
 }

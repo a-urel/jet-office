@@ -591,6 +591,80 @@ void main() {
     });
   });
 
+  group('fillTemplate: untrusted opaque content', () {
+    const String nestedInstruction =
+        '<w:r><w:instrText><w:instrText>a</w:instrText>b</w:instrText></w:r>';
+
+    test('a nested w:instrText in a footnote does not throw', () {
+      Uint8List bytes() => _withStories(
+        _p(''),
+        footnote: '$nestedInstruction${_run('{{not}}')}',
+      );
+      final List<FoundTag> tags = listTemplateTags(_open(bytes()));
+      expect(tags.map((FoundTag t) => t.text), <String>['{{not}}']);
+      final List<DocxWarning> warnings = fillTemplate(
+        _open(bytes()),
+        <String, Object?>{},
+        _en,
+      );
+      expect(
+        _one(warnings, DocxWarningCode.templatePlaceholderNotTyped).detail,
+        '{{not}}',
+      );
+    });
+
+    test('a nested w:instrText in a body text box does not throw', () {
+      Uint8List bytes() => templateDocument(<String>[
+        '<w:r>${textBoxDrawing(<String>['{{logo}}']).replaceFirst('<w:r><w:t>{{logo}}', '$nestedInstruction<w:r><w:t>{{logo}}')}</w:r>',
+      ]);
+      final List<FoundTag> tags = listTemplateTags(_open(bytes()));
+      expect(tags.map((FoundTag t) => t.text), <String>['{{logo}}']);
+      final List<DocxWarning> warnings = fillTemplate(
+        _open(bytes()),
+        <String, Object?>{'logo': 'L'},
+        _en,
+      );
+      expect(
+        _one(warnings, DocxWarningCode.templatePlaceholderNotTyped).detail,
+        '{{logo}}',
+      );
+    });
+
+    test('a text box in a w:ins with visible text is reported', () {
+      final DocxDocument doc = _open(
+        templateDocument(<String>[
+          '<w:ins w:id="1" w:author="Ada" w:date="2026-01-01T00:00:00Z">'
+              '${_run('abc')}<w:r>${textBoxDrawing(<String>['{{x}}'])}</w:r>'
+              '</w:ins>',
+        ]),
+      );
+      final List<FoundTag> tags = listTemplateTags(doc);
+      expect(tags.map((FoundTag t) => t.text), <String>['{{x}}']);
+      expect(tags.single.problem, DocxWarningCode.templatePlaceholderNotTyped);
+      final List<DocxWarning> warnings = fillTemplate(doc, <String, Object?>{
+        'x': 'X',
+      }, _en);
+      expect(warnings, hasLength(1));
+      expect(
+        _one(warnings, DocxWarningCode.templatePlaceholderNotTyped).detail,
+        '{{x}}',
+      );
+      expect(_texts(_reopen(doc)), <String>['abc']);
+    });
+
+    test('a tag in the visible text of a w:ins is reported once', () {
+      final DocxDocument doc = _open(
+        templateDocument(<String>[tagInInsertion('{{a}}')]),
+      );
+      final List<FoundTag> tags = listTemplateTags(doc);
+      expect(tags, hasLength(1));
+      expect(
+        tags.single.problem,
+        DocxWarningCode.templatePlaceholderInRevision,
+      );
+    });
+  });
+
   group('fillTemplate: transaction', () {
     test('a data error changes nothing and records nothing', () {
       final DocxDocument doc = _open(templateDocument(<String>[_run('{{a}}')]));
