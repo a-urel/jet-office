@@ -378,8 +378,9 @@ final DocxResult result = DocxTemplate(bytes).fill(
   carriage return in a detail shows as a space, and no detail or listed tag
   holds U+FFFC, the stand-in the scan uses for content without text.
 - **Within a paragraph, text tags first.** The `{{}}` tags of a paragraph are
-  filled before its merge fields (Ruling 7a), so a merge field's value that
-  holds `{{x}}` is not filled again, as a tag's value is not.
+  filled before its merge fields (the plan's ruling R7a), so a merge field's
+  value that holds `{{x}}` is not filled again, as a tag's value is not
+  (`fill_test.dart`, "a merge value holding a tag is not filled again").
 - **Listing.** `DocxTemplate.tags` and `tagsOf(document)` list every tag, each
   with its kind (value, section, inverted section, end, current, merge field,
   malformed), name, format, depth and whether it can be filled, in reading

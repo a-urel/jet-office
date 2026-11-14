@@ -446,6 +446,20 @@ void main() {
       expect(_texts(_reopen(en)), <String>['1,234.56']);
     });
 
+    test('a merge value holding a tag is not filled again', () {
+      final DocxDocument doc = _open(
+        templateDocument(<String>[
+          _run('{{a}} ') + _complexField(' MERGEFIELD Ad ', '«Ad»'),
+        ]),
+      );
+      final List<DocxWarning> warnings = fillTemplate(doc, <String, Object?>{
+        'a': 'A',
+        'Ad': '{{a}}',
+      }, _en);
+      expect(warnings, isEmpty);
+      expect(_texts(_reopen(doc)), <String>['A {{a}}']);
+    });
+
     test('text before and after, only around a value', () {
       final DocxDocument doc = _open(
         templateDocument(<String>[
