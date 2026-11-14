@@ -6,6 +6,8 @@ import 'dart:typed_data';
 
 import 'package:jet_office/jet_office.dart';
 import 'package:jet_office/src/docx/docx_package.dart';
+import 'package:jet_office/src/docx/model/blocks.dart'
+    show setPlacedCellReadHook;
 import 'package:jet_office/src/docx/related_part.dart';
 import 'package:jet_office/src/docx/warnings.dart';
 import 'package:jet_office/src/opc/ooxml.dart' show ContentType, Ns, RelType;
@@ -52,10 +54,15 @@ final class _Failing implements PartContent {
   List<Uint8List> encode() => _fail();
 }
 
-/// The fastest of three runs of a change of `w:gridSpan` in the middle row of
-/// a table of three rows of [cells] cells: every later cell of that row moves
-/// and continues a cell of the row above, and the row below is plain.
-Duration _gridSpanSet(int cells) {
+/// Changes `w:gridSpan` in the middle row of a table of three rows of [cells]
+/// cells, where every later cell of that row moves and continues a cell of
+/// the row above and the row below is plain, and returns how many cells of
+/// the rows above and below the check read (`setPlacedCellReadHook`).
+///
+/// It stops the run with a failure once the reads pass [budget], so a check
+/// that walks a neighbour row once per cell fails at once instead of running
+/// in quadratic time.
+int _gridSpanReads(int cells, int budget) {
   const String plain = '<w:tc><w:p/></w:tc>';
   const String continues = '<w:tc><w:tcPr><w:vMerge/></w:tcPr><w:p/></w:tc>';
   String wide(int span) =>
@@ -67,23 +74,30 @@ Duration _gridSpanSet(int cells) {
       '<w:tr>${plain * cells}</w:tr></w:tbl>',
     ),
   );
-  Duration? fastest;
-  for (int run = 0; run < 3; run++) {
-    final DocxTable table = _open(bytes).body.blocks.single as DocxTable;
-    final Stopwatch watch = Stopwatch()..start();
-    table.rows[1].cells.first.properties.gridSpan = 3;
-    final Duration elapsed = watch.elapsed;
-    expect(table.rows[1].cells.first.properties.gridSpan, 3);
-    if (fastest == null || elapsed < fastest) fastest = elapsed;
-  }
-  return fastest!;
+  final DocxTable table = _open(bytes).body.blocks.single as DocxTable;
+  int reads = 0;
+  setPlacedCellReadHook(table, () {
+    if (++reads > budget) {
+      fail('more than $budget cells of the rows around read');
+    }
+  });
+  table.rows[1].cells.first.properties.gridSpan = 3;
+  setPlacedCellReadHook(table, null);
+  expect(table.rows[1].cells.first.properties.gridSpan, 3);
+  return reads;
 }
 
 void main() {
-  test('a span set on a row of 20,000 cells stays near linear', () {
-    // About 20 ms when linear and 15 s when quadratic, on the machine this was
-    // measured on: the limit is far from both, so load does not fail it.
-    expect(_gridSpanSet(20000), lessThan(const Duration(seconds: 1)));
+  test('a span set on a row of 20,000 cells reads each row around once', () {
+    // It counts the cells of the rows above and below that the span check
+    // reads instead of timing it: a 1 s bound on a run of 25 to 50 ms could
+    // fail on a busy machine, and a check that searched the row above cell
+    // by cell took only 1.2 s at 20,000 cells, so it barely failed it. The
+    // check reads each row around once, 20,001 + 20,000 cells; one that
+    // walks a row around for each moved cell reads about 5,000 times as
+    // many, and stops at the budget at once.
+    const int cells = 20000;
+    expect(_gridSpanReads(cells, 3 * cells), 2 * cells + 1);
   });
 
   group('$_count children the schema lacks', () {

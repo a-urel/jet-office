@@ -522,6 +522,10 @@ final class DocxTable extends DocxBlock {
   /// The typed rows of [_children], in order.
   final List<DocxTableRow> _rows;
 
+  /// Called for each cell [_placedAt] yields, when set
+  /// ([setPlacedCellReadHook]); `null` in normal use.
+  void Function()? _onPlacedCellRead;
+
   late final List<DocxTableRow> _rowsView = UnmodifiableListView<DocxTableRow>(
     _rows,
   );
@@ -778,9 +782,19 @@ final class DocxTable extends DocxBlock {
   }
 
   /// The cells of the row at [index], placed; none for no such row.
-  List<_PlacedCell> _placedAt(int index) => index < 0 || index >= _rows.length
-      ? const <_PlacedCell>[]
-      : _rows[index]._placed();
+  ///
+  /// Each cell read from what this returns calls [_onPlacedCellRead], when it
+  /// is set, so a test sees how often the checks walk a neighbour row.
+  Iterable<_PlacedCell> _placedAt(int index) {
+    if (index < 0 || index >= _rows.length) return const <_PlacedCell>[];
+    final List<_PlacedCell> placed = _rows[index]._placed();
+    final void Function()? onRead = _onPlacedCellRead;
+    if (onRead == null) return placed;
+    return placed.map((_PlacedCell cell) {
+      onRead();
+      return cell;
+    });
+  }
 
   /// Throws [ArgumentError] when a child between the rows [r0] and [r1] may
   /// hold rows that [rows] does not list, which a merge would run across.
@@ -944,6 +958,16 @@ final class DocxTable extends DocxBlock {
 /// A cell of a row and the columns of the grid it takes, from `start` up to
 /// and without `end`.
 typedef _PlacedCell = ({DocxTableCell cell, int start, int end});
+
+/// Sets [hook] to be called once for each cell that a check of [table]
+/// reads from the row above or below the one it checks, or clears it for
+/// `null`. Not exported.
+///
+/// A test counts the calls to prove that setting a span reads each
+/// neighbour row once, not once per cell of the row, without timing it.
+void setPlacedCellReadHook(DocxTable table, void Function()? hook) {
+  table._onPlacedCellRead = hook;
+}
 
 /// The column after each of [cells] by the column it starts on, so a row of
 /// many cells is looked up, not searched cell by cell.

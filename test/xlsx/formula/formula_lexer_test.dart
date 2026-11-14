@@ -21,6 +21,19 @@ void expectJoins(String formula) {
   }
 }
 
+/// Lexes [formula] and fails the test as soon as the lexer has read 10
+/// characters per character of [formula], so a lexer in quadratic time fails
+/// at once instead of running for minutes.
+void expectLinearReads(String formula) {
+  final int bound = 10 * formula.length;
+  int reads = 0;
+  lexFormulaCountingReads(formula, () {
+    if (++reads > bound) {
+      fail('the lexer read more than $bound characters of ${formula.length}');
+    }
+  });
+}
+
 const List<String> fixedFormulas = <String>[
   // From the fixtures and producer files.
   '1/0',
@@ -293,23 +306,19 @@ void main() {
       0,
       100000,
     );
-    final Stopwatch watch = Stopwatch()..start();
-    final List<XlsxFormulaToken> tokens = lexFormula(formula);
-    watch.stop();
-    expect(tokens.length, lessThanOrEqualTo(formula.length));
-    expectJoins(formula);
     // Pathological input: one unclosed bracket and quote runs.
     final String worst = '[' * 50000 + "'" * 50000;
-    final Stopwatch w2 = Stopwatch()..start();
+    // It counts the characters the lexer reads instead of timing it: 2 s
+    // bounds on runs of about 16 and 0.4 ms could fail on a busy machine.
+    // The lexer reads 2.9 characters per character of the formula and 0.75
+    // of the worst case; one that rescans the rest of the input from each
+    // unclosed bracket reads about n / 4 per character of the worst case
+    // (2.8 s, close to the old bound).
+    expectLinearReads(formula);
+    expectLinearReads(worst);
+    final List<XlsxFormulaToken> tokens = lexFormula(formula);
+    expect(tokens.length, lessThanOrEqualTo(formula.length));
+    expectJoins(formula);
     expectJoins(worst);
-    w2.stop();
-    printOnFailure('100,000 chars: ${watch.elapsedMilliseconds} ms');
-    // ignore: avoid_print
-    print(
-      'lexFormula: 100,000 chars in ${watch.elapsedMilliseconds} ms '
-      '(${tokens.length} tokens); worst case ${w2.elapsedMilliseconds} ms',
-    );
-    expect(watch.elapsed, lessThan(const Duration(seconds: 2)));
-    expect(w2.elapsed, lessThan(const Duration(seconds: 2)));
   });
 }

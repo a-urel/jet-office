@@ -119,15 +119,29 @@ ParsedTag? parseTagBody(String body) {
 /// first, the outer one is malformed up to that `{{` and scanning resumes
 /// there; an unclosed `{{` is malformed up to the end. Never throws; runs in
 /// linear time.
-List<TagMatch> scanTags(String text) {
+///
+/// [onSearch], when given, is called after each search of [text] with the
+/// span it read: from where it started up to the end of what it found, or to
+/// the end of the text. A test adds the spans up to prove that the scan reads
+/// each character a bounded number of times, without timing it.
+List<TagMatch> scanTags(
+  String text, {
+  void Function(int start, int end)? onSearch,
+}) {
+  int find(String pattern, int start) {
+    final int found = text.indexOf(pattern, start);
+    onSearch?.call(start, found < 0 ? text.length : found + pattern.length);
+    return found;
+  }
+
   final out = <TagMatch>[];
   var i = 0;
   var close = -2; // cached index of the next `}}`; -1 when there is none
   while (true) {
-    final s = text.indexOf('{{', i);
+    final s = find('{{', i);
     if (s < 0) break;
-    if (close != -1 && close < s + 2) close = text.indexOf('}}', s + 2);
-    final open = text.indexOf('{{', s + 1);
+    if (close != -1 && close < s + 2) close = find('}}', s + 2);
+    final open = find('{{', s + 1);
     if (open >= 0 && (close < 0 || open < close)) {
       out.add(TagMatch._(text, s, open, null));
       i = open;

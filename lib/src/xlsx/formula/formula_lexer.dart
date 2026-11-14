@@ -36,19 +36,36 @@ const List<String> _errors = <String>[
 /// Lexes [formula] (without the leading `=`). The tokens' texts joined are
 /// always [formula]. Never throws, and runs in time linear in its length.
 List<XlsxFormulaToken> lexFormula(String formula) =>
-    _FormulaLexer(formula).run();
+    _FormulaLexer(formula, null).run();
+
+/// Lexes [formula] as [lexFormula] does, calling [onRead] for each
+/// character the lexer reads. Not exported.
+///
+/// A test counts the calls to prove that the lexer reads each character a
+/// bounded number of times, without timing it.
+List<XlsxFormulaToken> lexFormulaCountingReads(
+  String formula,
+  void Function() onRead,
+) => _FormulaLexer(formula, onRead).run();
 
 final class _FormulaLexer {
-  _FormulaLexer(this._s);
+  _FormulaLexer(this._s, this._onRead);
 
   final String _s;
+
+  /// Called for each character read, when set; `null` in normal use.
+  final void Function()? _onRead;
+
   final List<XlsxFormulaToken> _out = <XlsxFormulaToken>[];
   int _i = 0;
   int _arrayDepth = 0;
 
   int get _n => _s.length;
 
-  int _at(int i) => i < _n ? _s.codeUnitAt(i) : -1;
+  int _at(int i) {
+    _onRead?.call();
+    return i < _n ? _s.codeUnitAt(i) : -1;
+  }
 
   void _emit(XlsxFormulaTokenKind kind, int start, int end) {
     _out.add(XlsxFormulaToken(kind, _s.substring(start, end), start));

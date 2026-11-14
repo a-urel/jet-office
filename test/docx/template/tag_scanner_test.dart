@@ -142,19 +142,39 @@ void main() {
     expect(parseTagBody('a b'), isNull);
   });
 
+  // The two tests below count the characters the scan's searches read
+  // instead of timing it: 1 s bounds on runs of about 10 and 5 ms could fail
+  // on a busy machine. The scan reads each character a few times (5 per
+  // character on the first input and 3.5 on the second); one that searches
+  // for `}}` again from every `{{`, without keeping the last one found, reads
+  // about n * n / 2 on the first and n * n / 8 on the second (12.6 s and
+  // 3.3 s), which [_expectLinearScan] stops at its bound.
   test('a long run of open braces scans in linear time', () {
-    final s = '{' * 100000;
-    final watch = Stopwatch()..start();
-    final m = scanTags(s);
-    watch.stop();
-    expect(m, isNotEmpty);
-    expect(watch.elapsedMilliseconds, lessThan(1000));
+    final String s = '{' * 100000;
+    expect(_expectLinearScan(s), hasLength(99999));
   });
   test('a long run of open braces then a close scans in linear time', () {
-    final s = '${'{' * 50000}x${'}' * 50000}';
-    final watch = Stopwatch()..start();
-    scanTags(s);
-    watch.stop();
-    expect(watch.elapsedMilliseconds, lessThan(1000));
+    final String s = '${'{' * 50000}x${'}' * 50000}';
+    expect(_expectLinearScan(s), hasLength(49999));
   });
+}
+
+/// Scans [text] and returns what [scanTags] found, after checking that its
+/// searches read at most 8 characters per character of [text].
+///
+/// The scan stops with a failure as soon as the reads pass that bound, so a
+/// scan in quadratic time fails at once instead of running for minutes.
+List<TagMatch> _expectLinearScan(String text) {
+  final int bound = 8 * text.length;
+  int read = 0;
+  final List<TagMatch> matches = scanTags(
+    text,
+    onSearch: (int start, int end) {
+      read += end - start;
+      if (read > bound) {
+        fail('the scan read more than $bound characters of ${text.length}');
+      }
+    },
+  );
+  return matches;
 }

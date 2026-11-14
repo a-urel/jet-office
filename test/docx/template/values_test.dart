@@ -1,5 +1,6 @@
 // Tests the template values: how a data value becomes text, the data check
 // and the lookups. Pure Dart, so it runs on the web too.
+import 'dart:collection';
 import 'dart:typed_data';
 
 import 'package:jet_office/jet_office.dart';
@@ -111,13 +112,17 @@ void main() {
     });
 
     test('a shared structure is checked once, not once per path', () {
-      Object level = <Object?>[1];
+      // It counts the elements the check reads instead of timing it: a 1 s
+      // bound on a run of under 1 ms could fail on a busy machine. Each of
+      // the 41 lists is read once, 1 + 40 * 2 elements; a check that walks
+      // every path reads 2^41 and stops at the budget of [_CountingList].
+      final _Reads reads = _Reads(budget: 1000);
+      Object level = _CountingList(<Object?>[1], reads);
       for (int i = 0; i < 40; i++) {
-        level = <Object?>[level, level];
+        level = _CountingList(<Object?>[level, level], reads);
       }
-      final Stopwatch watch = Stopwatch()..start();
       checkTemplateData(<String, Object?>{'a': level});
-      expect(watch.elapsedMilliseconds, lessThan(1000));
+      expect(reads.count, 1 + 40 * 2);
     });
 
     test('throws for a non-String key', () {
@@ -182,4 +187,42 @@ void main() {
       expect(lookupKey(data, 'z'), isA<Missing>());
     });
   });
+}
+
+/// The element reads of every [_CountingList] that shares it.
+final class _Reads {
+  _Reads({required this.budget});
+
+  /// The most reads allowed; one more fails the test at once.
+  final int budget;
+
+  /// The reads so far.
+  int count = 0;
+}
+
+/// A list that counts each element read in [_reads], and fails the test
+/// once the reads pass the budget, so a walk of every path of a shared
+/// structure stops at once instead of running for ever.
+final class _CountingList extends ListBase<Object?> {
+  _CountingList(this._elements, this._reads);
+
+  final List<Object?> _elements;
+  final _Reads _reads;
+
+  @override
+  int get length => _elements.length;
+
+  @override
+  set length(int value) => _elements.length = value;
+
+  @override
+  Object? operator [](int index) {
+    if (++_reads.count > _reads.budget) {
+      fail('more than ${_reads.budget} elements read');
+    }
+    return _elements[index];
+  }
+
+  @override
+  void operator []=(int index, Object? value) => _elements[index] = value;
 }
