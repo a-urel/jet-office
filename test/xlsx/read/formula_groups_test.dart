@@ -4,8 +4,6 @@ import 'package:jet_office/src/xlsx/read/cell_decoder.dart';
 import 'package:jet_office/src/xlsx/read/formula_groups.dart';
 import 'package:test/test.dart';
 
-import '../../support/timing.dart';
-
 /// A result that is the valid master group of [kind] over [ref].
 Matcher _master(XlsxFormulaGroupKind kind, String ref) =>
     isA<FormulaGroupResult>()
@@ -350,46 +348,49 @@ void main() {
     });
 
     test('one wide range after many ended ones', () {
+      // Each single-cell range ends on the next row, but the tree drops it
+      // only when a lookup or a new range meets it, so all of them are still
+      // in the tree when the wide range comes, and its insert walks and drops
+      // them. Counted, not timed, for the reason expectBinarySearch gives.
+      // The run makes `ended` inserts, one insert that drops `ended` ranges
+      // and two lookups: at most 4 * 14 comparisons per insert, drop or
+      // lookup (the tree makes about 6). An insert that walked every range in
+      // the tree, ended or not, would make about 200 million.
       const int ended = 10000;
-      FormulaGroupResult? wide;
-      XlsxFormulaGroup? covered;
-      void many() {
-        final FormulaGroups groups = FormulaGroups();
-        for (int r = 0; r < ended; r++) {
-          groups.startRow(r);
-          final String ref = cellRef(r, r % columns);
-          final FormulaGroupResult result = groups.master(
-            FormulaType.array,
-            row: r,
-            column: r % columns,
-            ref: '$ref:$ref',
-          );
-          if (result.invalid) fail('master $ref is invalid');
-        }
-        groups.startRow(ended);
-        wide = groups.master(
+      int comparisons = 0;
+      final FormulaGroups groups = FormulaGroups(
+        compare: (int a, int b) {
+          comparisons++;
+          return a.compareTo(b);
+        },
+      );
+      for (int r = 0; r < ended; r++) {
+        groups.startRow(r);
+        final String ref = cellRef(r, r % columns);
+        final FormulaGroupResult result = groups.master(
           FormulaType.array,
-          row: ended,
-          column: 0,
-          ref: 'A${ended + 1}:XFD${ended + 1}',
+          row: r,
+          column: r % columns,
+          ref: '$ref:$ref',
         );
-        covered = groups.coveredBy(ended, columns - 1);
-        // A column in the middle of the range.
-        if (groups.coveredBy(ended, 9999) == null) {
-          fail('column 9999 is not covered');
-        }
+        if (result.invalid) fail('master $ref is invalid');
       }
-
-      // A tree that holds one range, with as many lookups.
-      void one() {
-        final FormulaGroups groups = FormulaGroups()..startRow(0);
-        groups.master(FormulaType.array, row: 0, column: 0, ref: 'A1:XFD1');
-        for (int r = 0; r < ended; r++) {
-          groups.coveredBy(0, r % columns);
-        }
-      }
-
-      expectScales(many, one);
+      groups.startRow(ended);
+      final FormulaGroupResult wide = groups.master(
+        FormulaType.array,
+        row: ended,
+        column: 0,
+        ref: 'A${ended + 1}:XFD${ended + 1}',
+      );
+      final XlsxFormulaGroup? covered = groups.coveredBy(ended, columns - 1);
+      // A column in the middle of the range.
+      expect(groups.coveredBy(ended, 9999), isNotNull);
+      const int calls = 2 * ended + 3;
+      expect(
+        comparisons,
+        lessThanOrEqualTo(calls * 4 * 14),
+        reason: '$comparisons comparisons for $calls calls',
+      );
       expect(
         wide,
         _master(XlsxFormulaGroupKind.array, 'A${ended + 1}:XFD${ended + 1}'),
