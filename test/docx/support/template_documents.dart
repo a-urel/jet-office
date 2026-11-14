@@ -5,7 +5,8 @@
 /// The helpers named `wordSplitTag`, `tagInHyperlink`, `tagAroundTab`,
 /// `tagInFieldResult`, `tagInInsertion` and `tagInInlineSdt` return inline
 /// XML for [templateParagraph]; [templateDocument] and [templateWithHeader]
-/// build the package.
+/// build the package. [textBoxDrawing] returns run content: an anchored
+/// drawing whose text box the model keeps opaque.
 library;
 
 import 'dart:convert';
@@ -133,3 +134,27 @@ Uint8List templateWithHeader({
     ),
   },
 );
+
+const String _wps =
+    'http://schemas.microsoft.com/office/word/2010/wordprocessingShape';
+const String _a = 'http://schemas.openxmlformats.org/drawingml/2006/main';
+
+/// An anchored `w:drawing` whose text box holds [paragraphs], each a `w:p`
+/// of one run.
+String textBoxDrawing(List<String> paragraphs) =>
+    '<w:drawing><wp:anchor xmlns:wp="${Ns.wp}" distT="0" distB="0" '
+    'distL="0" distR="0" simplePos="0" relativeHeight="1" behindDoc="0" '
+    'locked="0" layoutInCell="1" allowOverlap="1">'
+    '<wp:simplePos x="0" y="0"/>'
+    '<wp:positionH relativeFrom="column"><wp:posOffset>0</wp:posOffset>'
+    '</wp:positionH><wp:positionV relativeFrom="paragraph">'
+    '<wp:posOffset>0</wp:posOffset></wp:positionV>'
+    '<wp:extent cx="914400" cy="457200"/><wp:wrapNone/>'
+    '<wp:docPr id="1" name="Text Box 1"/>'
+    '<a:graphic xmlns:a="$_a"><a:graphicData '
+    'uri="http://schemas.microsoft.com/office/word/2010/wordprocessingShape">'
+    '<wps:wsp xmlns:wps="$_wps"><wps:cNvSpPr txBox="1"/><wps:spPr/>'
+    '<wps:txbx><w:txbxContent>'
+    '${paragraphs.map((String p) => '<w:p><w:r><w:t>$p</w:t></w:r></w:p>').join()}'
+    '</w:txbxContent></wps:txbx><wps:bodyPr/></wps:wsp>'
+    '</a:graphicData></a:graphic></wp:anchor></w:drawing>';

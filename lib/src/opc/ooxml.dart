@@ -18,8 +18,9 @@
 /// relationship types; and the comments, VML drawing and table content
 /// types. The WordprocessingML names ([Ns.w], [Ns.w14], [Ns.wp], [Ns.mc],
 /// [Ns.wStrict], the settings, web settings, font table, theme, numbering,
-/// header and footer relationship types, and the `wml…` and theme content
-/// types) are new too, with the ECMA-376 transitional values. So are the
+/// header, footer, footnotes and endnotes relationship types (a document's
+/// comments part has the worksheet's [RelType.comments] type), and the
+/// `wml…` and theme content types) are new too, with the ECMA-376 transitional values. So are the
 /// other main part types of SpreadsheetML (`sml…`: macro-enabled, template
 /// and binary) and PresentationML (`pml…`), by which the DOCX reader
 /// recognises and refuses a workbook or a presentation.
@@ -211,6 +212,14 @@ abstract final class RelType {
   /// A footer part of a document.
   static const String footer =
       'http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer';
+
+  /// The footnotes part of a document (`word/footnotes.xml`).
+  static const String footnotes =
+      'http://schemas.openxmlformats.org/officeDocument/2006/relationships/footnotes';
+
+  /// The endnotes part of a document (`word/endnotes.xml`).
+  static const String endnotes =
+      'http://schemas.openxmlformats.org/officeDocument/2006/relationships/endnotes';
 
   /// The main document part in a Strict OOXML package. A Strict file is
   /// recognised by this type and refused; it is not read.

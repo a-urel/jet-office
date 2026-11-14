@@ -28,6 +28,8 @@ void main() {
     expect(RelType.numbering, '${rel}numbering');
     expect(RelType.header, '${rel}header');
     expect(RelType.footer, '${rel}footer');
+    expect(RelType.footnotes, '${rel}footnotes');
+    expect(RelType.endnotes, '${rel}endnotes');
     expect(
       RelType.officeDocumentStrict,
       'http://purl.oclc.org/ooxml/officeDocument/relationships/'
