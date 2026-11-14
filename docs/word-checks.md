@@ -826,6 +826,82 @@ sizes are as before. For `d6_list` also add a line to the
 caption and see that the table moves down and its header row still repeats on
 the next page.
 
+## T1
+
+T1 adds `DocxTemplate`, the fill of a template's values (decision
+[`0024`](decisions/0024-docx-template-fill.md)). Open the filled and unfilled
+T1 fixtures, and the owner's templates filled, in Word for Mac. All of them
+are under `build/t1/`, the folder to open. Write them with:
+
+```bash
+dart run tool/write_t1_check.dart build/t1
+dotnet run --project tool/ooxml_validate -- build/t1
+```
+
+`tool/write_t1_check.dart` writes `t1_values.docx`, `t1_merge_fields.docx`,
+`t1_template.docx` and `t1_merge_fields_template.docx` (the last two are the
+templates unfilled, to compare with) and `owner/`, each `template_*.docx` of
+`test/fixtures/owner/docx/` filled with the fixed Turkish data
+(`fillDocxData()`). It prints a problem and exits 1 on any, so expect none.
+
+**The owner's templates.** The owner authors two templates in Word for Mac
+(spec section 13) and puts them in `test/fixtures/owner/docx/` with manifest
+entries and confirmed expected texts: `template_invoice.docx` (a company, a
+customer, a date, amounts, a table, a header and a footer with page numbers, a
+comment on a tag, a tracked change next to a field) and `template_letter.docx`
+(merge fields, `{{}}` tags mixed with them, a header and a footer). Only the
+owner edits those files and their expected texts; until they are there,
+`build/t1/owner/` is not written and the rows for it stay `not checked`.
+
+No repair prompt in any of them, and each saves in Word without a prompt; then,
+per document, as below. As under D3 to D6, this section says what to look for:
+what each document should show comes from the code that wrote it and from the
+SDK, not from Word, so read every statement here as what to expect until the
+owner has looked. The result is recorded in the table below, and none is
+recorded before then. Option-F9 shows a field's code (Option-F9 again hides
+it).
+
+### Fixtures and owner templates: `build/t1/*.docx` and `build/t1/owner/*.docx`
+- Every value is in place and in the formatting of its tag: where the tag's
+  first brace was bold the value is bold; the red `{{musteri.ad}}` gives a red
+  `Ayşe Yılmaz`. The text around a tag is unchanged.
+- The amount reads `1.234,56 ₺`, the date `14.11.2026`, the quantity `2,5`.
+- `t1_values.docx`: the missing value is visibly `{{yok}}`, and only that
+  tag is left. The header and the footer show the company and the date.
+- Section tags (`{{#x}}`, `{{/x}}`), if a template has them, are visible as
+  written: T1 does not fill them.
+- Page numbers in a header or footer still update (the field is untouched).
+- `t1_merge_fields.docx`: no field is left (Option-F9 shows no code, and
+  Cmd-A then F9 changes nothing), the date is in the switch's form
+  (`14.11.2026`), the name in capitals, and the text of `\b` and `\f` stands
+  around a value.
+- `owner/template_invoice.docx`: the comment on a tag is still anchored (it
+  shows beside the same text); the tracked change next to a field is still in
+  the Review pane's list.
+- `t1_template.docx` and `t1_merge_fields_template.docx` are the unfilled
+  templates: they must look as written and have no repair prompt either.
+
+### Save in Word
+
+For `t1_values`, `t1_merge_fields` and every owner file: change one word, save
+in Word, close and reopen. No repair prompt, the edit is there, and every
+filled value and field is as before.
+
+### Results
+
+One row per file or check. `Result` is `ok`, `sorun` (a problem) or `not
+checked`; `Notes` says what was seen.
+
+| Date | Word | File | Result | Notes |
+|---|---|---|---|---|
+|  |  | `build/t1/t1_values.docx` | not checked |  |
+|  |  | `build/t1/t1_merge_fields.docx` | not checked |  |
+|  |  | `build/t1/t1_template.docx` | not checked |  |
+|  |  | `build/t1/t1_merge_fields_template.docx` | not checked |  |
+|  |  | `build/t1/owner/template_invoice.docx` | not checked | Needs the owner's template. |
+|  |  | `build/t1/owner/template_letter.docx` | not checked | Needs the owner's template. |
+|  |  | Save in Word | not checked |  |
+
 ## Results
 
 One row per file or check. `Result` is `ok`, `sorun` (a problem) or `not

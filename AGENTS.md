@@ -56,6 +56,11 @@ pie, donut, scatter, combination and secondary axis in the DrawingML layer;
 `docs/xlsx-model.md`, "What C2 adds") is done: the owner's Excel check
 (`tool/write_c2_check.dart`, `test/fixtures/owner/charts/TALIMATLAR_C2.md`) is
 recorded in `docs/excel-checks.md`, "C2" (2026-11-14), with E3.
+Milestone T1 (DOCX template fill, values: `DocxTemplate`, `{{}}` tags and
+`MERGEFIELD`, decision 0024; `docs/docx-model.md`, "What T1 does") is built:
+the owner's Word check (`tool/write_t1_check.dart`, `docs/word-checks.md`,
+"T1") is open, and waits for the owner's `template_invoice.docx` and
+`template_letter.docx`. Sections and repeats come in T2, pictures in T3.
 `packages/jet_charts_flutter` is its Flutter backend (decision 0016), with its
 own `AGENTS.md`; milestones J3 and J4 are done. This
 package never depends on it. `packages/jet_charts_flutter/docs/app-themes.md`
@@ -376,6 +381,15 @@ dotnet run --project tool/ooxml_validate -- build/excel_gallery
   `test/fixtures/owner/charts/TALIMATLAR_C2.md`. Exit 2 on unusable
   arguments, 1 on any error. `test/tool/write_c2_check_test.dart` (VM) tests
   it.
+- `tool/write_t1_check.dart <out-dir>` writes the files of the owner's T1
+  Word check (`build/t1`): `t1_values.docx` and `t1_merge_fields.docx` (the
+  templates filled), `t1_template.docx` and `t1_merge_fields_template.docx`
+  (unfilled), and `owner/`, each `test/fixtures/owner/docx/template_*.docx`
+  filled with `fillDocxData()` (none exist yet: it says so and exits 0). It is
+  not part of the CI chain; `dotnet run --project tool/ooxml_validate --
+  build/t1` validates its output, and the owner's steps are in
+  `docs/word-checks.md`, "T1". Exit 2 on unusable arguments, 1 on any error.
+  `test/tool/write_t1_check_test.dart` (VM) tests it.
 - `tool/compare_text.dart` compares LibreOffice's text export of every DOCX
   fixture (`txt:Text (encoded):UTF8`) with its `<name>.expected.txt`, or its
   `<name>.libreoffice.txt` (`DocxFixture.libreOfficeText`: list labels such as

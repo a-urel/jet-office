@@ -12,7 +12,9 @@ WordprocessingML.
 This page covers milestone D1, the foundation, milestone D2, formatting,
 styles and lists, milestone D3, tables, milestone D4, sections, headers,
 footers and fields, milestone D5, pictures, hyperlinks, bookmarks and
-document properties, and milestone D6, the list export. **The names are fixed
+document properties, milestone D6, the list export, and milestone T1, the
+fill of a template's values (decision
+[`0024`](decisions/0024-docx-template-fill.md)). **The names are fixed
 as of D6** (decision 0010): the DOCX API is complete for phase 4, and a later
 rename is a breaking change. D6 renamed three symbols that D1 to D5 had
 published only inside the repository (see "What D6 does").
@@ -320,6 +322,75 @@ final DocxResult out = DocxListExport(
 - **The fuzz** runs 900 cases a seed instead of 750, the D6 fixtures joining
   the corpus.
 
+## What T1 does
+
+T1 adds `DocxTemplate`, the fill of values into a Word template (decision
+[`0024`](decisions/0024-docx-template-fill.md)): the owner writes `{{name}}`
+tags, or Word merge fields, in Word, and the library puts the values in. The
+rulings the plan made are recorded here; the spec left them to it or was
+silent.
+
+```dart
+final DocxResult result = DocxTemplate(bytes).fill(
+  <String, Object?>{
+    'firma': <String, Object?>{'unvan': 'Acme A.Ş.'},
+    'tarih': DateTime(2026, 11, 14),
+    'tutar': FormatDecimal('1234.56'),
+  },
+  options: const DocxTemplateOptions(locale: FormatLocale.trTR),
+);
+```
+
+- **What is filled.** A value tag `{{name}}`, `{{a.b}}` (a path through maps)
+  or `{{name:format}}` (a format code the number format engine reads, as in a
+  cell), and a `MERGEFIELD` (a complex field or a `w:fldSimple`) by its whole
+  name, as a key of the data, with `\@` date and `\#` number pictures
+  translated to format codes, and `\* Upper`, `Lower`, `FirstCap` and `Caps`
+  casing in the locale. A `\* MERGEFORMAT` or `\* CHARFORMAT` is ignored
+  silently, as Word adds one to every field.
+- **Where.** The body, table cells (nested ones too), every header and footer
+  part, once each even when sections share it. Tags in a text box, a block
+  content control, a footnote, an endnote or a comments part are found and
+  warned, not changed.
+- **Tags Word split.** A tag spread over runs (Word writes the first brace in
+  its own run, or splits at a spell-check mark) is replaced as one: the value
+  takes the run properties of the tag's first character, bookmarks, comment
+  ranges, `w:proofErr` and the like between the runs stay, and the runs wholly
+  inside the tag go. Text around a tag stays as it was, in its own run.
+- **Values.** A string, number, `bool`, `DateTime`, `Duration` or `FormatDecimal`
+  is text; `Duration` without a code shows as `[h]:mm:ss`, a `DateTime` as
+  format 14. A line break or tab in the text becomes a `w:br` or `w:tab`;
+  characters XML cannot hold are removed and warned. The value is never
+  scanned for tags again. A list, a map or a picture in a value tag leaves the
+  tag as written and warns `templateValueNotText`. The data is checked before
+  anything changes: an unsupported type, a key that is not a string or a cycle
+  throws an `ArgumentError` naming the path, and the document is as it was.
+- **A missing name.** The tag stays as written and the fill warns
+  `templateValueMissing` with the tag as detail; `removeMissing` removes it and
+  still warns.
+- **Warnings.** Every template warning has the tag, or the field instruction,
+  as written as its detail (cut by `displayText`) and the paragraph's path
+  (`body/p[3]`, `header1.xml/p[0]`) as its location. `fill` returns a
+  `DocxResult` holding the fill's warnings, then the save's; `fillDocument`
+  returns the fill's alone, and neither adds them to `DocxDocument.warnings`.
+- **Listing.** `DocxTemplate.tags` and `tagsOf(document)` list every tag, each
+  with its kind (value, section, inverted section, end, current, merge field,
+  malformed), name, format, depth and whether it can be filled, in reading
+  order, changing nothing.
+- **One transaction.** A fill is one change set: it is undone whole, and a data
+  error records nothing. `fillDocument` fills a document the caller holds in
+  place; `fill` opens the stored bytes again each time (no clone), so two fills
+  of one template are two documents with their own values and the caller
+  changing the bytes it gave afterwards changes nothing (the template copies
+  them).
+- **Section tags stay.** `{{#x}}`, `{{^x}}` and `{{/x}}` stay as text in T1;
+  each warns `templateSectionMalformed` with the tag as detail, and the
+  message says sections are not filled yet. T2 fills them.
+- **The tools.** `tool/fill_docx.dart` runs the fill on a directory and checks
+  what it changed (CI runs it on the fixtures and the owner's Word files),
+  `tool/write_t1_check.dart` writes the owner's Word check, and the fuzz
+  (`tool/fuzz_docx.dart --template`) fills mutated templates.
+
 ## Known gaps
 
 - **Visible text of some opaque inlines.** `mc:AlternateContent` and the text
@@ -606,6 +677,45 @@ final DocxResult out = DocxListExport(
   `wp:docPr` ids and `_Ref` names repeat, which the model does not check). Its
   figures show the order of magnitude of a long document's cost, not of a
   particular one.
+
+### Known gaps of T1
+
+- **Sections, repeats and conditions come in T2.** `{{#x}}`, `{{^x}}`, `{{/x}}`
+  are warned and left, and a table row is not repeated. There is no limit
+  option in T1 (the copy limit belongs to T2's repeats); a fill is linear in
+  the document.
+- **Pictures come in T3.** An `OfficeImage` in a value tag is accepted by the
+  validation, leaves the tag and warns `templateValueNotText`. An anchored
+  (floating) picture is no placeholder either.
+- **Content controls, tracked changes, text boxes, notes are not filled.** A
+  tag in a block or inline content control, in a tracked insertion (the fill
+  cannot put a value in a `w:ins` run without writing a revision), across a tab,
+  in a `PAGE` result, in a text box (also one inside a `w:ins` or an inline
+  `w:sdt`), a footnote, an endnote or a comments part is found, warned
+  (`templatePlaceholderInRevision`, `templatePlaceholderInContentControl`,
+  `templatePlaceholderNotTyped`) and left. A `MERGEFIELD` inside another field
+  (an `IF`) is not filled (`templateFieldNotTyped`).
+- **`\@` minutes and months share a letter in the Excel code.** Word's `M` is
+  a month and its `m` a minute, but both become `m` in the Excel code the
+  number format engine reads, and the engine tells them apart by their
+  neighbours, as Excel does (after an hour or before a second, a minute). A
+  picture that puts a Word minute or month where Excel would read the other
+  (an `m` apart from `h` and `s`) shows the other. A meridiem inside quoted text
+  is counted when the picture is checked, and `am/pm` loses its case. A picture
+  that cannot be translated warns `templateSwitchUnsupported` and fills with the
+  value's default form. `\* FirstCap` upper-cases the first character, not the
+  first letter after leading punctuation. A surrogate pair in a `\#` picture may
+  be split.
+- **Very deep data.** Data nested deeper than the Dart stack allows throws a
+  `StackOverflowError`, not an `ArgumentError`.
+- **A `w:ins` holding a `w:p` directly** (Word never writes it) may report a
+  tag twice; no test covers that edge.
+- **A relationship with no `Id` is dropped silently when stories load.** This
+  predates T1: it is in the model's loading of headers and footers, found by
+  the T1 fuzz, and is not changed here; it is reported to the owner.
+- **The tag's formatting is the first character's.** A value takes the
+  formatting of the first run of its tag, not of its last or of the text
+  before it; a tag whose first run is bold gives a bold value.
 
 ## Rules the model enforces
 
@@ -1166,6 +1276,49 @@ A list written by `DocxListExport` follows these rules. Tests are in
 | `tool/edit_docx.dart` and `tool/edit_model.dart` | set the title with `properties.copyWith(title: ...)`, so every other property of the file is kept | the owner's files keep their authors and dates | `test/tool/edit_docx_test.dart`, group "pictures, links, bookmarks and properties" |
 | The fuzz | seeds 1 to 4 at 900 cases each (750 before): the D6 fixtures join the corpus, so the fixed seeds still mutate every part name | the corpus grew by two fixtures and their header and footer parts | `test/docx/fuzz_test.dart` ("every part name is mutated in some corpus entry", "mutated files raise only DocxReadException") |
 | The benchmark and the large document | `benchmark/docx_model_benchmark_test.dart` repeats the body of `long.docx` (`scaledLongDocx`) to about 40,000 paragraphs, opens it, loads the body, changes a paragraph, saves and reopens; it records figures and judges none. `tool/write_large_docx.dart <dir>` writes the same document with the first paragraph after the middle set to `Edited by the model`, as `large.docx`, for the Word check | the fidelity standard says nothing of speed; a large document must still open | the benchmark by hand (`AGENTS.md`, "Benchmark"; `benchmark.md`, "DOCX document figures"); the tool: `test/tool/write_large_docx_test.dart` ("scales long.docx, with bookmark ids and _Toc names per copy", "a paragraph count below 1 throws", "editedLargeDocx changes one paragraph and reopens", "bad arguments exit 2") |
+
+### Template fill
+
+| Case | Behaviour | Why | Test |
+|---|---|---|---|
+| A value tag, a dotted path, a tag with spaces (also no-break ones) after `{{` | filled from the data; spaces after a sigil are allowed (`{{# kalemler }}`); an empty format (`{{a:}}`) is malformed | Word autocorrects a space after `{{` to a no-break one | `test/docx/template/tag_scanner_test.dart` ("no-break spaces count as spaces", "spaces around a body", "section with a space after the sigil"), `test/docx/template/fill_test.dart` ("a dotted path walks maps") |
+| An unclosed or nested `{{` | the tag ends at the first `}}`; when another `{{` comes first the outer one is malformed and scanning resumes at the inner | a stray `{{` loses no later tag | `test/docx/template/tag_scanner_test.dart` ("an outer tag broken by an inner one", "an unclosed tag", "triple braces"); linear time: "a long run of open braces scans in linear time" |
+| A tag Word split over runs | one replacement: value in the tag's first run, runs inside removed, text around kept | Word splits tags at autocorrect and spell-check marks | `test/docx/template/replace_test.dart` ("split tag in a header keeps bold and marks", "text around the tag in one run") |
+| Two tags, one run shared | both filled, text between and after kept | the second tag's start run may be the first one's end run | `test/docx/template/replace_test.dart` ("adjacent tags sharing a run") |
+| Marks and other inlines | bookmarks, comment ranges, `w:proofErr`, `w:del`, move and permission marks are transparent; every other inline is a boundary a tag cannot cross | the fill must not eat a field, a drawing or a tab | `test/docx/template/paragraph_text_test.dart` ("bookmarks and proofErr are transparent", "a tab is a nonText that ends the segment", "a run holding only an instruction cuts the segment"); `replace_test.dart` ("every other inline untouched") |
+| A tag in a hyperlink | filled there; runs wholly inside the tag are removed in the hyperlink too, leaving none empty | the link stays a link | `test/docx/template/replace_test.dart` ("tag in a hyperlink"); `test/docx/model/template_primitives_test.dart` ("removes a run of a hyperlink, and the set undoes it") |
+| A line break, a tab, a forbidden character in a value | `w:br`, `w:tab`; the character removed and `invalidCharactersRemoved` warned, also when two tags touch one run | no invalid XML | `test/docx/template/replace_test.dart` ("value with line break and tab", "forbidden characters removed", "forbidden characters of two spans in one run are all counted") |
+| A value that holds `{{` | not filled again | a customer name must not become a tag | `test/docx/template/fill_test.dart` ("a value with {{ is not filled again") |
+| Number, date, duration, boolean, text values | shown by the number format engine in the fill's locale; `Duration` without a code with `[h]:mm:ss`, `DateTime` with format 14; a flagged code still fills and warns | as `DocxListExport` | `test/docx/template/values_test.dart` ("numbers, dates, durations, booleans and text", "a format code reaches text through the formatter", "a code the engine flags yields its warning"), `fill_test.dart` ("a format warning still fills") |
+| A list, a map or a picture in a value tag | the tag stays, `templateValueNotText` | pictures come in T3 | `test/docx/template/values_test.dart` ("lists, maps and images are not text"), `fill_test.dart` ("a list is not text", "{{.}} at the root is the root map, not text") |
+| The data tree | checked first: an unsupported type, a non-String key or a cycle throws naming the path; a shared sub-map is accepted and checked once | a fill that fails halfway is worse than one that fails first | `test/docx/template/values_test.dart` ("throws for an unsupported type, naming the path", "throws for a non-String key", "throws for a cycle, accepts a shared sub-map", "a shared structure is checked once, not once per path"); `fill_test.dart` ("a data error changes nothing and records nothing") |
+| A name the data lacks | the tag stays, `templateValueMissing`; `removeMissing` removes it and still warns | a placeholder is never lost silently | `test/docx/template/fill_test.dart` ("a missing value stays and warns", "removeMissing removes it and still warns", "a missing merge field stays, or goes with removeMissing") |
+| Where it fills | body, cells, nested cells, headers, footers | the owner's templates have tags in all of them | `test/docx/template/fill_test.dart` ("fills the body, a cell, a nested cell, a header and a footer"); `test/docx/template/template_test.dart` ("t1_values: the fixed data fills the split, formatted, coloured, header, footer and table tags, and leaves {{yok}}") |
+| Section tags | stay as text, each warned `templateSectionMalformed` with the tag; the value inside a section is filled | sections are T2 | `test/docx/template/fill_test.dart` ("section tags stay, each warned, the value inside filled") |
+| A tag in a tracked insertion, a content control, across a tab, in a `PAGE` result, malformed | not filled, warned, left | filling would change a revision or a field the fill does not understand | `test/docx/template/fill_test.dart`, group "fillTemplate: tags that cannot be filled" ("inside w:ins", "inside an inline w:sdt", "across a tab", "in a PAGE result", "an unclosed tag") |
+| A merge field | complex field or `w:fldSimple`, filled by its whole name with the first result run's properties; text before and after kept; `\* MERGEFORMAT` silent; casing in the locale; an unsupported switch fills and warns | Word's own forms | `test/docx/template/fill_test.dart`, group "fillTemplate: merge fields" ("MERGEFORMAT is silent", "a date picture", "casing with the locale", "an unsupported switch fills and warns", "a w:fldSimple takes its inner run properties", "a merge field in a hyperlink is filled there"); `test/docx/template/merge_field_test.dart` (every group) |
+| `\#` and `%` | a `%` in a number picture is a literal, as Word does not multiply | Excel's `%` would | `test/docx/template/merge_field_test.dart` ("a percent sign is a literal, not Excel percent"); `values_test.dart` ("a percent literal shows as text") |
+| A `MERGEFIELD` in another field, or loose instruction runs | not typed, `templateFieldNotTyped` | a nested field's value is not ours to set | `test/docx/template/fill_test.dart` ("a MERGEFIELD inside an IF instruction is not typed", "loose instruction runs are not typed") |
+| Text boxes, content controls, footnotes, endnotes, comments | found (per paragraph, `MERGEFIELD` instructions too) and warned, never changed; a part that cannot be read is skipped without a warning, as the fill never writes it | an untrusted file's opaque content must not make the fill throw or lose a tag silently | `test/docx/template/opaque_scan_test.dart`; `fill_test.dart`, groups "fillTemplate: opaque content and parts" and "fillTemplate: untrusted opaque content" |
+| Listing | `tags` lists every tag in reading order with kind, name, format, depth, changing nothing; a malformed tag has no name; opaque and part placeholders are listed as not typed | the caller sees what a template asks for | `test/docx/template/template_test.dart` ("tags list kinds, names, formats and depth in reading order", "a malformed tag has the kind malformed and no name"); `fill_test.dart`, group "listTemplateTags" |
+| One transaction | a fill is one change set, undone whole; a data error records nothing | the library keeps no undo stack, only the set's id | `test/docx/template/fill_test.dart` ("one fill is one change set, undone whole"); `test/docx/model/template_primitives_test.dart` ("documentTransaction", "a body that throws leaves the document as it was") |
+| Reopen per fill, bytes copied | two fills of one template are two documents; mutating the caller's list changes nothing | no state leaks between fills | `test/docx/template/template_test.dart` ("fill twice gives two documents with their own values", "template bytes are copied") |
+| `fillDocument` | fills a document the caller holds, in place; it still edits afterwards | a caller may fill, then add what a template cannot | `test/docx/template/template_test.dart` ("fillDocument fills in place and the document still edits") |
+| Fill warnings | the fill's own collector, then the save's, in a `DocxResult`; not added to `DocxDocument.warnings` | the fill is a call of its own | `test/docx/template/template_test.dart` ("fill warnings are the fill's, then the save's") |
+| An unreadable file | `DocxReadException`, as `DocxDocument.open` | one error type | `test/docx/template/template_test.dart` ("an unreadable file throws DocxReadException") |
+| The model's primitives | `setRunContent`, `copyRunWithText`, `removeHeldInline`, `replaceHeldInline`, `runOfSimpleField` change a held run and record in the change log; a replacement that is held throws before anything changes | the fill is built on the public model's own change log | `test/docx/model/template_primitives_test.dart` |
+| Data that names nothing | gives the template back: `comparePackages` finds no difference | a fill preserves what it does not touch (decision 0010) | `test/docx/template/template_test.dart` ("data naming nothing gives every fixture back"); `test/docx/template/template_owner_test.dart` (VM; the owner's Word files) |
+
+### T1 fixtures and tools
+
+| Case | Behaviour | Why | Test |
+|---|---|---|---|
+| The four T1 fixtures (`t1_values`, `t1_merge_fields`, `t1_template`, `t1_merge_fields_template`) | `t1_values` and `t1_merge_fields` are the templates filled with `fillDocxData()` (`tool/src/fill_data.dart`) in `FormatLocale.trTR`, `t1_values` leaving `{{yok}}` and warning once; the other two are the templates unfilled, so CI fills them | the validation starts from them | `test/docx/template/template_test.dart` ("t1_values: ...", "t1_template lists its tags; t1_merge_fields fills every field"); `test/docx/round_trip_test.dart` and `test/tool/docx_tools_test.dart` (every fixture of `docxFixtures()`) |
+| What they hold | `t1_values`: `{{firma.unvan}}` split over runs with its first brace bold, a date `{{tarih:dd.mm.yyyy}}` and an amount `{{tutar:#,##0.00 ₺}}` split after their names, a red `{{musteri.ad}}` split at its dot, a table of six tags, a tag in the header and the footer, `{{yok}}`; `t1_merge_fields`: complex fields with text before and after (`\b`, `\f`), upper casing, a `\@ "dd.MM.yyyy"` date picture, a `w:fldSimple` and a header and a footer | the Word check looks for these (`word-checks.md`, "T1") | `test/docx/template/template_test.dart` |
+| `tool/fill_docx.dart` | fills every document of a directory with `fillDocxData()` and checks no fillable tag with data is left, every missing one still is and warned, no merge field with data is left, only the main part and the parts of filled tags changed, and `fill({})` gives the input back | CI validates what the fill saves | `test/tool/fill_docx_test.dart` (every "reports ..." case, "bad arguments: exit 2", "a truncated copy: exit 1, named") |
+| `tool/write_t1_check.dart <dir>` | writes the four fixtures and `owner/`, each `template_*.docx` of `test/fixtures/owner/docx/` filled with `fillDocxData()` (none yet: it says so and exits 0); exit 2 on bad arguments, 1 on an error | the owner's Word check | `test/tool/write_t1_check_test.dart` |
+| The fuzz | `tool/fuzz_docx.dart --template` and `test/docx/template/template_fuzz_test.dart` insert tags and switches into the story parts of the four templates and fill them; only `DocxReadException` may come out, and the fill of `{}` gives back the template opened, loaded and saved; the DOCX fuzz runs 1,400 cases a seed (900 before) so every part name is still mutated | the fill reads untrusted files | `test/docx/template/template_fuzz_test.dart`, `test/docx/fuzz_test.dart` ("every part name is mutated in some corpus entry") |
+| The AM/PM guard | `test/architecture/format_code_test.dart` allows `lib/src/docx/template/merge_field.dart` to hold the AM/PM marker: it translates Word's date pictures and writes the marker the number format engine reads, and scans no Excel format code. The allowlist is one path, narrow | the guard keeps Excel code scanning out of `lib/`; this file does not scan any | `test/architecture/format_code_test.dart` ("no file under lib/ holds the AM/PM markers", "the guard flags an AM/PM marker") |
 
 ### Checks outside the unit tests
 
