@@ -69,7 +69,13 @@ void replaceSpan(ParagraphText map, int start, int end, String value) {
   );
 
   if (identical(startRun, endRun)) {
-    setRunContent(startRun, before, '$prefix$value$suffix', after);
+    setRunContent(
+      startRun,
+      before,
+      '$prefix$value$suffix',
+      after,
+      addRemoved: true,
+    );
     return;
   }
 
@@ -86,14 +92,26 @@ void replaceSpan(ParagraphText map, int start, int end, String value) {
     inside.add(run);
   }
 
-  setRunContent(startRun, before, '$prefix$value', const <DocxRunContent>[]);
+  setRunContent(
+    startRun,
+    before,
+    '$prefix$value',
+    const <DocxRunContent>[],
+    addRemoved: true,
+  );
   for (final DocxRun run in inside) {
     removeHeldInline(run);
   }
-  if (suffix.isEmpty && after.isEmpty) {
+  if (suffix.isEmpty && after.isEmpty && removedCharactersOf(endRun) == 0) {
     removeHeldInline(endRun);
   } else {
-    setRunContent(endRun, const <DocxRunContent>[], suffix, after);
+    setRunContent(
+      endRun,
+      const <DocxRunContent>[],
+      suffix,
+      after,
+      addRemoved: true,
+    );
   }
 }
 

@@ -321,21 +321,29 @@ void restoreRunText(DocxRun run, DocxRunText state) {
 /// as for [DocxRun.text]. The edit is one change reported to the run's sink
 /// (`DocxEditSink.runTextSet`), and a content equal to the run's, with the
 /// same removed count, changes and records nothing.
+///
+/// With [addRemoved] the characters removed from [text] are added to the
+/// run's removed count instead of replacing it, as when a second span of one
+/// run is filled; an undo restores the count it had.
 void setRunContent(
   DocxRun run,
   List<DocxRunContent> before,
   String text,
-  List<DocxRunContent> after,
-) {
+  List<DocxRunContent> after, {
+  bool addRemoved = false,
+}) {
   final ScrubResult scrubbed = scrubXmlText(text);
   final List<DocxRunContent> next = <DocxRunContent>[
     ...before,
     ..._split(scrubbed.text),
     ...after,
   ];
-  if (scrubbed.removed == run._removed && run._sameContent(next)) return;
+  final int removed = addRemoved
+      ? run._removed + scrubbed.removed
+      : scrubbed.removed;
+  if (removed == run._removed && run._sameContent(next)) return;
   final DocxRunText previous = runTextOf(run);
-  run._apply(next, scrubbed.removed);
+  run._apply(next, removed);
   run._sink.runTextSet(run, previous);
 }
 

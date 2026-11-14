@@ -164,32 +164,89 @@ void main() {
       );
     });
 
+    test('forbidden characters of two spans in one run are all counted', () {
+      final DocxDocument doc = DocxDocument.open(
+        templateDocument(<String>[
+          '<w:r><w:t xml:space="preserve">{{a}} {{b}}</w:t></w:r>',
+        ]),
+      );
+      final DocxParagraph p = _first(doc);
+      final ParagraphText map = paragraphTextOf(p);
+      replaceSpan(map, 6, 11, 'x\u0001');
+      replaceSpan(map, 0, 5, 'y');
+      final DocxResult result = doc.save();
+      expect(_first(DocxDocument.open(result.bytes)).text, 'y x');
+      final DocxWarning w = result.warnings.singleWhere(
+        (DocxWarning w) => w.code == DocxWarningCode.invalidCharactersRemoved,
+      );
+      expect(w.count, 1);
+    });
+
+    test('forbidden characters in the later tag of adjacent runs', () {
+      final DocxDocument doc = DocxDocument.open(
+        templateDocument(<String>[
+          '<w:r><w:t xml:space="preserve">{{a</w:t></w:r>'
+              '<w:r><w:t xml:space="preserve">}} {{b</w:t></w:r>'
+              '<w:r><w:t>}}</w:t></w:r>',
+        ]),
+      );
+      final ParagraphText map = paragraphTextOf(_first(doc));
+      replaceSpan(map, 6, 11, 'x\u0001\u0002');
+      replaceSpan(map, 0, 5, 'y');
+      final DocxResult result = doc.save();
+      expect(_first(DocxDocument.open(result.bytes)).text, 'y x');
+      final DocxWarning w = result.warnings.singleWhere(
+        (DocxWarning w) => w.code == DocxWarningCode.invalidCharactersRemoved,
+      );
+      expect(w.count, 2);
+    });
+
     test('every other inline untouched', () {
       const String picture =
-          '<w:r><w:drawing><wp:inline xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"><wp:extent cx="10" cy="10"/><wp:docPr id="1" name="P"/></wp:inline></w:drawing></w:r>';
+          '<w:r w:rsidR="00112233"><w:rPr><w:noProof/></w:rPr><w:drawing>'
+          '<wp:inline xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing">'
+          '<wp:extent cx="10" cy="10"/><wp:docPr id="1" name="P"/></wp:inline>'
+          '</w:drawing></w:r>';
       const String field =
-          '<w:fldSimple w:instr=" PAGE "><w:r><w:t>1</w:t></w:r></w:fldSimple>';
+          '<w:fldSimple w:instr=" PAGE "><w:r><w:rPr><w:i/></w:rPr>'
+          '<w:t>1</w:t></w:r></w:fldSimple>';
       const String comment =
-          '<w:commentRangeStart w:id="3"/><w:r><w:t>c</w:t></w:r><w:commentRangeEnd w:id="3"/>';
-      final Uint8List original = templateDocument(<String>[
-        '$picture$field$comment${wordSplitTag('{{a.b}}')}$picture',
-      ]);
-      final DocxDocument doc = DocxDocument.open(original);
+          '<w:commentRangeStart w:id="3"/><w:r w:rsidR="00445566"><w:t>c</w:t>'
+          '</w:r><w:commentRangeEnd w:id="3"/>';
+      final DocxDocument unedited = DocxDocument.open(
+        templateDocument(<String>[
+          '$picture$field$comment${wordSplitTag('{{a.b}}', boldFirstBrace: true)}$picture',
+        ]),
+      );
+      final DocxDocument doc = DocxDocument.open(
+        templateDocument(<String>[
+          '$picture$field$comment${wordSplitTag('{{a.b}}', boldFirstBrace: true)}$picture',
+        ]),
+      );
+      // Touch the unedited model the same way, with no change, so both are
+      // written from the model.
+      _first(unedited).addRun('');
       final DocxParagraph p = _first(doc);
-      final List<String> before = p.inlines.map(_describe).toList();
+      _first(doc).addRun('');
       _fill(p, '{{a.b}}', 'V');
-      final DocxParagraph saved = _first(_reopen(doc));
-      final List<String> after = saved.inlines.map(_describe).toList();
-      // The tag's runs and marks are the only difference.
-      expect(after.take(5), before.take(5));
-      expect(after.last, before.last);
-      expect(after.where((String s) => s.startsWith('run:V')), hasLength(1));
-      expect(saved.text, '1cV');
+      final String original = readDocxText(
+        unedited.save().bytes,
+      )['word/document.xml']!;
+      final String edited = readDocxText(
+        doc.save().bytes,
+      )['word/document.xml']!;
+      final RegExp tagRuns = RegExp(
+        r'<w:r [^>]*w:rsidR="00B7C8D9"[^>]*>.*?</w:r>|'
+        r'<w:r [^>]*w:rsidR="00A1B2C3"[^>]*>.*?</w:r>',
+      );
+      // Everything but the tag's runs is equal; the value run takes the
+      // first brace's place with its w:rPr (bold) and attributes.
+      final String valueRun = RegExp(
+        r'<w:r [^>]*w:rsidR="00B7C8D9"[^>]*>.*?</w:r>',
+      ).firstMatch(edited)!.group(0)!;
+      expect(valueRun, contains('<w:rPr><w:b/></w:rPr>'));
+      expect(valueRun, contains('>V<'));
+      expect(edited.replaceAll(tagRuns, ''), original.replaceAll(tagRuns, ''));
     });
   });
 }
-
-String _describe(DocxInline i) => switch (i) {
-  DocxRun() => 'run:${i.text}|${i.content.map((c) => c.runtimeType)}',
-  _ => '${i.runtimeType}:${i.text}',
-};
