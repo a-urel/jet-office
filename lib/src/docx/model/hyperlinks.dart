@@ -146,6 +146,34 @@ final class DocxHyperlink extends DocxInline {
     return out.toString();
   }
 
+  DocxEditSink get _sink {
+    final DocxParagraph? paragraph = _paragraph;
+    return paragraph == null ? DocxEditSink.none : editSinkOf(paragraph);
+  }
+
+  /// Gives the hyperlink [inlines] in place of its own, as one change applied
+  /// through its paragraph's sink.
+  void _edit(List<DocxInline> inlines) =>
+      _sink.apply(_HyperlinkEdit(this, List<DocxInline>.of(_inlines), inlines));
+
+  /// Puts [inlines] in the hyperlink, without reporting it. An inline that
+  /// goes leaves the paragraph but stays the hyperlink's, so it can go
+  /// nowhere else and a revert can put it back; one that comes is the
+  /// hyperlink's and in its paragraph.
+  void _restore(List<DocxInline> inlines) {
+    final Set<DocxInline> kept = Set<DocxInline>.identity()..addAll(inlines);
+    for (final DocxInline gone in _inlines) {
+      if (!kept.contains(gone)) setParagraphOf(gone, null);
+    }
+    _inlines
+      ..clear()
+      ..addAll(inlines);
+    for (final DocxInline inline in _inlines) {
+      inline._hyperlink = this;
+      setParagraphOf(inline, _paragraph);
+    }
+  }
+
   @override
   String toString() => 'DocxHyperlink(${url ?? anchor ?? ''})';
 }
@@ -241,3 +269,19 @@ bool _forbidden(String text) => scrubXmlText(text).removed > 0;
 
 /// Whether the API built [link]; otherwise it was read from a file.
 bool hyperlinkIsBuilt(DocxHyperlink link) => link._built != null;
+
+/// An edit of a hyperlink's inlines (one removed or replaced by the template
+/// fill), from one list to another.
+final class _HyperlinkEdit implements Change {
+  _HyperlinkEdit(this._link, this._before, this._after);
+
+  final DocxHyperlink _link;
+  final List<DocxInline> _before;
+  final List<DocxInline> _after;
+
+  @override
+  void revert() => _link._restore(_before);
+
+  @override
+  void reapply() => _link._restore(_after);
+}

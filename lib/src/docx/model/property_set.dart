@@ -275,6 +275,30 @@ abstract base class PropertySet implements NestedProperties {
     }
   }
 
+  /// Takes the values set on [other] in place of those set here, without
+  /// reporting anything: how a copy of properties starts as the original is
+  /// now. [other] must be over the same [source] and [schema], since a value
+  /// set may stand for one of [source]'s children (a [RepeatedKept], a
+  /// [ValueRemoved]); otherwise it throws [ArgumentError].
+  ///
+  /// The values are immutable, and lists of repeated entries are replaced and
+  /// never changed, so later sets on either side do not reach the other.
+  void takeValuesSetOn(PropertySet other) {
+    if (!identical(other.source, source) || !identical(other.schema, schema)) {
+      throw ArgumentError.value(
+        other,
+        'other',
+        'must be over the same source and schema',
+      );
+    }
+    _overrides
+      ..clear()
+      ..addAll(other._overrides);
+    _repeated
+      ..clear()
+      ..addAll(other._repeated);
+  }
+
   /// Writes the properties as [qualifiedName]: [source]'s children merged
   /// with the values set, in [schema]'s order ([PropertyContainer.writeTo]
   /// has the rules). [attributes], when given, are written in place of

@@ -27,6 +27,8 @@ import '../../opc/opaque_xml.dart';
 import '../../xml/xml_escape.dart';
 import '../../xml/xml_pull_reader.dart';
 import '../properties.dart';
+import '../run_property_codecs.dart' show runPropertiesSchema;
+import '../story_reader.dart' show eachChild, isW, readerOfCaptured;
 import 'blocks.dart';
 import 'edit_sink.dart';
 import 'property_set.dart';
@@ -307,6 +309,187 @@ void restoreRunText(DocxRun run, DocxRunText state) {
     ..clear()
     ..addAll(state.content);
   run._removed = state.removed;
+}
+
+/// Sets [run]'s content to [before], then [text] split into text, tabs and
+/// breaks and scrubbed as [DocxRun.text] splits and scrubs it, then [after]:
+/// how the template fill puts a value in a run and keeps the content around
+/// the tag it replaces.
+///
+/// The run counts the characters removed from [text] as its removed count,
+/// so the save reports them with `DocxWarningCode.invalidCharactersRemoved`
+/// as for [DocxRun.text]. The edit is one change reported to the run's sink
+/// (`DocxEditSink.runTextSet`), and a content equal to the run's, with the
+/// same removed count, changes and records nothing.
+void setRunContent(
+  DocxRun run,
+  List<DocxRunContent> before,
+  String text,
+  List<DocxRunContent> after,
+) {
+  final ScrubResult scrubbed = scrubXmlText(text);
+  final List<DocxRunContent> next = <DocxRunContent>[
+    ...before,
+    ..._split(scrubbed.text),
+    ...after,
+  ];
+  if (scrubbed.removed == run._removed && run._sameContent(next)) return;
+  final DocxRunText previous = runTextOf(run);
+  run._apply(next, scrubbed.removed);
+  run._sink.runTextSet(run, previous);
+}
+
+/// A new run holding [text], split and scrubbed as [DocxRun.text] is, with
+/// [source]'s run properties as they are now: its `w:rPr` as read and the
+/// values set on it through the API since. It has none of [source]'s `w:r`
+/// attributes (`w:rsidR` and the like), and belongs to no paragraph.
+///
+/// It counts as read where [source] was, so a `w:rStyle` it takes as read is
+/// a reference of that document's, as [source]'s is. Later sets on either run
+/// do not reach the other.
+DocxRun copyRunWithText(DocxRun source, String text) {
+  final DocxRun copy = DocxRun._read(
+    source._source,
+    const <KeptAttribute>[],
+    const <DocxRunContent>[],
+  );
+  propertySetOfRunProperties(
+    copy._properties,
+  ).takeValuesSetOn(propertySetOfRunProperties(source._properties));
+  copy
+    .._readIn = source._readIn
+    .._setText(text);
+  return copy;
+}
+
+/// A new run holding [text], split and scrubbed as [DocxRun.text] is, with
+/// the `w:rPr` of the first `w:r` inside the opaque `w:fldSimple` [field], in
+/// document order, read as the reader reads a run's; a run of no properties
+/// when [field] holds no run, or its first run no `w:rPr`. It has no `w:r`
+/// attributes and belongs to no paragraph.
+///
+/// The run counts as read in the document of [field]'s paragraph, as a run
+/// read from the file would. [field]'s slice is read again, nested at most
+/// [maxDepth] deep; it was read under the part's limit already.
+DocxRun runOfSimpleField(
+  DocxOpaqueInline field,
+  String text, {
+  int maxDepth = 256,
+}) {
+  final DocxRun run = DocxRun._read(
+    _firstRunPropertiesIn(field._xml, maxDepth) ??
+        const PropertyContainer.empty(),
+    const <KeptAttribute>[],
+    const <DocxRunContent>[],
+  );
+  final DocxParagraph? paragraph = field._paragraph;
+  final DocxEditSink? sink = paragraph == null ? null : editSinkOf(paragraph);
+  run
+    .._readIn = identical(sink, DocxEditSink.none) ? null : sink
+    .._setText(text);
+  return run;
+}
+
+/// The `w:rPr` of the first `w:r` inside [xml], or `null` when it holds no
+/// run or that run has no `w:rPr`.
+PropertyContainer? _firstRunPropertiesIn(OpaqueXml xml, int maxDepth) {
+  final XmlPullReader r = readerOfCaptured(xml, maxDepth);
+  final int depth = r.depth;
+  while (r.next()) {
+    if (r.eventType == XmlEventType.endElement && r.depth <= depth) break;
+    if (r.eventType != XmlEventType.startElement || !isW(r, 'r')) continue;
+    PropertyContainer? properties;
+    eachChild(r, () {
+      if (properties == null && isW(r, 'rPr')) {
+        properties = PropertyContainer.read(r, runPropertiesSchema);
+      } else {
+        r.skip();
+      }
+    });
+    return properties;
+  }
+  return null;
+}
+
+/// The paragraph or hyperlink that holds [inline], and its index there: the
+/// hyperlink is `null` for an inline of the paragraph itself.
+///
+/// Throws [StateError] for an inline in no paragraph, or held by a
+/// [DocxField], which the template replaces whole and never edits inside.
+(DocxParagraph, DocxHyperlink?, int) _holderOf(DocxInline inline) {
+  final DocxParagraph? paragraph = inline._paragraph;
+  if (paragraph == null) {
+    throw StateError('The inline is in no paragraph.');
+  }
+  if (inline._field != null) {
+    throw StateError('The inline is in a field; replace the field whole.');
+  }
+  final DocxHyperlink? link = inline._hyperlink;
+  final List<DocxInline> holder = link == null
+      ? paragraph.inlines
+      : link._inlines;
+  final int index = holder.indexWhere((DocxInline i) => identical(i, inline));
+  if (index < 0) {
+    throw StateError('The inline is in no paragraph.');
+  }
+  return (paragraph, link, index);
+}
+
+/// Removes [inline] from the paragraph or the hyperlink that holds it, as one
+/// change: through the paragraph's own recorded edit
+/// ([DocxParagraph.removeInlineAt]) for an inline of the paragraph, and as an
+/// edit of the hyperlink's inlines for one of a hyperlink. A run removed from
+/// a hyperlink stays its hyperlink's, as [DocxHyperlink] has it, so it cannot
+/// go elsewhere, and an undo puts it back.
+///
+/// Throws [StateError] for an inline in no paragraph, or held by a
+/// [DocxField], before anything changes.
+void removeHeldInline(DocxInline inline) {
+  final (DocxParagraph paragraph, DocxHyperlink? link, int index) = _holderOf(
+    inline,
+  );
+  if (link == null) {
+    paragraph.removeInlineAt(index);
+  } else {
+    link._edit(<DocxInline>[...link._inlines]..removeAt(index));
+  }
+}
+
+/// Puts [replacement], which must be in no paragraph, field or hyperlink,
+/// where [inline] is, in its paragraph or its hyperlink, as one change, as
+/// [removeHeldInline] edits them. [inline] is then in no paragraph.
+///
+/// The styles [replacement] names are not resolved against the document's:
+/// give it runs of the document's own (`copyRunWithText`,
+/// `runOfSimpleField`) or of no style.
+///
+/// Throws [StateError] for an [inline] in no paragraph or held by a
+/// [DocxField], and for a [replacement] that is held anywhere, and
+/// [ArgumentError] for a [DocxHyperlink] put in a hyperlink; all before
+/// anything changes.
+void replaceHeldInline(DocxInline inline, DocxInline replacement) {
+  final (DocxParagraph paragraph, DocxHyperlink? link, int index) = _holderOf(
+    inline,
+  );
+  if (replacement._paragraph != null ||
+      replacement._field != null ||
+      replacement._hyperlink != null) {
+    throw StateError(
+      'The replacement is already in a paragraph, a field or a hyperlink.',
+    );
+  }
+  if (link == null) {
+    replaceInlineAt(paragraph, index, replacement);
+    return;
+  }
+  if (replacement is DocxHyperlink) {
+    throw ArgumentError.value(
+      replacement,
+      'replacement',
+      'must not be a hyperlink inside a hyperlink',
+    );
+  }
+  link._edit(<DocxInline>[...link._inlines]..[index] = replacement);
 }
 
 /// The paragraph [inline] is in, or `null`.

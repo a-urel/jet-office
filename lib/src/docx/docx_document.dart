@@ -88,6 +88,30 @@ DocxEdits editsOf(DocxDocument document) => document._edits;
 /// The change log of [document], for tests.
 ChangeLog changeLogOf(DocxDocument document) => document._edits.log;
 
+/// Runs [body] as one kept transaction of [document]'s change log and returns
+/// its set: how an internal edit made of many (the template fill) is one
+/// change set, which `ChangeLog.undo` takes back whole.
+///
+/// If [body] throws, every change it recorded is reverted and the error is
+/// rethrown ([ChangeLog.transaction]). Started inside another transaction, it
+/// folds into that one and its set cannot be undone alone.
+ChangeSet documentTransaction(DocxDocument document, void Function() body) =>
+    document._edits.log.transaction(body, keep: true);
+
+/// A saved file of [bytes] with [warnings], as [DocxDocument.save] gives it,
+/// for a save made outside the document (the template fill's). The list is
+/// copied and cannot be modified.
+DocxResult newDocxResult(Uint8List bytes, List<DocxWarning> warnings) =>
+    DocxResult._(bytes, List<DocxWarning>.unmodifiable(warnings));
+
+/// The absolute name of the part that holds [story], such as
+/// `/word/header1.xml`, for the locations of warnings; `null` for a story
+/// that has no part yet (an empty one, or one a save has not created).
+String? storyPartNameOf(DocxHeaderFooter story) => story._story._slot?.name;
+
+/// The package [document] was opened from.
+DocxPackage docxPackageOf(DocxDocument document) => document._package;
+
 /// Whether the body of [document] has been loaded, for tests.
 bool isBodyLoaded(DocxDocument document) => document._body != null;
 
