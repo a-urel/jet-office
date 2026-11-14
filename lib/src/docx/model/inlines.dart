@@ -404,7 +404,7 @@ PropertyContainer? _firstRunPropertiesIn(OpaqueXml xml, int maxDepth) {
   final XmlPullReader r = readerOfCaptured(xml, maxDepth);
   final int depth = r.depth;
   while (r.next()) {
-    if (r.eventType == XmlEventType.endElement && r.depth <= depth) break;
+    if (r.eventType == XmlEventType.endElement && r.depth < depth) break;
     if (r.eventType != XmlEventType.startElement || !isW(r, 'r')) continue;
     PropertyContainer? properties;
     eachChild(r, () {
@@ -498,6 +498,119 @@ void replaceHeldInline(DocxInline inline, DocxInline replacement) {
     );
   }
   link._edit(<DocxInline>[...link._inlines]..[index] = replacement);
+}
+
+/// Puts [replacements], in order, where [inline] is, in its paragraph or its
+/// hyperlink; with none, removes [inline]. In a paragraph the first takes
+/// [inline]'s place as [replaceHeldInline] does and each other is inserted
+/// after it (`DocxParagraph.insertInline`), one change each; in a hyperlink
+/// it is one edit of the hyperlink's inlines. Make it inside a transaction to
+/// undo it whole. [inline] is then in no paragraph.
+///
+/// Throws [StateError] for an [inline] in no paragraph or held by a
+/// [DocxField], and for a replacement that is held anywhere, and
+/// [ArgumentError] for a [DocxHyperlink] put in a hyperlink; all before
+/// anything changes.
+void spliceHeldInline(DocxInline inline, List<DocxInline> replacements) {
+  final (DocxParagraph paragraph, DocxHyperlink? link, int index) = _holderOf(
+    inline,
+  );
+  for (final DocxInline replacement in replacements) {
+    if (replacement._paragraph != null ||
+        replacement._field != null ||
+        replacement._hyperlink != null) {
+      throw StateError(
+        'A replacement is already in a paragraph, a field or a hyperlink.',
+      );
+    }
+    if (link != null && replacement is DocxHyperlink) {
+      throw ArgumentError.value(
+        replacement,
+        'replacements',
+        'must not hold a hyperlink to go inside a hyperlink',
+      );
+    }
+  }
+  if (link != null) {
+    link._edit(
+      <DocxInline>[...link._inlines]
+        ..replaceRange(index, index + 1, replacements),
+    );
+    return;
+  }
+  if (replacements.isEmpty) {
+    paragraph.removeInlineAt(index);
+    return;
+  }
+  replaceInlineAt(paragraph, index, replacements.first);
+  for (int i = 1; i < replacements.length; i++) {
+    paragraph.insertInline(index + i, replacements[i]);
+  }
+}
+
+/// The local names, in WordprocessingML, of the marks a filled field keeps
+/// ([fieldMarkCopies]): elements that hold no content and may be one half of
+/// a pair whose other half is outside the field (Ruling 6's transparent
+/// inlines but `w:del` and `w:moveFrom`, which hold the old result's text).
+const Set<String> carriedMarkNames = <String>{
+  'proofErr',
+  'commentRangeStart',
+  'commentRangeEnd',
+  'moveFromRangeStart',
+  'moveFromRangeEnd',
+  'moveToRangeStart',
+  'moveToRangeEnd',
+  'permStart',
+  'permEnd',
+};
+
+/// Copies, in file order, of the bookmark marks and the [carriedMarkNames]
+/// marks [field] holds, in its instruction, its result and the fields and
+/// hyperlinks inside them, for a fill that replaces [field] whole to put back
+/// after its value: without them half a bookmark or comment range would go.
+///
+/// A copy is written as its original: a mark read from the file keeps its
+/// element, and the end of a built bookmark whose start is copied too names
+/// the copied start. The originals stay [field]'s, so an undo that puts
+/// [field] back has them.
+List<DocxInline> fieldMarkCopies(DocxField field) {
+  final List<DocxInline> out = <DocxInline>[];
+  final Map<DocxBookmarkStart, DocxBookmarkStart> starts =
+      Map<DocxBookmarkStart, DocxBookmarkStart>.identity();
+  visitInlines(field, (DocxInline inline) {
+    switch (inline) {
+      case DocxBookmarkStart():
+        final OpaqueXml? xml = inline._xml;
+        final DocxBookmarkStart copy = xml == null
+            ? DocxBookmarkStart._built(inline.name, inline._repairedFrom)
+            : DocxBookmarkStart._read(xml, inline.id, inline.name);
+        starts[inline] = copy;
+        out.add(copy);
+      case DocxBookmarkEnd():
+        final OpaqueXml? xml = inline._xml;
+        final DocxBookmarkStart? start = inline.start;
+        out.add(
+          xml != null
+              ? DocxBookmarkEnd._read(xml, inline.id)
+              : DocxBookmarkEnd._built(starts[start] ?? start),
+        );
+      case DocxOpaqueInline():
+        if (inline.namespaceUri == Ns.w &&
+            carriedMarkNames.contains(inline.localName)) {
+          out.add(
+            DocxOpaqueInline._(
+              inline._xml,
+              inline.text,
+              inline._holdsRuns,
+              inline._breaksFields,
+            ),
+          );
+        }
+      default:
+        break;
+    }
+  });
+  return out;
 }
 
 /// The paragraph [inline] is in, or `null`.

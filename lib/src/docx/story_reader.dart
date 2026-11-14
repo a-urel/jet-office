@@ -541,6 +541,40 @@ final class BlockReader {
   int tables = 0;
 }
 
+/// The bookmark marks and the [carriedMarkNames] marks inside the opaque
+/// `w:fldSimple` [field], in document order, read as the reader reads them
+/// from a paragraph (each keeps its element), for a fill that replaces
+/// [field] whole to put back after its value. Runs, `w:del` and `w:moveFrom`
+/// are not looked into: they hold the old result. [field]'s slice is read
+/// again, nested at most [maxDepth] deep; it was read under the part's limit
+/// already.
+List<DocxInline> marksInSimpleField(DocxOpaqueInline field, int maxDepth) {
+  final XmlPullReader r = readerOfCaptured(opaqueInlineXml(field), maxDepth);
+  final List<DocxInline> out = <DocxInline>[];
+  void walk() {
+    eachChild(r, () {
+      if (isW(r, 'bookmarkStart')) {
+        final int? id = parseOfficeId(r.getAttribute('id', namespaceUri: Ns.w));
+        final String name = r.getAttribute('name', namespaceUri: Ns.w) ?? '';
+        out.add(readBookmarkStart(OpaqueXml.capture(r), id, name));
+      } else if (isW(r, 'bookmarkEnd')) {
+        final int? id = parseOfficeId(r.getAttribute('id', namespaceUri: Ns.w));
+        out.add(readBookmarkEnd(OpaqueXml.capture(r), id));
+      } else if (r.namespaceUri == Ns.w &&
+          carriedMarkNames.contains(r.localName)) {
+        out.add(opaqueInline(OpaqueXml.capture(r), text: ''));
+      } else if (isW(r, 'r') || isW(r, 'del') || isW(r, 'moveFrom')) {
+        r.skip();
+      } else {
+        walk();
+      }
+    });
+  }
+
+  walk();
+  return out;
+}
+
 /// Whether the element [r] is on is `w:<localName>`.
 bool isW(XmlPullReader r, String localName) =>
     r.namespaceUri == Ns.w && r.localName == localName;

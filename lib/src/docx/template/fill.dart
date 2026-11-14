@@ -14,6 +14,8 @@
 ///
 /// The walk is `template_walk.dart`'s; the text scan of opaque content is
 /// `opaque_scan.dart`'s.
+///
+/// @docImport '../read_exception.dart';
 library;
 
 import 'package:jet_core/jet_core.dart';
@@ -22,6 +24,7 @@ import '../../opc/change_log.dart';
 import '../docx_document.dart';
 import '../docx_package.dart';
 import '../model/inlines.dart';
+import '../story_reader.dart' show marksInSimpleField;
 import '../warnings.dart';
 import 'merge_field.dart';
 import 'opaque_scan.dart';
@@ -95,27 +98,32 @@ final class FoundTag {
   final int depth;
 }
 
-final Expando<ChangeSet> _lastFill = Expando<ChangeSet>('lastFill');
-
-/// The change set of the last fill of [document], for tests; `null` before
-/// one.
-ChangeSet? lastFillChangeSet(DocxDocument document) => _lastFill[document];
+/// Fills [document] with [data] in one transaction (`documentTransaction`)
+/// and returns the fill's warnings; [fillTemplateWithChanges] has the rules.
+List<DocxWarning> fillTemplate(
+  DocxDocument document,
+  Map<String, Object?> data,
+  FillSettings settings,
+) => fillTemplateWithChanges(document, data, settings).warnings;
 
 /// Fills [document] with [data] in one transaction (`documentTransaction`)
-/// and returns the fill's warnings.
+/// and returns the fill's warnings and the transaction's change set, which
+/// the caller may hand to the change log's undo; the library keeps no
+/// change set (decision 0009).
 ///
 /// [data] is checked first (`checkTemplateData`): an [ArgumentError] then
 /// leaves the document unchanged and records nothing. Names are looked up in
-/// [data] itself.
-List<DocxWarning> fillTemplate(
+/// [data] itself. A part that cannot be read (a header or footer) throws a
+/// [DocxReadException] from the walk, before anything changes.
+({List<DocxWarning> warnings, ChangeSet changes}) fillTemplateWithChanges(
   DocxDocument document,
   Map<String, Object?> data,
   FillSettings settings,
 ) {
   checkTemplateData(data);
   final _Fill fill = _Fill(document, data, settings);
-  _lastFill[document] = documentTransaction(document, fill.run);
-  return fill.warnings.warnings;
+  final ChangeSet changes = documentTransaction(document, fill.run);
+  return (warnings: fill.warnings.warnings, changes: changes);
 }
 
 /// The tags and merge fields of [document] in reading order, as a fill would
@@ -234,11 +242,15 @@ final class _Fill {
       replaceSpan(e.map!, e.match!.start, e.match!.end, text);
     }
     for (final (DocxInline field, String? text) in fields) {
-      if (text == null || text.isEmpty) {
-        removeHeldInline(field);
-      } else {
-        replaceHeldInline(field, _runFor(field, text));
-      }
+      // The marks the field holds go after its value, so a bookmark or a
+      // comment range that starts or ends in its result keeps both halves.
+      final List<DocxInline> marks = field is DocxField
+          ? fieldMarkCopies(field)
+          : marksInSimpleField(field as DocxOpaqueInline, maxDepth);
+      spliceHeldInline(field, <DocxInline>[
+        if (text != null && text.isNotEmpty) _runFor(field, text),
+        ...marks,
+      ]);
     }
   }
 

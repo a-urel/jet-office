@@ -499,6 +499,165 @@ void main() {
       expect(run.properties.bold, isTrue);
     });
 
+    group('marks inside a field result stay', () {
+      /// A MERGEFIELD `Ad` whose result run follows [inResult].
+      String field(String inResult) =>
+          '<w:r><w:fldChar w:fldCharType="begin"/></w:r>'
+          '<w:r><w:instrText xml:space="preserve"> MERGEFIELD Ad '
+          '</w:instrText></w:r>'
+          '<w:r><w:fldChar w:fldCharType="separate"/></w:r>'
+          '$inResult<w:r><w:t>«Ad»</w:t></w:r>'
+          '<w:r><w:fldChar w:fldCharType="end"/></w:r>';
+
+      void expectBothHalves(DocxDocument doc, String start, String end) {
+        final String xml = readDocxText(doc.save().bytes)['word/document.xml']!;
+        expect(xml, contains(start));
+        expect(xml, contains(end));
+        expect(xml.indexOf(start), lessThan(xml.indexOf(end)));
+      }
+
+      test('a bookmark started in the result keeps its start', () {
+        final DocxDocument doc = _open(
+          templateDocument(<String>[
+            '${field('<w:bookmarkStart w:id="3" w:name="adres"/>')}<w:bookmarkEnd w:id="3"/>',
+          ]),
+        );
+        expect(
+          fillTemplate(doc, <String, Object?>{'Ad': 'Ayşe'}, _en),
+          isEmpty,
+        );
+        final DocxParagraph p = _firstParagraph(doc);
+        expect(p.text, 'Ayşe');
+        expect(p.inlines.map((DocxInline i) => i.runtimeType), <Type>[
+          DocxRun,
+          DocxBookmarkStart,
+          DocxBookmarkEnd,
+        ]);
+        expect((p.inlines[1] as DocxBookmarkStart).name, 'adres');
+        expectBothHalves(
+          doc,
+          '<w:bookmarkStart w:id="3" w:name="adres"/>',
+          '<w:bookmarkEnd w:id="3"/>',
+        );
+        final DocxParagraph saved = _firstParagraph(_reopen(doc));
+        expect(saved.inlines.whereType<DocxBookmarkStart>(), hasLength(1));
+      });
+
+      test('a comment range started in the result keeps its start', () {
+        final DocxDocument doc = _open(
+          templateDocument(<String>[
+            '${field('<w:commentRangeStart w:id="0"/><w:proofErr w:type="spellStart"/>')}<w:commentRangeEnd w:id="0"/>',
+          ]),
+        );
+        expect(
+          fillTemplate(doc, <String, Object?>{'Ad': 'Ayşe'}, _en),
+          isEmpty,
+        );
+        expect(_firstParagraph(doc).text, 'Ayşe');
+        expectBothHalves(
+          doc,
+          '<w:commentRangeStart w:id="0"/>',
+          '<w:commentRangeEnd w:id="0"/>',
+        );
+        expect(
+          readDocxText(doc.save().bytes)['word/document.xml'],
+          contains('<w:proofErr w:type="spellStart"/>'),
+        );
+      });
+
+      test('a removed field keeps its marks', () {
+        final DocxDocument doc = _open(
+          templateDocument(<String>[
+            '${field('<w:bookmarkStart w:id="3" w:name="adres"/>')}<w:bookmarkEnd w:id="3"/>',
+          ]),
+        );
+        fillTemplate(
+          doc,
+          <String, Object?>{},
+          const FillSettings(removeMissing: true),
+        );
+        expect(
+          _firstParagraph(doc).inlines.map((DocxInline i) => i.runtimeType),
+          <Type>[DocxBookmarkStart, DocxBookmarkEnd],
+        );
+      });
+
+      test('a field in a hyperlink keeps its marks in the hyperlink', () {
+        final DocxDocument doc = _open(
+          templateDocument(<String>[
+            '<w:hyperlink w:anchor="x">'
+                '${field('<w:bookmarkStart w:id="3" w:name="adres"/>')}'
+                '</w:hyperlink><w:bookmarkEnd w:id="3"/>',
+          ]),
+        );
+        expect(
+          fillTemplate(doc, <String, Object?>{'Ad': 'Ayşe'}, _en),
+          isEmpty,
+        );
+        final DocxHyperlink link =
+            _firstParagraph(doc).inlines.first as DocxHyperlink;
+        expect(link.text, 'Ayşe');
+        expect(link.inlines.last, isA<DocxBookmarkStart>());
+        expectBothHalves(
+          doc,
+          '<w:bookmarkStart w:id="3" w:name="adres"/>',
+          '<w:bookmarkEnd w:id="3"/>',
+        );
+      });
+
+      test('a w:fldSimple keeps the marks inside it', () {
+        final DocxDocument doc = _open(
+          templateDocument(<String>[
+            '<w:fldSimple w:instr=" MERGEFIELD Ad ">'
+                '<w:bookmarkStart w:id="3" w:name="adres"/>'
+                '<w:r><w:rPr><w:b/></w:rPr><w:t>«Ad»</w:t></w:r>'
+                '<w:commentRangeStart w:id="0"/></w:fldSimple>'
+                '<w:bookmarkEnd w:id="3"/><w:commentRangeEnd w:id="0"/>',
+          ]),
+        );
+        expect(
+          fillTemplate(doc, <String, Object?>{'Ad': 'Ayşe'}, _en),
+          isEmpty,
+        );
+        final DocxParagraph p = _firstParagraph(doc);
+        expect(p.text, 'Ayşe');
+        expect((p.inlines.first as DocxRun).properties.bold, isTrue);
+        expectBothHalves(
+          doc,
+          '<w:bookmarkStart w:id="3" w:name="adres"/>',
+          '<w:bookmarkEnd w:id="3"/>',
+        );
+        expectBothHalves(
+          doc,
+          '<w:commentRangeStart w:id="0"/>',
+          '<w:commentRangeEnd w:id="0"/>',
+        );
+        final DocxParagraph saved = _firstParagraph(_reopen(doc));
+        expect(saved.inlines.whereType<DocxBookmarkStart>(), hasLength(1));
+      });
+
+      test('an undo puts the field back with its marks', () {
+        final DocxDocument doc = _open(
+          templateDocument(<String>[
+            '${field('<w:bookmarkStart w:id="3" w:name="adres"/>')}<w:bookmarkEnd w:id="3"/>',
+          ]),
+        );
+        final ({List<DocxWarning> warnings, ChangeSet changes}) fill =
+            fillTemplateWithChanges(doc, <String, Object?>{'Ad': 'Ayşe'}, _en);
+        changeLogOf(doc).undo(fill.changes);
+        final DocxParagraph p = _firstParagraph(doc);
+        expect(p.text, '«Ad»');
+        expect(p.inlines.map((DocxInline i) => i.runtimeType), <Type>[
+          DocxField,
+          DocxBookmarkEnd,
+        ]);
+        expect(
+          readDocxText(doc.save().bytes)['word/document.xml'],
+          contains('<w:bookmarkStart w:id="3" w:name="adres"/>'),
+        );
+      });
+    });
+
     test('a merge field in a hyperlink is filled there', () {
       final DocxDocument doc = _open(
         templateDocument(<String>[
@@ -688,7 +847,7 @@ void main() {
         throwsArgumentError,
       );
       expect(changeLogOf(doc).hasChanges, isFalse);
-      expect(lastFillChangeSet(doc), isNull);
+      expect(changeLogOf(doc).hasChanges, isFalse);
       expect(_texts(doc), <String>['{{a}}']);
     });
 
@@ -697,12 +856,17 @@ void main() {
         templateDocument(<String>[_run('{{a}} {{b}}'), wordSplitTag('{{c}}')]),
       );
       expect(changeLogOf(doc).hasChanges, isFalse);
-      fillTemplate(doc, <String, Object?>{'a': 'A', 'b': 'B', 'c': 'C'}, _en);
+      final ({List<DocxWarning> warnings, ChangeSet changes}) fill =
+          fillTemplateWithChanges(doc, <String, Object?>{
+            'a': 'A',
+            'b': 'B',
+            'c': 'C',
+          }, _en);
+      expect(fill.warnings, isEmpty);
       expect(changeLogOf(doc).hasChanges, isTrue);
       expect(_texts(doc), <String>['A B', 'C']);
-      final ChangeSet? set = lastFillChangeSet(doc);
-      expect(set, isNotNull);
-      expect(set!.isEmpty, isFalse);
+      final ChangeSet set = fill.changes;
+      expect(set.isEmpty, isFalse);
       changeLogOf(doc).undo(set);
       expect(_texts(doc), <String>['{{a}} {{b}}', '{{c}}']);
       expect(_texts(_reopen(doc)), <String>['{{a}} {{b}}', '{{c}}']);
