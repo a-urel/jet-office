@@ -68,6 +68,19 @@ final class DrawingChartRead {
   final List<DrawingChartIssue> issues;
 }
 
+/// The work one [readDrawingChartSpace] did, counted for tests that prove the
+/// work stays bounded without timing it.
+final class DrawingChartReadCounts {
+  /// Creates counts at zero.
+  DrawingChartReadCounts();
+
+  /// The typed forms written to compare with the part.
+  int typedChecks = 0;
+
+  /// The length of the longest text matched against the number pattern.
+  int longestNumberMatched = 0;
+}
+
 /// Reads [bytes], a `c:chartSpace` part.
 ///
 /// [theme] (`ChartTheme.office` when `null`) is the theme the part would be
@@ -96,11 +109,15 @@ final class DrawingChartRead {
 /// of 1,048,576 entries plus the part's size in bytes; a cache whose count
 /// would exceed what is left is cut to its last point, with
 /// [DrawingChartIssue.badNumber].
+///
+/// [counts], when given, adds up the work the read does; a test passes it to
+/// prove that work bounded without a clock.
 DrawingChartRead readDrawingChartSpace(
   Uint8List bytes, {
   ChartTheme? theme,
   ThemeColors? themeColors,
   bool date1904 = false,
+  DrawingChartReadCounts? counts,
 }) {
   final _Node? root;
   try {
@@ -123,6 +140,7 @@ DrawingChartRead readDrawingChartSpace(
     theme ?? ChartTheme.office,
     _maxPoints + bytes.length,
     date1904,
+    counts,
   ).read(bytes);
 }
 
@@ -272,6 +290,7 @@ final class _ChartReader {
     this.theme,
     this.pointBudget,
     this.date1904,
+    this.counts,
   );
 
   final _Node root;
@@ -285,6 +304,9 @@ final class _ChartReader {
 
   /// Whether date categories count in the 1904 date system.
   final bool date1904;
+
+  /// The work counted for a test, or `null`.
+  final DrawingChartReadCounts? counts;
 
   void _report(DrawingChartIssue issue) {
     if (!issues.contains(issue)) {
@@ -472,6 +494,7 @@ final class _ChartReader {
       ),
       autoTitle: autoTitle,
     );
+    counts?.typedChecks++;
     final DrawingChartWritten written;
     try {
       written = writeDrawingChartSpace(space, theme, date1904: date1904);

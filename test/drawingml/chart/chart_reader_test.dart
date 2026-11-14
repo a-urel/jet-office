@@ -990,29 +990,40 @@ void main() {
         // Seed 2 case 123 of the chart fuzz's long run (C2): the values'
         // `c:ptCount` of `c2_kinds`' doughnut set to twenty digits read in
         // about four seconds, as the typed check wrote a `c:dPt` for each of
-        // a million slices.
+        // a million slices. A part with fewer `c:dPt` than values cannot be
+        // the typed form's, so the reader skips that check. The counts prove
+        // it does; a clock could not, as about 22 ms fixed against 3.6 s
+        // broken leaves too narrow a gap for a busy machine.
         for (final ChartKind kind in <ChartKind>[
           ChartKind.pie,
           ChartKind.donut,
         ]) {
-          final String xml = utf8
-              .decode(
-                writeDrawingChartSpace(
-                  DrawingChartSpace(chart: _chart(kind)),
-                  _office,
-                ).bytes,
-              )
-              .replaceFirstMapped(
-                RegExp(
-                  r'(<c:numCache>(<c:formatCode>[^<]*</c:formatCode>)?)'
-                  r'<c:ptCount val="\d+"/>',
-                ),
-                (Match m) => '${m[1]}<c:ptCount val="99999999999999999999"/>',
-              );
+          final String written = utf8.decode(
+            writeDrawingChartSpace(
+              DrawingChartSpace(chart: _chart(kind)),
+              _office,
+            ).bytes,
+          );
+          final DrawingChartReadCounts plain = DrawingChartReadCounts();
+          expect(
+            readDrawingChartSpace(_bytes(written), counts: plain).typed,
+            isNotNull,
+            reason: '$kind',
+          );
+          expect(plain.typedChecks, 1, reason: '$kind');
+          final String xml = written.replaceFirstMapped(
+            RegExp(
+              r'(<c:numCache>(<c:formatCode>[^<]*</c:formatCode>)?)'
+              r'<c:ptCount val="\d+"/>',
+            ),
+            (Match m) => '${m[1]}<c:ptCount val="99999999999999999999"/>',
+          );
           expect(xml, contains('99999999999999999999'), reason: '$kind');
-          final Stopwatch watch = Stopwatch()..start();
-          final DrawingChartRead read = _read(xml);
-          watch.stop();
+          final DrawingChartReadCounts counts = DrawingChartReadCounts();
+          final DrawingChartRead read = readDrawingChartSpace(
+            _bytes(xml),
+            counts: counts,
+          );
           expect(
             read.chart!.series.first.values.values,
             hasLength(1 << 20),
@@ -1020,9 +1031,7 @@ void main() {
           );
           expect(read.typed, isNull, reason: '$kind');
           expect(read.issues, contains(DrawingChartIssue.badNumber));
-          // About 22 ms on the VM once fixed, 3.6 s before; the bound
-          // leaves Chrome and a loaded machine room.
-          expect(watch.elapsed, lessThan(const Duration(seconds: 3)));
+          expect(counts.typedChecks, 0, reason: '$kind');
         }
       });
 
@@ -1315,16 +1324,26 @@ void main() {
       expect(binary.issues, <DrawingChartIssue>[DrawingChartIssue.unreadable]);
     });
 
-    test('a long run of digits is read promptly as a bad number', () {
+    test('a long run of digits is a bad number, never matched', () {
+      // The number pattern is matched only on texts of at most 400
+      // characters, so a long text costs nothing however the pattern
+      // matches. The counts prove the guard holds; a clock proved only that
+      // this pattern happens not to backtrack.
       final String digits = '1' * _longDigits;
-      final Stopwatch watch = Stopwatch()..start();
-      final DrawingChartRead read = _read(
-        excelColumnChart.replaceFirst('<c:v>2</c:v>', '<c:v>${digits}x</c:v>'),
+      final DrawingChartReadCounts counts = DrawingChartReadCounts();
+      final DrawingChartRead read = readDrawingChartSpace(
+        _bytes(
+          excelColumnChart.replaceFirst(
+            '<c:v>2</c:v>',
+            '<c:v>${digits}x</c:v>',
+          ),
+        ),
+        counts: counts,
       );
-      watch.stop();
       expect(read.chart!.series.single.values.values, <double?>[1, null, 3]);
       expect(read.issues, <DrawingChartIssue>[DrawingChartIssue.badNumber]);
-      expect(watch.elapsed, lessThan(const Duration(seconds: 2)));
+      expect(counts.longestNumberMatched, greaterThan(0));
+      expect(counts.longestNumberMatched, lessThanOrEqualTo(400));
     });
 
     test('declared point counts share one budget per part', () {
@@ -1345,15 +1364,15 @@ void main() {
           '<c:valAx><c:axId val="2"/></c:valAx></c:plotArea></c:chart>'
           '</c:chartSpace>';
       final Uint8List bytes = _bytes(xml);
-      final Stopwatch watch = Stopwatch()..start();
       final DrawingChartRead read = readDrawingChartSpace(bytes);
-      watch.stop();
       final Chart chart = read.chart!;
       expect(chart.series, hasLength(100));
       int entries = 0;
       for (final ChartSeries s in chart.series) {
         entries += s.categories.values.length + s.values.values.length;
       }
+      // The budget, not a clock: without it the 200 caches keep their
+      // declared counts, 209,715,200 entries.
       expect(entries, lessThanOrEqualTo((1 << 20) + bytes.length));
       // The first caches keep their count; the later ones are cut to their
       // points.
@@ -1361,7 +1380,6 @@ void main() {
       expect(chart.series.last.categories.values, <Object?>['A']);
       expect(chart.series.last.values.values, <double?>[null, 1]);
       expect(read.issues, <DrawingChartIssue>[DrawingChartIssue.badNumber]);
-      expect(watch.elapsed, lessThan(const Duration(seconds: 2)));
     });
 
     test('a plot area without groups is unsupported', () {

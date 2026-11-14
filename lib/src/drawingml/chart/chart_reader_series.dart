@@ -279,10 +279,19 @@ extension _SeriesReading on _ChartReader {
     return int.parse(text);
   }
 
+  /// Whether [text] matches [_numberText], counted in
+  /// [DrawingChartReadCounts.longestNumberMatched].
+  bool _matchesNumber(String text) {
+    final DrawingChartReadCounts? c = counts;
+    if (c != null && text.length > c.longestNumberMatched) {
+      c.longestNumberMatched = text.length;
+    }
+    return _numberText.hasMatch(text);
+  }
+
   /// [text] as a finite number, or `null` and [DrawingChartIssue.badNumber].
   double? _number(String text) {
-    final double? n =
-        text.length <= _maxNumberLength && _numberText.hasMatch(text)
+    final double? n = text.length <= _maxNumberLength && _matchesNumber(text)
         ? double.tryParse(text)
         : null;
     if (n == null || !n.isFinite) {
