@@ -87,9 +87,22 @@ List<_Word> _words(String s) {
   return words;
 }
 
+/// The switch letters that take an argument.
+const String _takingSwitches = 'bf@#*';
+
 /// Parses [instruction], the text of a field's instruction, as a
 /// `MERGEFIELD`; `null` when it is another field or has no name.
-MergeField? parseMergeField(String instruction) {
+///
+/// A `\#` picture is read with [locale]'s separators, as Word wrote it in
+/// that locale's language: when [locale]'s decimal separator is `,` (Turkish
+/// Word's `#.##0,00`), `.` and `,` swap outside quoted text before the
+/// picture becomes an Excel code. A switch written without a space before
+/// its argument (`\#0.00`, `\*Upper`) takes the rest of the word as its
+/// argument; any other word starting with `\` is unsupported.
+MergeField? parseMergeField(
+  String instruction, {
+  FormatLocale locale = FormatLocale.enUS,
+}) {
   final List<_Word> words = _words(instruction);
   if (words.isEmpty ||
       words.first.raw.startsWith('"') ||
@@ -107,29 +120,31 @@ MergeField? parseMergeField(String instruction) {
   while (i < words.length) {
     final _Word word = words[i];
     i++;
-    final bool isSwitch =
-        word.raw.length == 2 && word.raw.codeUnitAt(0) == 0x5C;
-    if (!isSwitch) {
+    final bool slash = word.raw.length >= 2 && word.raw.codeUnitAt(0) == 0x5C;
+    if (!slash) {
       name ??= word.text;
       continue;
     }
     final String letter = word.raw[1].toLowerCase();
-    final bool takes =
-        letter == 'b' ||
-        letter == 'f' ||
-        letter == '@' ||
-        letter == '#' ||
-        letter == '*';
+    final bool takes = _takingSwitches.contains(letter);
     if (!takes) {
       unsupported.add(word.raw);
       continue;
     }
-    if (i >= words.length) {
+    final _Word arg;
+    String written = word.raw;
+    if (word.raw.length > 2) {
+      // `\#0.00`: the switch and its argument in one word.
+      final String rest = word.raw.substring(2);
+      arg = _Word(_unquoted(rest), rest);
+    } else if (i >= words.length) {
       unsupported.add(word.raw);
       continue;
+    } else {
+      arg = words[i];
+      i++;
+      written = '${word.raw} ${arg.raw}';
     }
-    final _Word arg = words[i];
-    i++;
     switch (letter) {
       case 'b':
         before = arg.text;
@@ -138,14 +153,16 @@ MergeField? parseMergeField(String instruction) {
       case '@':
         final String? code = _datePicture(arg.text);
         if (code == null) {
-          unsupported.add('${word.raw} ${arg.raw}');
+          unsupported.add(written);
         } else {
           dateFormat = code;
         }
       case '#':
-        final String? code = _numberPicture(arg.text);
+        final String? code = _numberPicture(
+          locale.decimalSeparator == ',' ? _swapSeparators(arg.text) : arg.text,
+        );
         if (code == null) {
-          unsupported.add('${word.raw} ${arg.raw}');
+          unsupported.add(written);
         } else {
           numberFormat = code;
         }
@@ -162,7 +179,7 @@ MergeField? parseMergeField(String instruction) {
           case 'caps':
             casing = 'Caps';
           default:
-            unsupported.add('${word.raw} ${arg.raw}');
+            unsupported.add(written);
         }
     }
   }
@@ -243,6 +260,25 @@ String? _datePicture(String p) {
   }
   if (hours12 && !ampm) return null;
   if (hours24 && ampm) return null;
+  return out.toString();
+}
+
+/// [s] without the quotes around it, when it is quoted.
+String _unquoted(String s) {
+  if (!s.startsWith('"')) return s;
+  final int end = s.indexOf('"', 1);
+  return end < 0 ? s.substring(1) : s.substring(1, end);
+}
+
+/// [p] with `.` and `,` swapped outside the text quoted in `'`.
+String _swapSeparators(String p) {
+  final StringBuffer out = StringBuffer();
+  bool quoted = false;
+  for (int i = 0; i < p.length; i++) {
+    final String ch = p[i];
+    if (ch == "'") quoted = !quoted;
+    out.write(quoted ? ch : (ch == '.' ? ',' : (ch == ',' ? '.' : ch)));
+  }
   return out.toString();
 }
 

@@ -1231,6 +1231,10 @@ Uint8List t1MergeFieldsTemplate() => templateWithStories(
           complexMergeField(' MERGEFIELD Tarih \\@ "dd.MM.yyyy" ', '«Tarih»'),
     ),
     _p(
+      templateRun('Tutar: ') +
+          complexMergeField(' MERGEFIELD tutar \\# "#.##0,00" ', '«tutar»'),
+    ),
+    _p(
       templateRun('Eski alan: ') + simpleMergeField(' MERGEFIELD Ad ', '«Ad»'),
     ),
     _p(
@@ -1249,6 +1253,7 @@ const List<String> _t1MergeFieldsText = <String>[
   'Sayın Ayşe,',
   'Müşteri: AYŞE YILMAZ',
   'Tarih: 14.11.2026',
+  'Tutar: 1.234,56',
   'Eski alan: Ayşe',
   'Değerli Ayşe, teklifimiz ektedir.',
   'Saygılarımızla.',
@@ -1260,6 +1265,7 @@ const List<String> _t1MergeFieldsTemplateText = <String>[
   '«Ad»',
   'Müşteri: «Müşteri Adı»',
   'Tarih: «Tarih»',
+  'Tutar: «tutar»',
   'Eski alan: «Ad»',
   'Değerli «Ad», teklifimiz ektedir.',
   'Saygılarımızla.',

@@ -190,6 +190,7 @@ final class _Fill {
         maxDepth,
         (String location, List<TemplateEntry> entries) =>
             _paragraph(story.part, location, entries),
+        locale: settings.locale,
       );
     }
     final DocxPackage package = docxPackageOf(document);

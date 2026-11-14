@@ -396,6 +396,21 @@ void main() {
       expect(_texts(_reopen(doc)), <String>['14.11.2026']);
     });
 
+    test('a number picture in the fill locale\'s separators', () {
+      Uint8List template(String picture) => templateDocument(<String>[
+        _complexField(' MERGEFIELD Tutar \\# "$picture" ', '«Tutar»'),
+      ]);
+      final Map<String, Object?> data = <String, Object?>{
+        'Tutar': FormatDecimal('1234.56'),
+      };
+      final DocxDocument tr = _open(template('#.##0,00'));
+      expect(fillTemplate(tr, data, _tr), isEmpty);
+      expect(_texts(_reopen(tr)), <String>['1.234,56']);
+      final DocxDocument en = _open(template('#,##0.00'));
+      expect(fillTemplate(en, data, _en), isEmpty);
+      expect(_texts(_reopen(en)), <String>['1,234.56']);
+    });
+
     test('text before and after, only around a value', () {
       final DocxDocument doc = _open(
         templateDocument(<String>[

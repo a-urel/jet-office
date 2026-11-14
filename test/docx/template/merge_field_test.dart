@@ -73,6 +73,43 @@ void main() {
       );
     });
 
+    test('a number picture is read with the locale\'s separators', () {
+      String? number(String picture, FormatLocale locale) => parseMergeField(
+        ' MERGEFIELD T \\# "$picture" ',
+        locale: locale,
+      )!.numberFormat;
+      // Turkish Word writes `.` for thousands and `,` for decimals.
+      expect(number('#.##0,00', FormatLocale.trTR), '#,##0.00');
+      expect(number('#,##0.00', FormatLocale.enUS), '#,##0.00');
+      expect(number('0,0%', FormatLocale.trTR), '0.0"%"');
+      // Quoted text keeps its separators.
+      expect(number("#.##0,00 'a.b,c'", FormatLocale.trTR), '#,##0.00 "a.b,c"');
+      expect(number('#.##0,00', FormatLocale.enUS), '#.##0,00');
+    });
+
+    test('a switch written without a space takes its argument', () {
+      final MergeField f = parseMergeField(
+        ' MERGEFIELD T \\#0.00 \\*Upper \\b"Sayın" \\fx ',
+      )!;
+      expect(f.name, 'T');
+      expect(f.numberFormat, '0.00');
+      expect(f.casing, 'Upper');
+      expect(f.before, 'Sayın');
+      expect(f.after, 'x');
+      expect(f.unsupported, isEmpty);
+      final MergeField date = parseMergeField(' MERGEFIELD T \\@dd.MM.yyyy ')!;
+      expect(date.dateFormat, 'dd.mm.yyyy');
+    });
+
+    test('another word starting with a backslash is unsupported', () {
+      final MergeField f = parseMergeField(
+        ' MERGEFIELD T \\vx \\*Roman \\#x0 ',
+      )!;
+      expect(f.name, 'T');
+      expect(f.unsupported, <String>['\\vx', '\\*Roman', '\\#x0']);
+      expect(parseMergeField(' MERGEFIELD \\zz T ')!.name, 'T');
+    });
+
     test('a percent sign is a literal, not Excel percent', () {
       expect(parseMergeField(' MERGEFIELD T \\# "0%" ')!.numberFormat, '0"%"');
     });

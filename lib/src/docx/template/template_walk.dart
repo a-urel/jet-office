@@ -8,6 +8,8 @@
 /// entries this walk gives, and the listing reports them.
 library;
 
+import 'package:jet_core/jet_core.dart' show FormatLocale;
+
 import '../../opc/ooxml.dart' show Ns, RelType;
 import '../../opc/package.dart' show OpcRelationship;
 import '../docx_document.dart';
@@ -143,12 +145,15 @@ final class TemplateEntry {
 /// order, with the paragraph's path, right before the next paragraph is
 /// read, so it may edit the paragraph; an opaque block's entries come with
 /// its path too. Paragraphs in table cells and nested tables are walked.
+/// A merge field's `\#` picture is read with [locale]'s separators
+/// (`parseMergeField`).
 void walkTemplateStory(
   TemplateStory story,
   int maxDepth,
-  void Function(String location, List<TemplateEntry> entries) onParagraph,
-) {
-  _walkBlocks(story.blocks, story.prefix, maxDepth, onParagraph);
+  void Function(String location, List<TemplateEntry> entries) onParagraph, {
+  FormatLocale locale = FormatLocale.enUS,
+}) {
+  _walkBlocks(story.blocks, story.prefix, maxDepth, onParagraph, locale);
 }
 
 void _walkBlocks(
@@ -156,6 +161,7 @@ void _walkBlocks(
   String path,
   int maxDepth,
   void Function(String location, List<TemplateEntry> entries) onParagraph,
+  FormatLocale locale,
 ) {
   int paragraphs = 0;
   int tables = 0;
@@ -164,7 +170,7 @@ void _walkBlocks(
     switch (block) {
       case DocxParagraph():
         final String at = '$path/p[${paragraphs++}]';
-        onParagraph(at, paragraphEntries(block, maxDepth));
+        onParagraph(at, paragraphEntries(block, maxDepth, locale: locale));
       case DocxTable():
         final String at = '$path/tbl[${tables++}]';
         final List<DocxTableRow> rows = block.rows;
@@ -176,6 +182,7 @@ void _walkBlocks(
               '$at/tr[$r]/tc[$c]',
               maxDepth,
               onParagraph,
+              locale,
             );
           }
         }
@@ -231,8 +238,13 @@ TemplateEntry placeholderEntry(
 }
 
 /// The entries of [paragraph] in reading order: its text tags, its merge
-/// fields, and what its opaque content holds.
-List<TemplateEntry> paragraphEntries(DocxParagraph paragraph, int maxDepth) {
+/// fields, and what its opaque content holds; a merge field's `\#` picture
+/// read with [locale]'s separators.
+List<TemplateEntry> paragraphEntries(
+  DocxParagraph paragraph,
+  int maxDepth, {
+  FormatLocale locale = FormatLocale.enUS,
+}) {
   final ParagraphText map = paragraphTextOf(paragraph);
   final List<TemplateEntry> entries = <TemplateEntry>[
     for (final TagMatch m in scanTags(map.text)) _tagEntry(map, m),
@@ -240,6 +252,7 @@ List<TemplateEntry> paragraphEntries(DocxParagraph paragraph, int maxDepth) {
   _InlineWalk(
     entries,
     maxDepth,
+    locale,
   ).walk(paragraph.inlines, direct: true, counting: true);
   // A stable sort by offset; at one offset a field comes before the tag
   // that starts in its result, which cannot be filled anyway.
@@ -297,10 +310,11 @@ TemplateEntry _tagEntry(ParagraphText map, TagMatch m) {
 /// The walk of a paragraph's inlines for its merge fields and opaque
 /// content, counting the offset of each as `paragraphTextOf` counts text.
 final class _InlineWalk {
-  _InlineWalk(this.entries, this.maxDepth);
+  _InlineWalk(this.entries, this.maxDepth, this.locale);
 
   final List<TemplateEntry> entries;
   final int maxDepth;
+  final FormatLocale locale;
   int offset = 0;
 
   /// Walks [inlines]: [direct] when they are the paragraph's or a
@@ -373,7 +387,7 @@ final class _InlineWalk {
         // Ruling 8: a MERGEFIELD inside another field is not filled.
         _notTyped(instruction);
       } else {
-        final MergeField? merge = parseMergeField(instruction);
+        final MergeField? merge = parseMergeField(instruction, locale: locale);
         entries.add(_mergeEntry(instruction, merge, field));
       }
       walk(result, direct: false, counting: counting);
@@ -417,7 +431,7 @@ final class _InlineWalk {
       final String? instruction = _simpleInstruction(inline);
       final MergeField? merge = instruction == null
           ? null
-          : parseMergeField(instruction);
+          : parseMergeField(instruction, locale: locale);
       if (merge != null) {
         if (direct) {
           entries.add(_mergeEntry(instruction!, merge, inline));

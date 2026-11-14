@@ -24,7 +24,7 @@ const int _cases = 300;
 /// Chrome leg compares it, which proves both get the same cases. A change to
 /// the corpus (the `t1_*` templates, `template_documents.dart`), to the
 /// mutations or to the `package:archive` version resolved changes it.
-const int _casesDigest = 3812990126;
+const int _casesDigest = 1085579129;
 
 /// Adler-32 of [data], in arithmetic that stays exact in a browser.
 int _adler32(List<int> data) {
