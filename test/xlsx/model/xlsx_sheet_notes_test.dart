@@ -3,7 +3,9 @@ import 'dart:typed_data';
 
 import 'package:jet_office/jet_office.dart';
 import 'package:jet_office/src/opc/change_log.dart';
-import 'package:jet_office/src/xlsx/model/xlsx_workbook.dart' show changeLogOf;
+import 'package:jet_office/src/xlsx/model/vml_part.dart';
+import 'package:jet_office/src/xlsx/model/xlsx_workbook.dart'
+    show changeLogOf, packageOf;
 import 'package:test/test.dart';
 
 import '../../../tool/src/part_compare.dart';
@@ -1126,17 +1128,30 @@ void main() {
       });
     });
 
-    test('generates 10,000 notes in under 5 s', () {
+    test('generates 10,000 notes, searching each box for ids once', () {
       final XlsxWorkbook book = XlsxWorkbook.open(_package());
       final XlsxSheet sheet = book.sheets.single;
-      final Stopwatch watch = Stopwatch()..start();
       for (int i = 0; i < 10000; i++) {
         sheet.setNote(i, i % 10, XlsxNote.plain('Note $i', author: 'A'));
       }
+      // Counts the shapes the VML part searches for its highest shape id and
+      // z-index instead of timing the loop, so a busy machine cannot fail
+      // it: the bound of 5 s it replaces left a margin of only six times
+      // over 0.5 s on the VM and 0.8 s in Chrome. The part searches its
+      // shapes once and then each box it adds, 10,000 in all; searching
+      // every box again for each new one, the regression this guards, made
+      // 50,005,000 and took over two minutes.
+      final VmlPart vml = packageOf(book).partNames
+          .where((String name) => name.endsWith('.vml'))
+          .map((String name) => packageOf(book).contentOf(name))
+          .whereType<VmlPart>()
+          .single;
+      expect(
+        vml.shapesSearched,
+        lessThanOrEqualTo(2 * 10000),
+        reason: '${vml.shapesSearched} shapes searched',
+      );
       final Uint8List saved = book.save().bytes;
-      watch.stop();
-      printOnFailure('${watch.elapsedMilliseconds} ms');
-      expect(watch.elapsed, lessThan(const Duration(seconds: 5)));
       expect(XlsxWorkbook.open(saved).sheets.single.notes, hasLength(10000));
     });
   });

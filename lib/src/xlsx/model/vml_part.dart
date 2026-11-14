@@ -245,6 +245,15 @@ final class VmlPart implements PartContent {
   /// forgets them.
   ({int id, int z})? _top;
 
+  /// The number of shapes searched for their ids and z-indexes since the
+  /// part was made: each shape of a search of the whole part, and each shape
+  /// added while the highest values are known.
+  ///
+  /// A diagnostic for tests: counting it proves that adding a note searches
+  /// its own box, not every box again, without timing it.
+  int get shapesSearched => _shapesSearched;
+  int _shapesSearched = 0;
+
   ({int id, int z}) get _highest {
     final ({int id, int z})? known = _top;
     if (known != null) return known;
@@ -252,6 +261,7 @@ final class VmlPart implements PartContent {
     for (final VmlShape shape in shapes) {
       top = _higher(_higher(top, _topOf(shape.source)), _topOf(shape.after));
     }
+    _shapesSearched += shapes.length;
     return _top = top;
   }
 
@@ -276,7 +286,10 @@ final class VmlPart implements PartContent {
     } else {
       shapes.insert(index, to);
       final ({int id, int z})? top = _top;
-      if (top != null) _top = _higher(top, _topOf(to.source));
+      if (top != null) {
+        _shapesSearched++;
+        _top = _higher(top, _topOf(to.source));
+      }
     }
   }
 

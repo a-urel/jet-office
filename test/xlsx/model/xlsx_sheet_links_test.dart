@@ -169,7 +169,7 @@ void main() {
     });
 
     test('a sheet of very many links reads in linear time', testOn: 'vm', () {
-      const int count = 150000;
+      const int count = 300000;
       final StringBuffer links = StringBuffer('<hyperlinks>');
       final StringBuffer rels = StringBuffer();
       for (int i = 0; i < count; i++) {
@@ -183,13 +183,20 @@ void main() {
       ).sheets.single;
       // Loads the sheet, so that the getter alone is timed: reading the
       // entries and joining them. A test's timeout cannot stop code that
-      // never yields, so the bound is checked after: a fraction of a second
-      // here, minutes when quadratic.
+      // never yields, so the bound is checked after. Nothing the join does
+      // can be counted from outside, so the bound is wide on both sides, and
+      // the count is large because a quadratic join's time grows with its
+      // square: the getter took 0.67 to 0.69 s on a busy machine, while a
+      // join that searches the targets one by one for each link, the
+      // regression this guards, took 5 min 13 s. 20 s is about 30 times the
+      // slowest correct run and a fifteenth of the broken one.
       sheet.merges;
       final Stopwatch watch = Stopwatch()..start();
       final List<({XlsxRange range, XlsxHyperlink link})> read =
           sheet.hyperlinks;
-      expect(watch.elapsed, lessThan(const Duration(seconds: 15)));
+      watch.stop();
+      printOnFailure('${watch.elapsedMilliseconds} ms');
+      expect(watch.elapsed, lessThan(const Duration(seconds: 20)));
       expect(read, hasLength(count));
       expect(read.last.link.address, 'https://a.example/${count - 1}');
     });

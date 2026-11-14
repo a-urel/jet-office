@@ -1021,7 +1021,7 @@ void main() {
     });
 
     group('a file of very many rules joins in linear time', () {
-      const int count = 150000;
+      const int count = 300000;
       void joins(String name, String Function(int i) sqref, int formats) {
         test(name, testOn: 'vm', () {
           final StringBuffer elements = StringBuffer();
@@ -1033,12 +1033,21 @@ void main() {
           ).sheets.single;
           // Loads the sheet, so that the getter alone is timed: reading the
           // entries and joining them. A test's timeout cannot stop code that
-          // never yields, so the bound is checked after: a fraction of a second
-          // here, minutes when quadratic.
+          // never yields, so the bound is checked after. Nothing the join
+          // does can be counted from outside, so the bound is wide on both
+          // sides, and the count is large because a quadratic join's time
+          // grows with its square: the getter took 0.65 to 0.96 s on a busy
+          // machine, while a join that scans the formats for each rule (the
+          // regression of the first test) ran past 10 minutes and one that
+          // places each rule by a scan of its format's rules (the second's)
+          // took 9 min 36 s. 20 s is 20 times the slowest correct run and
+          // under a twentieth of a broken one.
           sheet.dataValidations;
           final Stopwatch watch = Stopwatch()..start();
           final List<XlsxConditionalFormat> read = sheet.conditionalFormats;
-          expect(watch.elapsed, lessThan(const Duration(seconds: 15)));
+          watch.stop();
+          printOnFailure('${watch.elapsedMilliseconds} ms');
+          expect(watch.elapsed, lessThan(const Duration(seconds: 20)));
           expect(read, hasLength(formats));
           expect(
             read.fold<int>(

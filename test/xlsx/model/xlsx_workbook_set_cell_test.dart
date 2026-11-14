@@ -2,6 +2,8 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:jet_office/jet_office.dart';
+import 'package:jet_office/src/xlsx/model/cell_store.dart';
+import 'package:jet_office/src/xlsx/model/worksheet_part.dart';
 import 'package:jet_office/src/xlsx/model/xlsx_sheet.dart';
 import 'package:jet_office/src/xlsx/model/xlsx_workbook.dart';
 import 'package:test/test.dart';
@@ -222,8 +224,8 @@ void main() {
     expect(again.sheets.single.cellAt(2, 0)?.formula, r'B3*$C$1');
   });
 
-  test('setting 10,000 cells on a sheet with a formula takes linear '
-      'time', () {
+  test('setting 10,000 cells on a sheet with a formula takes linear time: '
+      'a few cells read per set, not the sheet', () {
     final XlsxWorkbook book = XlsxWorkbook.open(
       buildWorkbook(<String, String>{
         'S': worksheet(
@@ -234,12 +236,22 @@ void main() {
     );
     final XlsxSheet sheet = book.sheets.single;
     sheet.rows.toList();
-    final Stopwatch watch = Stopwatch()..start();
+    final CellStore store =
+        (packageOf(book).contentOf('/xl/worksheets/sheet1.xml')!
+                as WorksheetPart)
+            .cells;
+    final int before = store.cellsBuilt;
     for (int i = 0; i < 10000; i++) {
       sheet.setCell(i ~/ 10 + 1, i % 10 + 1, i);
     }
-    // A scan of every cell per set would visit 2 * 10^8 cells.
-    expect(watch.elapsed, lessThan(const Duration(seconds: 15)));
+    // Counts the cells the store builds instead of timing the loop, so a
+    // busy machine cannot fail it. Finding a cell's formula group looks at
+    // the store's group masters, so a set builds the few cells it touches;
+    // it builds about 40,000. A scan of every cell per set, the regression
+    // this guards, builds the sheet's 20,001 cells each time: 200,049,990.
+    final int built = store.cellsBuilt - before;
+    expect(built, lessThanOrEqualTo(10000 * 10), reason: '$built cells built');
+    expect(sheet.cellAt(1000, 10)?.value, XlsxDecimal('9999'));
   });
 
   test('unsupported value types throw ArgumentError', () {

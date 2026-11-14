@@ -367,6 +367,14 @@ final class CellStore {
   /// The number of cells, styled empty cells included.
   int get cellCount => _cellCount;
 
+  /// The number of [RawCell]s the store has built since it was made, for
+  /// [cellAt], [forEachInRow] and every other read of a cell.
+  ///
+  /// A diagnostic for tests: counting it proves that an edit reads the few
+  /// cells it touches, not every cell of the sheet, without timing it.
+  int get cellsBuilt => _cellsBuilt;
+  int _cellsBuilt = 0;
+
   /// An estimate of the memory the store retains, in bytes, for benchmarks.
   ///
   /// The sum of the typed lists' `lengthInBytes` (spare capacity included:
@@ -930,6 +938,7 @@ final class CellStore {
   // Building and taking apart.
 
   RawCell _build(_Block b, int at, int row, int column) {
+    _cellsBuilt++;
     final int word = b.words[at];
     final int s = b.styles[at];
     final String? value = switch ((word >> _valueShift) & _valueMask) {
