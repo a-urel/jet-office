@@ -59,8 +59,9 @@ enum DocxWarningCode {
   /// name read from a file is kept and never reported.
   bookmarkNameRepaired,
 
-  /// A template tag names a value the data lacks (a value, section or picture
-  /// tag); the tag stays as written and [DocxWarning.detail] is the tag as
+  /// A template tag or merge field names a value the data lacks (a value,
+  /// section or picture tag); it stays as written, or is removed when the
+  /// fill removes missing values, and [DocxWarning.detail] is the tag as
   /// written, such as `{{musteri.unvan}}`.
   templateValueMissing,
 
@@ -75,8 +76,9 @@ enum DocxWarningCode {
   /// written.
   templateSectionMalformed,
 
-  /// A list or map was given for a value tag; the tag stays as written and
-  /// [DocxWarning.detail] is the tag as written.
+  /// A list, a map or a picture (filled from T2) was given for a value tag;
+  /// the tag stays as written and [DocxWarning.detail] is the tag as
+  /// written.
   templateValueNotText,
 
   /// Something that is not a picture was given for a picture placeholder; the
@@ -88,12 +90,14 @@ enum DocxWarningCode {
   /// [DocxWarning.detail] is the tag as written, with its code.
   templateFormatWarning,
 
-  /// A `MERGEFIELD` switch is not honoured and the default format was used;
-  /// [DocxWarning.detail] is the field instruction as written.
+  /// A `MERGEFIELD` switch is not honoured and was not applied; the field is
+  /// filled without it and [DocxWarning.detail] is the field instruction as
+  /// written.
   templateSwitchUnsupported,
 
-  /// A `MERGEFIELD` is kept by the model as loose runs, not as a typed field,
-  /// and stays as it is; [DocxWarning.detail] is the field instruction as
+  /// A `MERGEFIELD` cannot be filled where it stands: the model keeps it as
+  /// loose runs, not as a typed field, or it is nested in another field. It
+  /// stays as it is; [DocxWarning.detail] is the field instruction as
   /// written.
   templateFieldNotTyped,
 

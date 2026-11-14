@@ -139,11 +139,11 @@ String formatDocxWarning(DocxWarning w, OfficeLocale locale) {
           : '$part içindeki $count yer işareti adı Word kurallarına '
                 'uymuyordu ve düzeltildi$named.',
     (DocxWarningCode.templateValueMissing, OfficeLocale.en) =>
-      'The data has no value for $detail in $part$locations; the tag was left as written.',
+      'The data had no value for $detail in $part$locations.',
     (DocxWarningCode.templateValueMissing, OfficeLocale.de) =>
-      'Die Daten enthalten keinen Wert für $detail in $part$locations; das Tag blieb unverändert.',
+      'Die Daten enthielten keinen Wert für $detail in $part$locations.',
     (DocxWarningCode.templateValueMissing, OfficeLocale.tr) =>
-      '$part$locations içindeki $detail için veride değer yok; etiket olduğu gibi bırakıldı.',
+      '$part$locations içindeki $detail için veride değer yoktu.',
     (DocxWarningCode.templateTagMalformed, OfficeLocale.en) =>
       '$detail in $part$locations is not a valid tag; it was left as text.',
     (DocxWarningCode.templateTagMalformed, OfficeLocale.de) =>
@@ -157,11 +157,11 @@ String formatDocxWarning(DocxWarning w, OfficeLocale locale) {
     (DocxWarningCode.templateSectionMalformed, OfficeLocale.tr) =>
       '$part$locations içindeki bir bölüm etiketi olduğu gibi bırakıldı: bölümler henüz doldurulmuyor ($detail).',
     (DocxWarningCode.templateValueNotText, OfficeLocale.en) =>
-      'The value for $detail in $part$locations is a list or a map, not text; the tag was left as written.',
+      'The value for $detail in $part$locations is a list, a map or a picture, not text (pictures are filled later); the tag was left as written.',
     (DocxWarningCode.templateValueNotText, OfficeLocale.de) =>
-      'Der Wert für $detail in $part$locations ist eine Liste oder Zuordnung, kein Text; das Tag blieb unverändert.',
+      'Der Wert für $detail in $part$locations ist eine Liste, eine Zuordnung oder ein Bild, kein Text (Bilder werden später gefüllt); das Tag blieb unverändert.',
     (DocxWarningCode.templateValueNotText, OfficeLocale.tr) =>
-      '$part$locations içindeki $detail için değer metin değil, liste veya harita; etiket olduğu gibi bırakıldı.',
+      '$part$locations içindeki $detail için değer metin değil; bir liste, harita veya resim (resimler daha sonra doldurulacak); etiket olduğu gibi bırakıldı.',
     (DocxWarningCode.templateValueNotPicture, OfficeLocale.en) =>
       'The value for $detail in $part$locations is not a picture; the placeholder picture was kept.',
     (DocxWarningCode.templateValueNotPicture, OfficeLocale.de) =>
@@ -175,17 +175,17 @@ String formatDocxWarning(DocxWarning w, OfficeLocale locale) {
     (DocxWarningCode.templateFormatWarning, OfficeLocale.tr) =>
       '$part$locations içindeki $detail biçim kodu, sayı biçimi motorundan bir uyarı verdi.',
     (DocxWarningCode.templateSwitchUnsupported, OfficeLocale.en) =>
-      'A switch of $detail in $part$locations is not supported; the default format was used.',
+      'A switch of $detail in $part$locations is not supported and was not applied.',
     (DocxWarningCode.templateSwitchUnsupported, OfficeLocale.de) =>
-      'Ein Schalter von $detail in $part$locations wird nicht unterstützt; das Standardformat wurde verwendet.',
+      'Ein Schalter von $detail in $part$locations wird nicht unterstützt und wurde nicht angewendet.',
     (DocxWarningCode.templateSwitchUnsupported, OfficeLocale.tr) =>
-      '$part$locations içindeki $detail alanının bir anahtarı desteklenmiyor; varsayılan biçim kullanıldı.',
+      '$part$locations içindeki $detail alanının bir anahtarı desteklenmiyor ve uygulanmadı.',
     (DocxWarningCode.templateFieldNotTyped, OfficeLocale.en) =>
-      'The merge field $detail in $part$locations is kept as loose runs, not as a field, and was left as it is.',
+      'The merge field $detail in $part$locations could not be filled where it stands (it is not kept as a field, or it is inside another field) and was left as it is.',
     (DocxWarningCode.templateFieldNotTyped, OfficeLocale.de) =>
-      'Das Seriendruckfeld $detail in $part$locations liegt als lose Abschnitte vor, nicht als Feld, und blieb unverändert.',
+      'Das Seriendruckfeld $detail in $part$locations kann an seiner Stelle nicht gefüllt werden (es liegt nicht als Feld vor oder steht in einem anderen Feld) und blieb unverändert.',
     (DocxWarningCode.templateFieldNotTyped, OfficeLocale.tr) =>
-      '$part$locations içindeki $detail birleştirme alanı alan olarak değil, ayrı parçalar olarak tutuluyor ve olduğu gibi bırakıldı.',
+      '$part$locations içindeki $detail birleştirme alanı bulunduğu yerde doldurulamadı (alan olarak tutulmuyor ya da başka bir alanın içinde) ve olduğu gibi bırakıldı.',
     (DocxWarningCode.templatePlaceholderInRevision, OfficeLocale.en) =>
       '$detail in $part$locations lies inside a tracked change; it was left as written.',
     (DocxWarningCode.templatePlaceholderInRevision, OfficeLocale.de) =>

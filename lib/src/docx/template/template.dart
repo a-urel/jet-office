@@ -38,18 +38,19 @@ import 'tag_scanner.dart';
 /// );
 /// ```
 final class DocxTemplate {
-  /// Opens [bytes] once to check them and keeps a copy.
+  /// Opens [bytes] once to check them, lists their tags and keeps a copy.
   ///
-  /// Throws a [DocxReadException] as [DocxDocument.open] does, and an
-  /// [ArgumentError] when a limit is below 1.
+  /// Throws a [DocxReadException] as [DocxDocument.open] does, or when the
+  /// body, a header or a footer part cannot be read, and an [ArgumentError]
+  /// when a limit is below 1.
   DocxTemplate(
     Uint8List bytes, {
     DocxReadLimits limits = const DocxReadLimits(),
   }) : _bytes = Uint8List.fromList(bytes),
        _limits = limits {
-    _tags = listTemplateTags(
-      DocxDocument.open(_bytes, limits: limits),
-    ).map(_tagOf).toList(growable: false);
+    _tags = List<DocxTemplateTag>.unmodifiable(
+      listTemplateTags(DocxDocument.open(_bytes, limits: limits)).map(_tagOf),
+    );
   }
 
   final Uint8List _bytes;
@@ -64,7 +65,9 @@ final class DocxTemplate {
   ///
   /// The result's warnings are the fill's, then the save's. Throws an
   /// [ArgumentError] when [data] holds a value that is not a supported kind;
-  /// nothing is filled then.
+  /// nothing is filled then. Throws a [DocxReadException] when a part of the
+  /// copy cannot be read, as [DocxDocument.open] and [DocxDocument.save] do;
+  /// the template read its body, headers and footers when it was made.
   DocxResult fill(
     Map<String, Object?> data, {
     DocxTemplateOptions options = const DocxTemplateOptions(),
@@ -86,7 +89,8 @@ final class DocxTemplate {
   /// warnings.
   ///
   /// Throws an [ArgumentError] for a value that is not a supported kind, and
-  /// then leaves [document] unchanged.
+  /// a [DocxReadException] when the body, a header or a footer part of
+  /// [document] cannot be read; either way [document] is left unchanged.
   static List<DocxWarning> fillDocument(
     DocxDocument document,
     Map<String, Object?> data, {
@@ -97,9 +101,15 @@ final class DocxTemplate {
     FillSettings(locale: options.locale, removeMissing: options.removeMissing),
   );
 
-  /// The tags of [document] in reading order, without changing it.
+  /// The tags of [document] in reading order, without changing it. The list
+  /// cannot be modified.
+  ///
+  /// Throws a [DocxReadException] when a header or footer part of
+  /// [document] cannot be read.
   static List<DocxTemplateTag> tagsOf(DocxDocument document) =>
-      listTemplateTags(document).map(_tagOf).toList(growable: false);
+      List<DocxTemplateTag>.unmodifiable(
+        listTemplateTags(document).map(_tagOf),
+      );
 
   static DocxTemplateTag _tagOf(FoundTag t) {
     final DocxTemplateTagKind kind;

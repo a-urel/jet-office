@@ -212,6 +212,31 @@ void main() {
     expect(() => DocxTemplate(Uint8List(0)), throwsA(isA<DocxReadException>()));
   });
 
+  test('a header that cannot be read throws and changes nothing', () {
+    final Uint8List bytes = templateWithHeader(
+      headerInline: '<w:r><w:t>{{a}}</w:r>',
+      bodyInline: _run('{{a}}'),
+    );
+    final DocxDocument document = DocxDocument.open(bytes);
+    expect(
+      () => DocxTemplate.fillDocument(document, <String, Object?>{'a': 'A'}),
+      throwsA(isA<DocxReadException>()),
+    );
+    final DocxParagraph p = document.body.blocks.first as DocxParagraph;
+    expect(p.text, '{{a}}');
+    expect(() => DocxTemplate(bytes), throwsA(isA<DocxReadException>()));
+  });
+
+  test('tags cannot be modified', () {
+    final DocxTemplate template = DocxTemplate(_template());
+    final DocxTemplateTag first = template.tags.first;
+    expect(() => template.tags[0] = first, throwsUnsupportedError);
+    final List<DocxTemplateTag> held = DocxTemplate.tagsOf(
+      DocxDocument.open(_template()),
+    );
+    expect(() => held[0] = held[1], throwsUnsupportedError);
+  });
+
   test('fillDocument fills in place and the document still edits', () {
     final DocxDocument document = DocxDocument.open(_template());
     final List<DocxWarning> warnings = DocxTemplate.fillDocument(
