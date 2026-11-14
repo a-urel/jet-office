@@ -1,8 +1,10 @@
+import 'dart:collection';
+
 import 'package:jet_office/jet_office.dart';
 import 'package:jet_office/src/xlsx/cell_ref.dart';
+import 'package:jet_office/src/xlsx/read/sheet_reader.dart' show RowCells;
 import 'package:test/test.dart';
 
-import '../../support/timing.dart';
 import 'support/workbook_builder.dart';
 
 /// A reader over one sheet `S` holding [rows].
@@ -297,17 +299,12 @@ void main() {
     expect(_warnings(r), <String>['cellDuplicated B1']);
   });
 
-  test('sorts a full row written right to left without quadratic cost', () {
-    // Inserting each cell in place costs O(n²) on such a row: 16,384 cells
-    // in 8 rows took seconds. Appending and sorting once takes milliseconds.
-    // The bound is a ratio to the same sheet written left to right, timed
-    // again when a busy machine slows one side (expectScales).
-    String sheet({required bool reversed}) {
+  test('sorts a full row written right to left', () {
+    String sheet() {
       final StringBuffer rows = StringBuffer();
       for (int r = 1; r <= 8; r++) {
         rows.write('<row r="$r">');
-        for (int i = 0; i < 16384; i++) {
-          final int c = reversed ? 16383 - i : i;
+        for (int c = 16383; c >= 0; c--) {
           rows.write('<c r="${cellRef(r - 1, c)}"><v>$c</v></c>');
         }
         rows.write('</row>');
@@ -315,17 +312,9 @@ void main() {
       return rows.toString();
     }
 
-    List<XlsxReadRow> readAll(String xml) {
-      final XlsxReader r = _reader(xml);
-      final List<XlsxReadRow> read = r.rows('S').toList();
-      expect(r.warnings, isEmpty);
-      return read;
-    }
-
-    final String forward = sheet(reversed: false);
-    final String backward = sheet(reversed: true);
-    late List<XlsxReadRow> read;
-    expectScales(() => read = readAll(backward), () => readAll(forward));
+    final XlsxReader r = _reader(sheet());
+    final List<XlsxReadRow> read = r.rows('S').toList();
+    expect(r.warnings, isEmpty);
     expect(read, hasLength(8));
     for (final XlsxReadRow row in read) {
       expect(row.cells, hasLength(16384));
@@ -334,6 +323,43 @@ void main() {
       }
       expect(row.cells.last.value, XlsxDecimal('16383'));
     }
+  });
+
+  test('a row written right to left is sorted without quadratic cost', () {
+    // Inserting each cell in place costs O(n²) on such a row: 16,384 cells
+    // in 8 rows took seconds. Appending and sorting once writes each list
+    // element a few times. Counted, not timed, so a busy machine cannot fail
+    // it: the bound of 4 times a baseline plus 250 ms that this test had was
+    // the kind that failed under load in formula_groups_test.dart. The
+    // lists count every element write; an insert in place shifts on average
+    // half of the row, about 134 million writes per list for 16,384 cells.
+    const int n = XlsxLimits.maxColumns;
+    final _CountingList<int> columns = _CountingList<int>();
+    final _CountingList<String> cells = _CountingList<String>();
+    final RowCells<String> row = RowCells<String>(
+      columns: columns,
+      cells: cells,
+    );
+    for (int c = n - 1; c >= 0; c--) {
+      expect(row.place(c, 'cell $c'), isTrue);
+    }
+    // A duplicate among out-of-order cells replaces the cell, last wins.
+    expect(row.place(7, 'last 7'), isFalse);
+    row.sort();
+    expect(columns, List<int>.generate(n, (int c) => c));
+    expect(cells, <String>[
+      for (int c = 0; c < n; c++) c == 7 ? 'last 7' : 'cell $c',
+    ]);
+    expect(
+      columns.writes,
+      lessThanOrEqualTo(4 * n),
+      reason: '${columns.writes} column writes for $n cells',
+    );
+    expect(
+      cells.writes,
+      lessThanOrEqualTo(4 * n),
+      reason: '${cells.writes} cell writes for $n cells',
+    );
   });
 
   test('a duplicate among out-of-order cells keeps the last and warns', () {
@@ -805,4 +831,39 @@ void main() {
       'XlsxReadSheet(0, S, visible)',
     );
   });
+}
+
+/// A growable list that counts the writes of its elements: each element
+/// added, set or moved (an insert moves the elements after it).
+final class _CountingList<E> extends ListBase<E> {
+  final List<E> _elements = <E>[];
+
+  /// The elements written so far.
+  int writes = 0;
+
+  @override
+  int get length => _elements.length;
+
+  @override
+  set length(int value) {
+    if (value > _elements.length) {
+      throw UnsupportedError('Grows only by add.');
+    }
+    _elements.length = value;
+  }
+
+  @override
+  E operator [](int index) => _elements[index];
+
+  @override
+  void operator []=(int index, E value) {
+    writes++;
+    _elements[index] = value;
+  }
+
+  @override
+  void add(E element) {
+    writes++;
+    _elements.add(element);
+  }
 }

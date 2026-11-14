@@ -344,9 +344,22 @@ final class _CellScratch {
 /// does not starts a column-to-position map, so a duplicate is still found
 /// in constant time, and the row is sorted once when it ends: a row written
 /// right to left costs O(n log n), not O(n²).
-final class _RowCells<C> {
-  final List<int> columns = <int>[];
-  final List<C> cells = <C>[];
+///
+/// Not part of the public API; public in this library so a test can pass
+/// [columns] and [cells] lists that count their writes, to prove a row is
+/// not sorted by inserting in place without timing it.
+final class RowCells<C> {
+  /// Starts an empty row, filling [columns] and [cells] (new growable
+  /// lists when `null`; given ones must be empty).
+  RowCells({List<int>? columns, List<C>? cells})
+    : columns = columns ?? <int>[],
+      cells = cells ?? <C>[];
+
+  /// The columns of [cells], in column order once [sort] has run.
+  final List<int> columns;
+
+  /// The cells, in column order once [sort] has run.
+  final List<C> cells;
 
   /// Column to position in [cells], built at the first cell out of order.
   Map<int, int>? _positions;
@@ -509,7 +522,7 @@ final class _RowWalk<C, R> {
     bool pendingInvalid = position.invalid;
     _onRow?.call(index);
 
-    final _RowCells<C> cells = _RowCells<C>();
+    final RowCells<C> cells = RowCells<C>();
     List<OpaqueXml> rowChildren = const <OpaqueXml>[];
     if (!_reader.isEmptyElement) {
       final _CellScratch c = _scratch;
