@@ -508,31 +508,41 @@ void main() {
     });
   });
   group('final review fixes', () {
-    test('a fixed unit of 1e-300 over data to 1e300 returns quickly', () {
-      final Stopwatch watch = Stopwatch()..start();
-      final ValueScale s = autoValueScale(
-        dataMin: 0,
-        dataMax: 1e300,
-        maxIntervals: 10,
-        fixedMajorUnit: 1e-300,
-      );
-      expect(watch.elapsedMilliseconds, lessThan(2000));
-      expect(s.ticks.length, lessThanOrEqualTo(1001));
-      expect(s.majorUnit.isFinite, isTrue);
-      expect((s.max - s.min) / s.majorUnit, lessThanOrEqualTo(1000 + 1e-6));
-      expect(s.max, greaterThanOrEqualTo(1e300));
-    });
+    // The two tests below guard a fixed unit far finer than the data: it
+    // used to stop at an overflowing or imprecise power of ten and ask for
+    // billions of ticks. They check the unit and the interval count the
+    // scale ends with, not the time it takes: the scale returns in well
+    // under 10 ms, a unit that is not raised far enough leaves far more
+    // than 1,000 intervals however fast it is found, and a scale that asked
+    // for billions of ticks would run out of memory before any time bound
+    // was read.
+    test(
+      'a fixed unit of 1e-300 over data to 1e300 is raised until it fits',
+      () {
+        final ValueScale s = autoValueScale(
+          dataMin: 0,
+          dataMax: 1e300,
+          maxIntervals: 10,
+          fixedMajorUnit: 1e-300,
+        );
+        expect(s.majorUnit, closeTo(1e298, 1e283));
+        expect(s.ticks.length, lessThanOrEqualTo(1001));
+        expect((s.max - s.min) / s.majorUnit, lessThanOrEqualTo(1000 + 1e-6));
+        expect(s.max, greaterThanOrEqualTo(1e300));
+      },
+    );
 
-    test('a fixed unit of 5e-324 over data 0 to 1 returns quickly', () {
-      final Stopwatch watch = Stopwatch()..start();
+    test('a fixed unit of 5e-324 over data 0 to 1 is raised until it fits', () {
       final ValueScale s = autoValueScale(
         dataMin: 0,
         dataMax: 1,
         maxIntervals: 10,
         fixedMajorUnit: 5e-324,
       );
-      expect(watch.elapsedMilliseconds, lessThan(2000));
+      // 5e-324 is the smallest double, 4.94065645841247e-324, times 10^321.
+      expect(s.majorUnit, closeTo(0.00494065645841247, 1e-17));
       expect(s.ticks.length, lessThanOrEqualTo(1001));
+      expect((s.max - s.min) / s.majorUnit, lessThanOrEqualTo(1000 + 1e-6));
       expect(s.min, 0);
       expect(s.max, greaterThanOrEqualTo(1));
     });

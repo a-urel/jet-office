@@ -218,11 +218,10 @@ DataLabelPlacement placeDataLabels({
           _ => theme.dataLabels,
         };
         final TextPrimitive label = TextPrimitive(t.$1, t.$2, candidate, style);
-        if (marks.any(
-          label.bounds,
-          (LaidMark m) =>
-              !isOwnMark(t.$1, m.mark.id) && textOverlapsMark(label, m),
-        )) {
+        if (marks.any(label.bounds, (LaidMark m) {
+          layoutCheckCounter?.checks++;
+          return !isOwnMark(t.$1, m.mark.id) && textOverlapsMark(label, m);
+        })) {
           continue;
         }
         final TextPrimitive probe = TextPrimitive(
@@ -236,10 +235,10 @@ DataLabelPlacement placeDataLabels({
           ),
           theme.dataLabels,
         );
-        if (taken.any(
-          probe.bounds,
-          (TextPrimitive o) => textsOverlap(probe, o),
-        )) {
+        if (taken.any(probe.bounds, (TextPrimitive o) {
+          layoutCheckCounter?.checks++;
+          return textsOverlap(probe, o);
+        })) {
           continue;
         }
         chosen = label;

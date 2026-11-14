@@ -265,8 +265,12 @@ by hand, then fix it.
   cells of a 32 pt grid its box covers (`BoxGrid`), and within a mark only
   against the shapes whose boxes can reach it (a line's segments, sorted by
   box and found by binary search); a 10,000-point line with data labels lays
-  out in about 255 ms on the VM, and `data_labels_test.dart` (VM only) fails
-  it above 1.5 s.
+  out in about 255 ms on the VM. `data_labels_test.dart` counts those checks
+  rather than timing them (`layoutCheckCounter` in `overlap.dart`, a test
+  hook): about 420 per label on a dense 10,000-point line, where scanning
+  every segment makes about 16,500, and about 3 per label on a large scatter
+  chart of 10,000 placed labels, where scanning every marker or every placed
+  label makes 5,000 to 10,000; it fails above 2,000 and 20 per label.
 - Known deferred defects: the value-position functions disagree beyond 2x the
   span (`valuePosition` clamps to [0, 1], marks to [-1, 2]); the stacked line
   or area extent with mixed signs is wider than needed; a side legend is

@@ -183,6 +183,22 @@ bool textsOverlap(TextPrimitive a, TextPrimitive b) =>
 
 bool _hasArea(ChartRect r) => r.width > 0 && r.height > 0;
 
+/// Counts the checks of text against marks, a mark's shapes and other text
+/// that placing data labels makes, while it is [layoutCheckCounter].
+///
+/// A test hook: a test that proves placement stays near linear in the number
+/// of labels counts these checks instead of timing the layout.
+final class LayoutCheckCounter {
+  /// The checks counted so far.
+  int checks = 0;
+}
+
+/// The counter that placing data labels and [textOverlapsMark] report each
+/// check to, or `null` (the default) for none.
+///
+/// Tests set it around a layout and set it back to `null` after.
+LayoutCheckCounter? layoutCheckCounter;
+
 /// Items filed by the cells of a square grid their boxes cover, so that a
 /// query looks only at the items near its box: placing data labels and
 /// checking text against marks stay near linear in the number of labels.
@@ -333,6 +349,7 @@ final class LaidMark {
       }
     }
     for (int i = lo; i < _boxes.length && _boxes[i].left < bounds.right; i++) {
+      layoutCheckCounter?.checks++;
       if (_boxesMeet(bounds, _boxes[i])) {
         yield i;
       }
@@ -415,6 +432,7 @@ bool textOverlapsMark(TextPrimitive text, LaidMark mark) {
   }
   final ChartPoint centre = _centroid(region);
   for (final int index in mark._near(bounds)) {
+    layoutCheckCounter?.checks++;
     final List<ChartPoint> shape = mark.shapes[index];
     for (int i = 0; i < shape.length; i++) {
       if (_crosses(shape[i], shape[(i + 1) % shape.length], planes)) {

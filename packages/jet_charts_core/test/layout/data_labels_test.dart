@@ -2,6 +2,8 @@ import 'dart:math' as math;
 
 import 'package:jet_charts_core/jet_charts_core.dart';
 import 'package:jet_charts_core/src/layout/chart_ids.dart' as ids;
+import 'package:jet_charts_core/src/layout/overlap.dart'
+    show LayoutCheckCounter, layoutCheckCounter;
 import 'package:test/test.dart';
 
 import '../support/gallery.dart';
@@ -494,46 +496,94 @@ void main() {
     });
   });
 
-  test('a line of 10,000 points with data labels lays out in reasonable '
-      'time', () {
-    // A guard against checking every label against every mark, segment or
-    // placed label, not a benchmark. On the VM it takes about 255 ms (it took
-    // about 2.85 s when every label went through every marker, about 8 s when
-    // also through every segment); 1.5 s keeps a margin of about 6. VM only:
-    // Chrome is slower and the guard is about the algorithm, not a platform.
-    final List<double?> values = <double?>[
-      for (int i = 0; i < 10000; i++) 50 + 40 * math.sin(i / 50),
-    ];
-    final Stopwatch watch = Stopwatch()..start();
-    final ChartLayout l = layoutChart(
-      Chart(
-        kind: ChartKind.line,
-        dataLabels: const ChartDataLabels(visible: true),
-        legend: const ChartLegend(visible: false),
-        valueAxis: fixed,
-        series: <ChartSeries>[
-          ChartSeries(
-            name: ChartData<String>(values: <String?>['S0']),
-            categories: ChartData<Object>(
-              values: <Object>[for (int i = 0; i < 10000; i++) i],
+  group('placing 10,000 data labels checks each place against what lies '
+      'near it', () {
+    // These tests count the checks of a label's place against a mark, a
+    // mark's shape or a text (`layoutCheckCounter`) instead of timing the
+    // layout, so a busy machine cannot fail them. They used to time the line
+    // chart against 1.5 s, about 6 times its idle run of about 240 ms on the
+    // VM, while the regressions they guard ran only about 12 to 33 times as
+    // long (2.85 s checking every label against every marker, 8 s against
+    // every segment too). The count is the same on every platform, so they
+    // run in Chrome as well.
+
+    /// Lays out a chart of [kind] with data labels on, of one series of
+    /// 10,000 points at x (or category) `i` and [value] `(i)`, and returns
+    /// the layout and the checks its data labels made.
+    (ChartLayout, int) counted(
+      ChartKind kind,
+      double Function(int) value, {
+      ChartSize size = const ChartSize(800, 400),
+    }) {
+      final LayoutCheckCounter counter = LayoutCheckCounter();
+      layoutCheckCounter = counter;
+      addTearDown(() => layoutCheckCounter = null);
+      final ChartLayout l = layoutChart(
+        Chart(
+          kind: kind,
+          dataLabels: const ChartDataLabels(visible: true),
+          legend: const ChartLegend(visible: false),
+          valueAxis: fixed,
+          series: <ChartSeries>[
+            ChartSeries(
+              name: ChartData<String>(values: <String?>['S0']),
+              categories: ChartData<Object>(
+                values: <Object>[for (int i = 0; i < 10000; i++) i],
+              ),
+              values: ChartData<double>(
+                values: <double?>[for (int i = 0; i < 10000; i++) value(i)],
+              ),
             ),
-            values: ChartData<double>(values: values),
-          ),
-        ],
-      ),
-      theme: theme,
-      size: const ChartSize(800, 400),
-      measurer: measurer,
-    );
-    watch.stop();
-    expect(watch.elapsed, lessThan(const Duration(milliseconds: 1500)));
-    expect(
-      flat(
-        l.primitives,
-      ).where((ChartPrimitive p) => p.id.startsWith(ids.dataLabelPrefix)),
-      isNotEmpty,
-    );
-  }, testOn: 'vm');
+          ],
+        ),
+        theme: theme,
+        size: size,
+        measurer: measurer,
+      );
+      layoutCheckCounter = null;
+      return (l, counter.checks);
+    }
+
+    int labels(ChartLayout l) => flat(
+      l.primitives,
+    ).where((ChartPrimitive p) => p.id.startsWith(ids.dataLabelPrefix)).length;
+
+    test('a line: its segments by binary search', () {
+      // One mark, the line, of 9,999 segments, about 12 per point across the
+      // plot; markers do not fit. The search makes about 420 checks per
+      // label (4,202,812 in all); a scan of every segment makes about 16,500
+      // (165,165,654), and so does a search that ends late.
+      final (ChartLayout l, int checks) = counted(
+        ChartKind.line,
+        (int i) => 50 + 40 * math.sin(i / 50),
+      );
+      expect(labels(l), greaterThan(0));
+      expect(
+        checks,
+        lessThanOrEqualTo(10000 * 2000),
+        reason: '$checks checks for 10,000 labels',
+      );
+    });
+
+    test('a scatter chart: its markers and placed labels by grid', () {
+      // 10,000 markers spread over a large plot, one mark each, and almost
+      // every label placed (9,999), so a scan of every marker or of every
+      // placed label shows. The grids make about 3 checks per label (26,792
+      // in all); checking every place against every marker makes 99,997,183
+      // (and took about 40 s), against every placed label 50,004,610.
+      final (ChartLayout l, int checks) = counted(
+        ChartKind.scatter,
+        (int i) => (i * 7919 % 101).toDouble(),
+        size: const ChartSize(4000, 4000),
+      );
+      expect(labels(l), greaterThan(9000));
+      expect(
+        checks,
+        lessThanOrEqualTo(10000 * 20),
+        reason: '$checks checks for 10,000 labels',
+      );
+    });
+  });
 
   test('labels that cannot fit are hidden and listed', () {
     final ChartLayout l = lay(
