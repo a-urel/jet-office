@@ -306,10 +306,13 @@ The file is untrusted (decision 0007). Three tests hold that:
   with 500 cases each (100 until C1's `c1_kinds` joined the corpus);
   `tool/fuzz_reader.dart` runs any range by hand (AGENTS.md, "Fuzzing"). A
   defect that needs more than 2,000 cases is found only by hand runs.
-- **Timing bounds** of the row-sort and formula-group scale tests are
-  relative to a baseline measured in the same run (`test/support/timing.dart`),
-  so a slow machine does not fail them. `hostile_files_test.dart` (1 s and
-  2 s) and `cell_decoder_test.dart:133` keep absolute bounds.
+- **Scale tests** of the row sort and the formula groups count work instead
+  of timing it, so a busy machine cannot fail them: the row sort counts the
+  writes of its cell lists (`RowCells`, `sheet_reader_test.dart`), the
+  formula groups the comparisons of their range tree
+  (`formula_groups_test.dart`). Their relative timing bounds failed under
+  load. `hostile_files_test.dart` (1 s and 2 s) and
+  `cell_decoder_test.dart:133` keep absolute bounds.
 
 The spec's "a 1 KB file that claims 1 GB" is a declared size, refused before
 anything is inflated. "Inflates to 1 GB" cannot fit in 1 KB: deflate's ratio
