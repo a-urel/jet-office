@@ -24,8 +24,9 @@
 /// * no `MERGEFIELD` is left whose name the data has;
 /// * `comparePackages` (`tool/src/part_compare.dart`) finds differences only
 ///   in the main part and in the header and footer parts that held a tag
-///   whose name the data has: never in `[Content_Types].xml`, nor in any
-///   other part;
+///   the fill fills (a fillable one whose name the data has; a tag it
+///   cannot fill, such as one in a tracked insertion, allows nothing): never
+///   in `[Content_Types].xml`, nor in any other part;
 /// * and `fill({})`, data that names nothing, gives the input back:
 ///   `comparePackages` finds no difference at all.
 ///
@@ -228,8 +229,8 @@ List<String> _tagProblems(
 }
 
 /// The problems of the parts: `comparePackages` of [input] and [saved] may
-/// find differences only in [mainPart] and in the parts of [tags] whose name
-/// the data has.
+/// find differences only in [mainPart] and in the parts of [tags] the fill
+/// fills: fillable ones whose name the data has.
 List<String> _partProblems(
   Uint8List input,
   Uint8List saved,
@@ -241,7 +242,7 @@ List<String> _partProblems(
   final Set<String> allowed = <String>{
     entry(mainPart),
     for (final DocxTemplateTag t in tags)
-      if (_named(t, data)) entry(t.part),
+      if (_fillable(t) && _named(t, data)) entry(t.part),
   };
   return <String>[
     for (final String d in comparePackages(input, saved))

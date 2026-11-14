@@ -20,7 +20,7 @@
 /// case is written to stderr as `seed <s> case <i> (<mutation>)` before it
 /// runs, so the last line names the case that never came back.
 ///
-/// The quality gate runs seeds 1 to 4 with 900 cases each
+/// The quality gate runs seeds 1 to 4 with 1400 cases each
 /// (`test/docx/fuzz_test.dart`).
 ///
 /// With `--template` it fuzzes `DocxTemplate` instead (decision 0024, T1): the

@@ -4,7 +4,8 @@
 /// pictures, hyperlinks, bookmarks and document properties (D5) and with
 /// lists written by `DocxListExport` (D6); and the template fill's of T1
 /// (decision 0024): a template filled by `DocxTemplate` (`t1_values`,
-/// `t1_merge_fields`) and that template unfilled (`t1_template`).
+/// `t1_merge_fields`) and those templates unfilled (`t1_template`,
+/// `t1_merge_fields_template`).
 ///
 /// New in jet_office. Every D fixture starts from `DocxDocument()`, the blank
 /// document, so what LibreOffice and the Open XML SDK see is what the model
@@ -186,6 +187,12 @@ List<DocxFixture> docxFixtures() => <DocxFixture>[
     't1_merge_fields',
     _t1MergeFieldsText.join('\n'),
     () => _filled(t1MergeFieldsTemplate()),
+    headerFooterText: '1 header: Teklif\n1 footer: Sayfa altı',
+  ),
+  DocxFixture(
+    't1_merge_fields_template',
+    _t1MergeFieldsTemplateText.join('\n'),
+    () => DocxDocument.open(t1MergeFieldsTemplate()).save(),
     headerFooterText: '1 header: Teklif\n1 footer: Sayfa altı',
   ),
   DocxFixture(
@@ -1244,5 +1251,16 @@ const List<String> _t1MergeFieldsText = <String>[
   'Tarih: 14.11.2026',
   'Eski alan: Ayşe',
   'Değerli Ayşe, teklifimiz ektedir.',
+  'Saygılarımızla.',
+];
+
+/// The text of `t1_merge_fields_template`: each field's cached result, as
+/// Word writes it (`«Ad»`).
+const List<String> _t1MergeFieldsTemplateText = <String>[
+  '«Ad»',
+  'Müşteri: «Müşteri Adı»',
+  'Tarih: «Tarih»',
+  'Eski alan: «Ad»',
+  'Değerli «Ad», teklifimiz ektedir.',
   'Saygılarımızla.',
 ];

@@ -194,10 +194,11 @@ dotnet run --project tool/ooxml_validate -- build/excel_gallery
   visible, filled by `DocxTemplate.fill` with `fillDocxData()` in Turkish;
   `t1_merge_fields`, complex `MERGEFIELD`s with `\b`, `\f`, `\*` and `\@`, a
   `w:fldSimple` and a field inside a sentence, filled the same way;
-  `t1_template`, the template of `t1_values` unfilled, so LibreOffice and the
-  SDK see the tags as written). A fixture with a
+  `t1_template` and `t1_merge_fields_template`, those two templates unfilled,
+  so LibreOffice and the SDK see the tags and fields as written, and
+  `tool/fill_docx.dart` fills both kinds in CI). A fixture with a
   `DocxFixture.headerFooterText` (`d4_headers`, `d4_fields`, `d5_pictures`,
-  `d5_links`, `d6_list`, `d6_list_landscape`, the three `t1_*`) also gets
+  `d5_links`, `d6_list`, `d6_list_landscape`, the four `t1_*`) also gets
   `<name>.stories.txt`,
   what its headers and footers show. No fixture ends in a table, because
   LibreOffice's text export of one never ends (see below), or in a section
@@ -479,7 +480,8 @@ dotnet run --project tool/ooxml_validate -- build/excel_gallery
   lacks must still be there and warned `templateValueMissing`; no
   `MERGEFIELD` the data names may be left; `comparePackages` must find
   differences only in the main part and in the header and footer parts that
-  held a tag the data names, never in `[Content_Types].xml`; and `fill({})`
+  held a tag the fill fills (fillable, named by the data), never in
+  `[Content_Types].xml`; and `fill({})`
   must give the input back, with no difference at all. It prints each problem
   as `<file>: <problem>` and exits 1 on any (a file that cannot be read is
   one), 2 on unusable arguments. CI runs it on the fixtures and on the owner's
@@ -669,7 +671,7 @@ cases proves the VM and Chrome get the same strings and tokens, and a formula
 past the length limit must lex in bounded time. Pin a failure as a unit test
 in `test/xlsx/formula/formula_lexer_test.dart` first.
 
-`test/docx/fuzz_test.dart` does the same for `DocxDocument` (seeds 1 to 4, 900
+`test/docx/fuzz_test.dart` does the same for `DocxDocument` (seeds 1 to 4, 1400
 cases each, over the fixtures (the `d3_*`, `d4_*`, `d5_*`, `d6_*` and `t1_*`
 ones among them), a hand-made table with every element of the table values, a hand-made
 `sections_by_hand` (every section child, six stories, broken references and
@@ -707,13 +709,14 @@ dart run tool/fuzz_docx.dart --seeds 1-200 --cases 1000
 It prints each failure as `seed <s> case <i> (<mutation>): <error>` and exits
 1 on any. Pin a failure as a unit test in the owning `*_test.dart` first.
 
-The gate runs 900 cases per seed, not 150, for one reason: the seeds are fixed,
+The gate runs 1400 cases per seed, not 150, for one reason: the seeds are fixed,
 so the cases must between them mutate every part name of the corpus
 (`every part name is mutated in some corpus entry`), and the D3 fixtures,
 `tables_by_hand`, the D4 fixtures, with their header and footer parts,
 `sections_by_hand` and the D5 fixtures joined the corpus and made fewer too few
 (with the D5 fixtures, 600 left `word/footer4.xml` of `d4_headers` unmutated;
-with the D6 ones, 750 left `word/_rels/footer1.xml.rels` unmutated).
+with the D6 ones, 750 left `word/_rels/footer1.xml.rels` unmutated; with the
+four T1 fixtures, 1350 left `word/footer4.xml` of `d4_headers` unmutated).
 When a new part name or corpus entry joins the corpus, run that test and raise
 the count again if it fails.
 

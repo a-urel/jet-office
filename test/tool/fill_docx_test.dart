@@ -13,6 +13,7 @@ import 'package:test/test.dart';
 import '../../tool/fill_docx.dart';
 import '../../tool/src/text_compare.dart' show docxFullText, docxStoriesText;
 import '../docx/support/docx_builder.dart' show rewriteDocxPart;
+import '../docx/support/template_documents.dart';
 import '../fixtures/docx_fixtures.dart';
 
 void main() {
@@ -94,8 +95,49 @@ void main() {
   });
 
   test('fills the merge fields: exit 0', () {
-    put('t1_merge_fields_template.docx', fixture('t1_merge_fields'));
+    put('t1_merge_fields_template.docx', t1MergeFieldsTemplate());
+    final StringBuffer out = StringBuffer();
+    expect(run(out: out), 0, reason: '$out');
+    final DocxDocument filled = DocxDocument.open(
+      File('${output.path}/t1_merge_fields_template.docx').readAsBytesSync(),
+    );
+    final DocxFixture merge = docxFixtures().singleWhere(
+      (DocxFixture f) => f.name == 't1_merge_fields',
+    );
+    expect(docxFullText(filled), merge.expectedText);
+    expect(DocxTemplate.tagsOf(filled), isEmpty);
+  });
+
+  test('reports a header changed where only an unfillable tag is', () {
+    // `{{musteri.ad}}` in a tracked insertion is listed with a problem and
+    // left as written, so its header may not change.
+    put(
+      'insertion.docx',
+      templateWithHeader(
+        headerInline: tagInInsertion('{{musteri.ad}}'),
+        bodyInline: templateRun('{{firma.unvan}}'),
+      ),
+    );
     expect(run(), 0);
+    final StringBuffer out = StringBuffer();
+    expect(
+      run(
+        out: out,
+        corruptForTest: (String name, Uint8List saved) => rewriteDocxPart(
+          saved,
+          'word/header1.xml',
+          (String xml) => xml.replaceFirst('</w:hdr>', '<w:p/></w:hdr>'),
+        ),
+      ),
+      1,
+    );
+    expect(
+      out.toString(),
+      contains(
+        'insertion.docx: a part outside the allowed set: '
+        'word/header1.xml',
+      ),
+    );
   });
 
   test('bad arguments: exit 2', () {
