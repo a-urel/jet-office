@@ -262,6 +262,7 @@
 /// @docImport 'src/docx/model/table_properties.dart';
 /// @docImport 'src/docx/read_exception.dart';
 /// @docImport 'src/docx/read_limits.dart';
+/// @docImport 'src/docx/template/template.dart';
 /// @docImport 'src/docx/warnings.dart';
 /// @docImport 'src/xlsx/cell_formatting.dart';
 /// @docImport 'src/xlsx/chart.dart';
@@ -443,6 +444,12 @@ export 'src/docx/model/table_properties.dart'
         maxTableColumns;
 export 'src/docx/read_exception.dart' show DocxReadException, DocxReadFailure;
 export 'src/docx/read_limits.dart' show DocxReadLimits;
+export 'src/docx/template/template.dart'
+    show
+        DocxTemplate,
+        DocxTemplateOptions,
+        DocxTemplateTag,
+        DocxTemplateTagKind;
 export 'src/docx/warnings.dart' show DocxWarning, DocxWarningCode;
 export 'src/xlsx/alignment.dart'
     show

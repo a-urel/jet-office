@@ -254,4 +254,12 @@ void main() {
     expect(export.headerShading, 'D9D9D9');
     expect(export.footerBefore, 'Page ');
   });
+
+  test('the template fill is exported', () {
+    const DocxTemplateOptions options = DocxTemplateOptions();
+    expect(options.removeMissing, isFalse);
+    expect(DocxTemplateTagKind.values, hasLength(7));
+    expect(DocxTemplate, isNotNull);
+    expect(DocxTemplateTag, isNotNull);
+  });
 }
