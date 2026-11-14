@@ -281,8 +281,29 @@ void main() {
     /// the column order [columnsInOrder], then checks every covered lookup
     /// and that nothing is covered past the ranges. Returns the number of
     /// wrong answers.
-    int manyRanges(Iterable<int> columnsInOrder) {
-      final FormulaGroups groups = FormulaGroups()..startRow(0);
+    /// Inserts one array per column on row 0, each over [rows] more rows, in
+    /// the column order [columnsInOrder], then checks every covered lookup,
+    /// that nothing is covered past the ranges and that finding a range
+    /// stays a binary search.
+    ///
+    /// It counts the tree's key comparisons instead of timing the run, so a
+    /// busy machine cannot fail it: a wall-clock bound of 4 times a baseline
+    /// plus 250 ms failed once under load (0.457 s against 0.359 s) with
+    /// nothing in XLSX changed, and a generous one would not do, as a scan
+    /// of a plain list of 16,384 columns per lookup takes about a second.
+    /// The run makes `columns` inserts and `(rows + 1) * columns` lookups,
+    /// 196,608 calls. A search in O(log n) costs a few comparisons per key
+    /// bit, log2(16384) = 14, so the bound is 4 * 14 per call (the tree
+    /// makes about 7); a walk over the ranges, one step per range, makes
+    /// about 20,000 per call.
+    void expectBinarySearch(Iterable<int> columnsInOrder) {
+      int comparisons = 0;
+      final FormulaGroups groups = FormulaGroups(
+        compare: (int a, int b) {
+          comparisons++;
+          return a.compareTo(b);
+        },
+      )..startRow(0);
       for (final int c in columnsInOrder) {
         final FormulaGroupResult result = groups.master(
           FormulaType.array,
@@ -309,45 +330,23 @@ void main() {
       for (int c = 0; c < columns; c++) {
         if (groups.coveredBy(rows + 1, c) != null) wrong++;
       }
-      return wrong;
-    }
-
-    /// The same inserts and lookups on a tree that holds a single range.
-    void singleRange() {
-      final FormulaGroups groups = FormulaGroups()..startRow(0);
-      groups.master(
-        FormulaType.array,
-        row: 0,
-        column: 0,
-        ref: 'A1:A${rows + 1}',
+      expect(wrong, 0);
+      const int calls = columns + (rows + 1) * columns;
+      expect(
+        comparisons,
+        lessThanOrEqualTo(calls * 4 * 14),
+        reason: '$comparisons comparisons for $calls calls',
       );
-      for (int c = 1; c < columns; c++) {
-        groups.coveredBy(0, c);
-      }
-      for (int r = 1; r <= rows + 1; r++) {
-        groups.startRow(r);
-        for (int c = 0; c < columns; c++) {
-          groups.coveredBy(r, c);
-        }
-      }
     }
 
     test('binary search over many ranges', () {
-      int wrong = -1;
-      expectScales(() {
-        wrong = manyRanges(Iterable<int>.generate(columns));
-      }, singleRange);
-      expect(wrong, 0);
+      expectBinarySearch(Iterable<int>.generate(columns));
     });
 
     test('ranges inserted right to left stay a binary search', () {
-      int wrong = -1;
-      expectScales(() {
-        wrong = manyRanges(
-          Iterable<int>.generate(columns, (int i) => columns - 1 - i),
-        );
-      }, singleRange);
-      expect(wrong, 0);
+      expectBinarySearch(
+        Iterable<int>.generate(columns, (int i) => columns - 1 - i),
+      );
     });
 
     test('one wide range after many ended ones', () {

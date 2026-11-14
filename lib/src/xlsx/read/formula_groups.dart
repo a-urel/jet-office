@@ -63,11 +63,20 @@ final class _Active {
 /// ranges it does not touch). With rows out of order, a range whose columns
 /// meet an active one is refused even when their rows do not meet.
 final class FormulaGroups {
+  /// Starts a sheet pass with no groups.
+  ///
+  /// [compare] orders the active ranges' first columns, as `int.compareTo`
+  /// does when it is `null`. A test passes one that counts its calls, to
+  /// prove that finding a range stays a search in O(log n) without timing
+  /// it.
+  FormulaGroups({int Function(int, int)? compare})
+    : _active = SplayTreeMap<int, _Active>(compare);
+
   /// The shared followers' groups by `si`, without leading zeros.
   final Map<String, XlsxFormulaGroup> _shared = <String, XlsxFormulaGroup>{};
 
   /// The active array and data-table ranges by first column.
-  final SplayTreeMap<int, _Active> _active = SplayTreeMap<int, _Active>();
+  final SplayTreeMap<int, _Active> _active;
 
   /// The 0-based index of the latest row started.
   int _row = 0;
