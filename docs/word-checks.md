@@ -873,8 +873,8 @@ it).
 - Page numbers in a header or footer still update (the field is untouched).
 - `t1_merge_fields.docx`: no field is left (Option-F9 shows no code, and
   Cmd-A then F9 changes nothing), the date is in the switch's form
-  (`14.11.2026`), the name in capitals, and the text of `\b` and `\f` stands
-  around a value.
+  (`14.11.2026`), the amount in Turkish separators (`Tutar: 1.234,56`), the
+  name in capitals, and the text of `\b` and `\f` stands around a value.
 - `owner/template_invoice.docx`: the comment on a tag is still anchored (it
   shows beside the same text); the tracked change next to a field is still in
   the Review pane's list.
