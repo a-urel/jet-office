@@ -159,6 +159,11 @@ final class StoryPart implements PartContent {
   /// The save sets it before it writes the part.
   String? Function(Object built)? relationshipId;
 
+  /// The new ids this save gives what the template fill's copies hold
+  /// (plan T2, Ruling 9); `null` outside a save. The save sets it before it
+  /// writes the part.
+  CopyIds? copyIds;
+
   /// The warnings the last [encode] raised, as
   /// `DocumentPart.encodeWarnings` says, at locations under the part's name,
   /// such as `word/header1.xml/p[0]/r[1]`.
@@ -188,6 +193,7 @@ final class StoryPart implements PartContent {
       bookmarkId: bookmarkId,
       drawingId: drawingId,
       relationshipId: relationshipId,
+      copyIds: copyIds,
     ).writeBlocks(blocks, _location);
     if (needsClosingParagraph(blocks, _readUnclosed)) {
       w
