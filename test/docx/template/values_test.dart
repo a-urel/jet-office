@@ -290,6 +290,18 @@ void main() {
       expect(lookupInScopes(scopes, <String>['b', 'c']), isA<Missing>());
     });
 
+    test('a null or a text on the way breaks the path, no fallback', () {
+      for (final Object? inner in <Object?>[null, 'x']) {
+        final List<Object?> scopes = <Object?>[
+          <String, Object?>{
+            'a': <String, Object?>{'b': 1},
+          },
+          <String, Object?>{'a': inner},
+        ];
+        expect(lookupInScopes(scopes, <String>['a', 'b']), isA<Missing>());
+      }
+    });
+
     test('non-map scopes are skipped', () {
       final List<Object?> scopes = <Object?>[
         <String, Object?>{'a': 1},
