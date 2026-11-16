@@ -125,7 +125,8 @@ enum SectionForm {
 
 /// A well-formed section: its two tags, its form and the sections inside.
 final class SectionPair {
-  SectionPair._(this.open, this.close, this.form, this.depth, this.children);
+  SectionPair._(this.open, this.close, this.form, this.depth)
+    : children = <SectionPair>[];
 
   /// The opening tag, `{{#name}}` or `{{^name}}`.
   final SectionTagSite open;
@@ -162,7 +163,8 @@ final class SectionLayout {
 }
 
 /// Pairs [sites], a region's section tags in reading order, into sections by
-/// Rulings 7, 8, 13 and 14. Never throws.
+/// Rulings 7, 8, 13, 14 and 21. Never throws, and needs no stack deeper than
+/// a few frames however deep the sections nest.
 ///
 /// A stack pairs a closer with the opener of its path on top. A closer whose
 /// opener is deeper in the stack makes every opener above it, its own opener
@@ -173,90 +175,153 @@ final class SectionLayout {
 /// belong to its parent. A section that stands in the rows of a rows section
 /// beside it, before its opener or after its closer, moves inside it; two
 /// rows sections of one table whose rows overlap without one nesting in the
-/// other are both malformed.
+/// other are both malformed, and a rows section inside a rows section that
+/// selects the same rows is malformed (Ruling 21).
+///
+/// The work is linear in the sites but for the moves of Ruling 8, which
+/// look only at the neighbours of a rows section.
 SectionLayout pairSections(List<SectionTagSite> sites) {
-  final Map<SectionTagSite, int> order = Map<SectionTagSite, int>.identity();
-  final List<SectionTagSite> malformed = <SectionTagSite>[];
-  final List<_Frame> frames = <_Frame>[_Frame(null)];
-  for (final SectionTagSite s in sites) {
-    order[s] = order.length;
+  final int n = sites.length;
+  final List<bool> bad = List<bool>.filled(n, false);
+  final List<int> partner = List<int>.filled(n, -1);
+
+  // Ruling 7: the stack, with the open frames of each path by its key, so a
+  // closer finds its opener without a scan.
+  final List<int> frames = <int>[];
+  final Map<String, List<int>> open = <String, List<int>>{};
+  void pop() {
+    final int i = frames.removeLast();
+    open[_key(sites[i])]!.removeLast();
+  }
+
+  for (int i = 0; i < n; i++) {
+    final SectionTagSite s = sites[i];
     if (s._opens) {
-      frames.add(_Frame(s));
+      (open[_key(s)] ??= <int>[]).add(frames.length);
+      frames.add(i);
       continue;
     }
-    if (s.kind != TagKind.sectionEnd) {
-      malformed.add(s);
+    final List<int>? same = s.kind == TagKind.sectionEnd ? open[_key(s)] : null;
+    if (same == null || same.isEmpty) {
+      bad[i] = true;
       continue;
     }
-    int k = frames.length - 1;
-    while (k >= 1 && !_samePath(frames[k].open!.path, s.path)) {
-      k--;
-    }
-    if (k == 0) {
-      malformed.add(s);
-      continue;
-    }
+    final int k = same.last;
     if (k == frames.length - 1) {
-      final _Frame own = frames.removeLast();
-      frames.last.children.add(_Node(own.open!, s, own.children));
+      partner[frames[k]] = i;
+      partner[i] = frames[k];
+      pop();
       continue;
     }
     while (frames.length > k) {
-      _dropFrame(frames, malformed);
+      bad[frames.last] = true;
+      pop();
     }
-    malformed.add(s);
+    bad[i] = true;
   }
-  while (frames.length > 1) {
-    _dropFrame(frames, malformed);
+  for (final int i in frames) {
+    bad[i] = true;
   }
-  List<_Node> roots = frames.single.children;
-  _formAll(roots);
-  roots = _wellFormed(roots, malformed);
-  roots = _absorb(roots, malformed);
-  malformed.sort(
-    (SectionTagSite a, SectionTagSite b) => order[a]!.compareTo(order[b]!),
-  );
+
+  // Forms (Rulings 8, 13, 14).
+  final List<SectionForm?> forms = List<SectionForm?>.filled(n, null);
+  for (int i = 0; i < n; i++) {
+    final int j = partner[i];
+    if (bad[i] || j <= i) continue;
+    final SectionForm? form = _formOf(sites[i], sites[j]);
+    if (form == null) {
+      bad[i] = true;
+      bad[j] = true;
+    } else {
+      forms[i] = form;
+    }
+  }
+
+  // The tree of the well-formed pairs, which nest in reading order.
+  final _Node root = _Node(null, null, null);
+  final List<_Node> stack = <_Node>[root];
+  for (int i = 0; i < n; i++) {
+    if (bad[i]) continue;
+    final int j = partner[i];
+    if (j > i) {
+      final _Node node = _Node(sites[i], sites[j], forms[i]);
+      stack.last.children.add(node);
+      stack.add(node);
+    } else if (j >= 0) {
+      stack.removeLast();
+    }
+  }
+
+  // Ruling 8's moves and Ruling 21, each pair's children once, top down.
+  final Map<SectionTagSite, int> index = Map<SectionTagSite, int>.identity();
+  for (int i = 0; i < n; i++) {
+    index[sites[i]] = i;
+  }
+  void drop(_Node node) {
+    bad[index[node.open]!] = true;
+    bad[index[node.close]!] = true;
+  }
+
+  final List<_Node> work = <_Node>[root];
+  while (work.isNotEmpty) {
+    final _Node parent = work.removeLast();
+    parent.children = _arrange(parent, parent.allChildren(), drop);
+    parent.before.clear();
+    parent.after.clear();
+    work.addAll(parent.children);
+  }
+
+  // The result, top down.
+  final List<SectionPair> roots = <SectionPair>[];
+  final List<(_Node, List<SectionPair>, int)> build =
+      <(_Node, List<SectionPair>, int)>[
+        for (final _Node c in root.children.reversed) (c, roots, 0),
+      ];
+  while (build.isNotEmpty) {
+    final (_Node node, List<SectionPair> into, int depth) = build.removeLast();
+    final SectionPair pair = SectionPair._(
+      node.open!,
+      node.close!,
+      node.form!,
+      depth,
+    );
+    into.add(pair);
+    for (final _Node c in node.children.reversed) {
+      build.add((c, pair.children, depth + 1));
+    }
+  }
   return SectionLayout._(
-    List<SectionPair>.unmodifiable(<SectionPair>[
-      for (final _Node n in roots) _build(n, 0),
+    List<SectionPair>.unmodifiable(roots),
+    List<SectionTagSite>.unmodifiable(<SectionTagSite>[
+      for (int i = 0; i < n; i++)
+        if (bad[i]) sites[i],
     ]),
-    List<SectionTagSite>.unmodifiable(malformed),
   );
 }
 
-/// An opener on the stack and the pairs closed inside it so far.
-final class _Frame {
-  _Frame(this.open);
+String _key(SectionTagSite site) => site.path.join('.');
+
+/// A pair while the layout is built; the root has no tags.
+final class _Node {
+  _Node(this.open, this.close, this.form);
 
   final SectionTagSite? open;
-  final List<_Node> children = <_Node>[];
-}
+  final SectionTagSite? close;
+  final SectionForm? form;
+  List<_Node> children = <_Node>[];
 
-/// A pair while the layout is built.
-final class _Node {
-  _Node(this.open, this.close, this.children);
+  /// Siblings moved in before the opener, the nearest first.
+  final List<_Node> before = <_Node>[];
 
-  final SectionTagSite open;
-  final SectionTagSite close;
-  List<_Node> children;
+  /// Siblings moved in after the closer, in reading order.
+  final List<_Node> after = <_Node>[];
 
-  /// The form, or `null` when the pair is malformed.
-  SectionForm? form;
-}
-
-/// Pops the top frame as malformed; the pairs inside go to the frame below.
-void _dropFrame(List<_Frame> frames, List<SectionTagSite> malformed) {
-  final _Frame top = frames.removeLast();
-  malformed.add(top.open!);
-  frames.last.children.addAll(top.children);
-}
-
-bool _samePath(List<String> a, List<String> b) {
-  if (a.length != b.length) return false;
-  for (int i = 0; i < a.length; i++) {
-    if (a[i] != b[i]) return false;
-  }
-  return true;
+  /// [before], [children] and [after], in reading order.
+  List<_Node> allChildren() => <_Node>[
+    ...before.reversed,
+    ...children,
+    ...after,
+  ];
 }
 
 bool _sameStep(SiteStep a, SiteStep b) => switch ((a, b)) {
@@ -281,13 +346,6 @@ CellStep? _cellOf(SectionTagSite site) {
   if (steps.length < 2 || steps.last is! BlockStep) return null;
   final SiteStep step = steps[steps.length - 2];
   return step is CellStep ? step : null;
-}
-
-void _formAll(List<_Node> nodes) {
-  for (final _Node n in nodes) {
-    n.form = _formOf(n.open, n.close);
-    _formAll(n.children);
-  }
 }
 
 /// The form of the pair [open], [close] (Ruling 8, then 13 and 14), or
@@ -322,108 +380,80 @@ SectionForm? _formOf(SectionTagSite open, SectionTagSite close) {
   return null;
 }
 
-/// [nodes] with every malformed pair replaced by the pairs inside it, its
-/// tags added to [malformed]; recursively.
-List<_Node> _wellFormed(List<_Node> nodes, List<SectionTagSite> malformed) {
+/// How much of [inner] stands in the rows pair [outer]: none, part or all.
+int _within(_Node inner, _Node outer) {
+  int k = 0;
+  if (_contains(outer.form!, outer.open!, outer.close!, inner.open!)) k++;
+  if (_contains(outer.form!, outer.open!, outer.close!, inner.close!)) k++;
+  return k;
+}
+
+/// Whether [a] and [b] are rows pairs of one table over the same rows.
+bool _sameRows(_Node a, _Node b) {
+  if (a.form != SectionForm.rows || b.form != SectionForm.rows) return false;
+  final CellStep ao = _cellOf(a.open!)!;
+  final CellStep ac = _cellOf(a.close!)!;
+  final CellStep bo = _cellOf(b.open!)!;
+  final CellStep bc = _cellOf(b.close!)!;
+  return identical(ao.table, bo.table) && ao.row == bo.row && ac.row == bc.row;
+}
+
+/// The children of [parent], [nodes] in reading order, in one pass with a
+/// cursor: a sibling that stands in a rows pair's rows moves into it (Ruling
+/// 8); a pair that overlaps a rows sibling without nesting, and a rows pair
+/// over [parent]'s own rows (Ruling 21), is malformed ([drop]) and the pairs
+/// inside it come back to be arranged in its place.
+List<_Node> _arrange(
+  _Node parent,
+  List<_Node> nodes,
+  void Function(_Node node) drop,
+) {
+  final List<_Node> input = nodes.reversed.toList();
   final List<_Node> out = <_Node>[];
-  for (final _Node n in nodes) {
-    n.children = _wellFormed(n.children, malformed);
-    if (n.form != null) {
-      out.add(n);
-    } else {
-      malformed
-        ..add(n.open)
-        ..add(n.close);
-      out.addAll(n.children);
+  void conflict(List<_Node> gone) {
+    final List<_Node> back = <_Node>[];
+    for (final _Node g in gone) {
+      drop(g);
+      back.addAll(g.allChildren());
     }
+    input.addAll(back.reversed);
+  }
+
+  while (input.isNotEmpty) {
+    final _Node f = input.removeLast();
+    if (parent.form == SectionForm.rows && _sameRows(f, parent)) {
+      conflict(<_Node>[f]);
+      continue;
+    }
+    bool placed = false;
+    while (!placed && out.isNotEmpty) {
+      final _Node q = out.last;
+      final int fInQ = q.form == SectionForm.rows ? _within(f, q) : 0;
+      final int qInF = f.form == SectionForm.rows ? _within(q, f) : 0;
+      if (fInQ == 2 && qInF == 2) {
+        // Side by side over the same rows: neither nests.
+        out.removeLast();
+        conflict(<_Node>[q, f]);
+        placed = true;
+      } else if (fInQ == 2) {
+        q.after.add(f);
+        placed = true;
+      } else if (qInF == 2) {
+        out.removeLast();
+        f.before.add(q);
+      } else if (fInQ == 1 || qInF == 1) {
+        // The rows overlap without one pair nesting in the other.
+        out.removeLast();
+        conflict(<_Node>[q, f]);
+        placed = true;
+      } else {
+        break;
+      }
+    }
+    if (!placed) out.add(f);
   }
   return out;
 }
-
-bool _inside(_Node inner, _Node outer) =>
-    _contains(outer.form!, outer.open, outer.close, inner.open) &&
-    _contains(outer.form!, outer.open, outer.close, inner.close);
-
-/// Moves into each rows pair of [nodes], siblings in reading order, the
-/// siblings that stand in its rows (Ruling 8); rows pairs that overlap
-/// without nesting are made malformed. Recursively.
-List<_Node> _absorb(List<_Node> nodes, List<SectionTagSite> malformed) {
-  List<_Node> list = nodes;
-  bool changed = true;
-  while (changed) {
-    changed = false;
-    for (int i = 0; i < list.length && !changed; i++) {
-      final _Node q = list[i];
-      if (q.form != SectionForm.rows) continue;
-      int first = i;
-      int last = i;
-      _Node? conflict;
-      for (final int dir in const <int>[-1, 1]) {
-        int j = i + dir;
-        while (conflict == null && j >= 0 && j < list.length) {
-          final _Node s = list[j];
-          final bool o = _contains(q.form!, q.open, q.close, s.open);
-          final bool c = _contains(q.form!, q.open, q.close, s.close);
-          final bool around = s.form == SectionForm.rows && _inside(q, s);
-          if (o && c && around) {
-            // Side by side over the same rows: neither nests.
-            conflict = s;
-            break;
-          }
-          // Nothing of s in q's rows, or q in s's: s takes q in its turn.
-          if ((!o && !c) || around) break;
-          if (o != c) {
-            conflict = s;
-            break;
-          }
-          if (dir < 0) {
-            first = j;
-          } else {
-            last = j;
-          }
-          j += dir;
-        }
-      }
-      if (conflict != null) {
-        final List<_Node> next = <_Node>[];
-        for (final _Node n in list) {
-          if (identical(n, q) || identical(n, conflict)) {
-            malformed
-              ..add(n.open)
-              ..add(n.close);
-            next.addAll(n.children);
-          } else {
-            next.add(n);
-          }
-        }
-        list = next;
-        changed = true;
-      } else if (first < i || last > i) {
-        q.children = <_Node>[
-          ...list.sublist(first, i),
-          ...q.children,
-          ...list.sublist(i + 1, last + 1),
-        ];
-        list = <_Node>[...list.sublist(0, first), q, ...list.sublist(last + 1)];
-        changed = true;
-      }
-    }
-  }
-  for (final _Node n in list) {
-    n.children = _absorb(n.children, malformed);
-  }
-  return list;
-}
-
-SectionPair _build(_Node n, int depth) => SectionPair._(
-  n.open,
-  n.close,
-  n.form!,
-  depth,
-  List<SectionPair>.unmodifiable(<SectionPair>[
-    for (final _Node c in n.children) _build(c, depth + 1),
-  ]),
-);
 
 bool _contains(
   SectionForm form,

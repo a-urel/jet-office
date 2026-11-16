@@ -362,17 +362,51 @@ void main() {
     expect(layout.malformed, hasLength(4));
   });
 
-  test('two rows pairs over the same rows, one inside the other in reading '
-      'order, nest', () {
+  test('a rows pair selecting the same rows as its outer rows pair is '
+      'malformed', () {
+    final Object cell02 = Object();
+    final Object cell03 = Object();
     final SectionLayout layout = pairSections(<SectionTagSite>[
-      open('x', cellP(cell00, 0, 0, 0), alone: false),
-      open('y', cellP(cell01, 0, 1, 0), alone: false),
-      close('y', cellP(cell20, 2, 0, 0), alone: false),
-      close('x', cellP(cell21, 2, 1, 0), alone: false),
+      open('a', cellP(cell00, 0, 0, 0), alone: false),
+      open('b', cellP(cell01, 0, 1, 0), alone: false),
+      close('b', cellP(cell02, 0, 2, 0), alone: false),
+      close('a', cellP(cell03, 0, 3, 0), alone: false),
     ]);
-    expect(layout.malformed, isEmpty);
-    expect(layout.roots.single.open.path, <String>['x']);
-    expect(layout.roots.single.children.single.open.path, <String>['y']);
+    expect(layout.malformed.map((SectionTagSite s) => s.text), <String>[
+      '{{#b}}',
+      '{{/b}}',
+    ]);
+    expect(layout.roots.single.open.path, <String>['a']);
+    expect(layout.roots.single.form, SectionForm.rows);
+    expect(layout.roots.single.children, isEmpty);
+
+    // Over rows 1..2 of rows 1..3 the inner pair nests.
+    final SectionLayout smaller = pairSections(<SectionTagSite>[
+      open('a', cellP(cell10, 1, 0, 0), alone: false),
+      open('b', cellP(Object(), 1, 1, 0), alone: false),
+      close('b', cellP(cell20, 2, 0, 0), alone: false),
+      close('a', cellP(Object(), 3, 0, 0), alone: false),
+    ]);
+    expect(smaller.malformed, isEmpty);
+    expect(smaller.roots.single.children.single.open.path, <String>['b']);
+    expect(smaller.roots.single.children.single.depth, 1);
+  });
+
+  test('the pairs inside a same-rows inner pair stay inside the outer '
+      'one', () {
+    final Object p = Object();
+    final SectionLayout layout = pairSections(<SectionTagSite>[
+      open('a', cellP(cell00, 0, 0, 0), alone: false),
+      open('b', cellP(cell00, 0, 0, 1), alone: false),
+      open('i', cellP(cell00, 0, 0, 2), level: p, offset: 0),
+      close('i', cellP(cell00, 0, 0, 2), level: p, offset: 9),
+      close('b', cellP(cell01, 0, 1, 0), alone: false),
+      close('a', cellP(cell01, 0, 1, 1), alone: false),
+    ]);
+    expect(layout.malformed, hasLength(2));
+    final SectionPair a = layout.roots.single;
+    expect(a.children.single.open.path, <String>['i']);
+    expect(a.children.single.depth, 1);
   });
 
   test('a malformed pair\'s children belong to its parent', () {
@@ -479,6 +513,78 @@ void main() {
     }
   });
 
+  test('ten thousand nested sections pair without running out of stack', () {
+    final Object p = Object();
+    const int n = 10000;
+    final SectionLayout layout = pairSections(<SectionTagSite>[
+      for (int i = 0; i < n; i++) open('a', bodyP(0), level: p, offset: i),
+      for (int i = 0; i < n; i++) close('a', bodyP(0), level: p, offset: n + i),
+    ]);
+    expect(layout.malformed, isEmpty);
+    SectionPair pair = layout.roots.single;
+    int count = 1;
+    while (pair.children.isNotEmpty) {
+      pair = pair.children.single;
+      count++;
+      expect(pair.depth, count - 1);
+      expect(pair.contains(pair.open), isFalse);
+    }
+    expect(count, n);
+
+    // Unclosed, then closers deep in the stack: everything malformed.
+    final SectionLayout broken = pairSections(<SectionTagSite>[
+      for (int i = 0; i < n; i++) open('a', bodyP(0), level: p, offset: i),
+      close('a', bodyP(0), level: p, offset: n),
+      for (int i = 0; i < n; i++)
+        open('b$i', bodyP(0), level: p, offset: n + 1 + i),
+      close('a', bodyP(0), level: p, offset: 2 * n + 1),
+    ]);
+    // The innermost a pairs; every other tag is malformed.
+    expect(broken.malformed, hasLength(2 * n));
+    expect(broken.roots.single.open.offset, n - 1);
+  });
+
+  test('fifty thousand sites pair in bounded time', () {
+    final Object p = Object();
+    final Stopwatch watch = Stopwatch()..start();
+    // Openers left open, then closers of names that are not open.
+    final SectionLayout unpaired = pairSections(<SectionTagSite>[
+      for (int i = 0; i < 25000; i++) open('a$i', bodyP(0), level: p),
+      for (int i = 0; i < 25000; i++) close('b$i', bodyP(0), level: p),
+    ]);
+    expect(unpaired.malformed, hasLength(50000));
+    // 12,500 tables, each with an inline pair in row 0 before a rows pair.
+    final List<SectionTagSite> sites = <SectionTagSite>[];
+    for (int t = 0; t < 12500; t++) {
+      final Object tbl = Object();
+      final Object c0 = Object();
+      final Object c1 = Object();
+      final Object c2 = Object();
+      List<SiteStep> at(Object cell, int r, int c) => <SiteStep>[
+        BlockStep(body, t),
+        CellStep(tbl, r, c),
+        BlockStep(cell, 0),
+      ];
+      sites
+        ..add(open('i', at(c0, 0, 0), level: p, offset: 0))
+        ..add(close('i', at(c0, 0, 0), level: p, offset: 5))
+        ..add(open('r', at(c1, 0, 1), alone: false))
+        ..add(close('r', at(c2, 1, 0), alone: false));
+    }
+    final SectionLayout rows = pairSections(sites);
+    expect(rows.malformed, isEmpty);
+    expect(rows.roots, hasLength(12500));
+    expect(
+      rows.roots.every(
+        (SectionPair r) =>
+            r.form == SectionForm.rows && r.children.single.depth == 1,
+      ),
+      isTrue,
+    );
+    // Linear work takes well under a second; quadratic took tens.
+    expect(watch.elapsed, lessThan(const Duration(seconds: 20)));
+  });
+
   test('pairSections never throws', () {
     final Random random = Random(1);
     final List<Object> containers = <Object>[body, cell00, cell01, Object()];
@@ -500,7 +606,7 @@ void main() {
             random.nextInt(3),
           );
     for (int i = 0; i < 10000; i++) {
-      final int n = random.nextInt(9);
+      final int n = i % 500 == 0 ? random.nextInt(2000) : random.nextInt(9);
       final List<SectionTagSite> sites = <SectionTagSite>[
         for (int k = 0; k < n; k++)
           site(
