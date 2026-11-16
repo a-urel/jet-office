@@ -111,6 +111,89 @@ Lookup lookupPath(Map<Object?, Object?> scope, List<String> path) {
 Lookup lookupKey(Map<Object?, Object?> scope, String key) =>
     scope.containsKey(key) ? Found(scope[key]) : const Missing();
 
+/// What a value does to a section (spec section 4, T2 plan Ruling 5).
+enum SectionEffect {
+  /// The content repeats, one copy per item, the item the innermost scope.
+  repeat,
+
+  /// The content goes, with both tags.
+  remove,
+
+  /// The content shows once. For `{{#name}}` the value is pushed as the
+  /// innermost scope, so `{{.}}` shows it; for `{{^name}}` no scope is
+  /// pushed.
+  once,
+
+  /// The content shows once with the map as the innermost scope.
+  scope,
+}
+
+/// What [value], found in the data, does to a section: `{{#name}}`, or
+/// `{{^name}}` when [inverted].
+///
+/// A non-empty `List` repeats, its elements the items; a `Map`, empty too, is
+/// a scope, the map the one item; `false`, `null`, `''` and an empty `List`
+/// remove, with no items; any other value (`true`, any `num`, `0` too, a
+/// `FormatDecimal`, a non-empty `String`, a `DateTime`, a `Duration`, an
+/// `OfficeImage`) shows once, the value the one item. An inverted section
+/// shows once, with no items, exactly when the section would remove, and
+/// removes otherwise. A missing name is not a value: the caller handles it
+/// (Ruling 12). Never throws.
+({SectionEffect effect, List<Object?> items}) sectionEffect(
+  Object? value, {
+  required bool inverted,
+}) {
+  final bool removes =
+      value == null ||
+      value == false ||
+      (value is String && value.isEmpty) ||
+      (value is List && value.isEmpty);
+  if (inverted) {
+    return removes
+        ? (effect: SectionEffect.once, items: const <Object?>[])
+        : (effect: SectionEffect.remove, items: const <Object?>[]);
+  }
+  if (removes) return (effect: SectionEffect.remove, items: const <Object?>[]);
+  if (value is List) {
+    return (effect: SectionEffect.repeat, items: List<Object?>.of(value));
+  }
+  if (value is Map) {
+    return (effect: SectionEffect.scope, items: <Object?>[value]);
+  }
+  return (effect: SectionEffect.once, items: <Object?>[value]);
+}
+
+/// Looks [path] up through [scopes], the data first and the innermost scope
+/// last (Ruling 6).
+///
+/// The first segment is looked up in each scope from the innermost outward,
+/// skipping a scope that is not a `Map`; the first map that has the key
+/// decides, and the rest of the path is walked in it with no further
+/// fallback, [Missing] if it breaks. An empty [path] is the innermost scope
+/// itself, as `{{.}}` reads it. No scopes find nothing. Never throws.
+Lookup lookupInScopes(List<Object?> scopes, List<String> path) {
+  if (scopes.isEmpty) return const Missing();
+  if (path.isEmpty) return Found(scopes.last);
+  for (int i = scopes.length - 1; i >= 0; i--) {
+    final Object? scope = scopes[i];
+    if (scope is Map && scope.containsKey(path.first)) {
+      return lookupPath(scope, path);
+    }
+  }
+  return const Missing();
+}
+
+/// Looks the one key [key] up through [scopes], as a `MERGEFIELD` does: the
+/// key is the whole name, dots included, looked up in each `Map` scope from
+/// the innermost outward (Ruling 6). Never throws.
+Lookup lookupKeyInScopes(List<Object?> scopes, String key) {
+  for (int i = scopes.length - 1; i >= 0; i--) {
+    final Object? scope = scopes[i];
+    if (scope is Map && scope.containsKey(key)) return Found(scope[key]);
+  }
+  return const Missing();
+}
+
 /// A value as text, or the reason it is not text.
 final class ValueText {
   /// Creates a result.
