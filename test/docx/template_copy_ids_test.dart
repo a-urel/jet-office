@@ -180,6 +180,53 @@ void main() {
     expect(_cNvPrIds(saved), ids);
   });
 
+  test('a drawing inside a copied opaque block gets a new id', () {
+    final DocxDocument doc = _open(
+      '<w:sdt><w:sdtPr><w:id w:val="3"/></w:sdtPr><w:sdtContent>'
+      '<w:p>${_picture('7')}</w:p></w:sdtContent></w:sdt><w:p/>',
+      header: '<w:p>${_picture('30')}</w:p>',
+    );
+    final DocxBlock sdt = doc.body.blocks.first;
+    expect(sdt, isA<DocxOpaqueBlock>());
+    final List<DocxBlock> copies = <DocxBlock>[
+      ...copyBlocks(<DocxBlock>[sdt]).items,
+      ...copyBlocks(<DocxBlock>[sdt]).items,
+    ];
+    for (int i = 0; i < copies.length; i++) {
+      doc.body.insertBlock(1 + i, copies[i]);
+    }
+
+    final Uint8List saved = doc.save().bytes;
+
+    final List<String> ids = _docPrIds(saved);
+    expect(ids, hasLength(3));
+    expect(ids.first, '7');
+    expect(ids.toSet(), hasLength(3));
+    for (final String id in ids.skip(1)) {
+      expect(int.parse(id), greaterThan(30));
+    }
+    expect(_cNvPrIds(saved), ids);
+    expect(_docPrIds(saved, 'word/header1.xml'), <String>['30']);
+  });
+
+  test('a drawing inside copied mc:AlternateContent run content gets a new '
+      'id', () {
+    final DocxDocument doc = _open(
+      '<w:p><w:r><mc:AlternateContent><mc:Choice Requires="wps">'
+      '<w:drawing><wp:anchor><wp:docPr id="12" name="Shape"/></wp:anchor>'
+      '</w:drawing></mc:Choice><mc:Fallback><w:pict/></mc:Fallback>'
+      '</mc:AlternateContent></w:r></w:p><w:p/>',
+      header: '<w:p>${_picture('30')}</w:p>',
+    );
+    doc.body.insertBlock(1, copyBlocks(<DocxBlock>[_p(doc.body, 0)]).items[0]);
+
+    final List<String> ids = _docPrIds(doc.save().bytes);
+
+    expect(ids, hasLength(2));
+    expect(ids.first, '12');
+    expect(int.parse(ids[1]), greaterThan(30));
+  });
+
   test('copied revisions get new w:id above every annotation id of the '
       'file', () {
     final DocxDocument doc = _open(
