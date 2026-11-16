@@ -353,7 +353,7 @@ final class _RegionWalk {
           steps: steps,
           level: (run == null ? null : levels[run]) ?? owner,
           offset: e.offset,
-          alone: !field && _blankOutside(map.text, match.start, match.end),
+          alone: !field && _blankOutside(map, match.start, match.end),
           breaksSection: paragraphHasBreak(paragraph),
           crossesMerge: _crossesMerge(steps, kind),
           payload: e,
@@ -427,13 +427,17 @@ bool _holdsField(List<DocxInline> inlines) {
   return false;
 }
 
-/// Whether [text] outside `[start, end)` is only U+0020 and U+00A0; a tab, a
-/// break, a picture or opaque content is a [nonText] there, which is not.
-bool _blankOutside(String text, int start, int end) {
+/// Whether [map]'s text outside `[start, end)` is only U+0020, U+00A0 and
+/// comment references (Ruling 8); a tab, a break, a picture, a note
+/// reference or other opaque content is a [nonText] there, which is not.
+bool _blankOutside(ParagraphText map, int start, int end) {
+  final String text = map.text;
   bool blank(int from, int to) {
     for (int i = from; i < to; i++) {
       final int unit = text.codeUnitAt(i);
-      if (unit != 0x20 && unit != 0xA0) return false;
+      if (unit != 0x20 && unit != 0xA0 && !map.isCommentReference(i)) {
+        return false;
+      }
     }
     return true;
   }

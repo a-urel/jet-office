@@ -241,36 +241,52 @@ void main() {
     expect(sites.every((SectionTagSite s) => !s.crossesMerge), isTrue);
   });
 
-  test('alone allows spaces, bookmarks and proofing marks only', () {
-    String alone(String inner) => templateParagraph(inner);
-    final DocxDocument doc = _doc(
-      '${alone(templateRun('  {{#a}}  '))}'
-      '${alone('<w:bookmarkStart w:id="1" w:name="m"/>'
-      '<w:proofErr w:type="spellStart"/>${templateRun('{{#a}}')}'
-      '<w:bookmarkEnd w:id="1"/>')}'
-      '${alone('${templateRun('{{#a}}')}<w:r><w:tab/></w:r>')}'
-      '${alone('${templateRun('{{#a}}')}<w:fldSimple w:instr=" PAGE "/>')}'
-      '${alone('${templateRun('{{#a}}')}${tagInFieldResult('')}')}'
-      '${alone('${templateRun('{{#a}}')}${hyperlinkOf(<String>['x'])}')}'
-      '${alone(templateRun('{{#a}}{{b}}'))}',
-    );
-    final List<DocxBlock> blocks = doc.body.blocks;
-    final List<RegionParagraph> scanned = scanRegion(
-      BlockRegion(doc.body, blocks, 0, blocks.length, <String>[
-        for (int i = 0; i < blocks.length; i++) 'body/p[$i]',
-      ]),
-      256,
-    );
-    expect(scanned.map((RegionParagraph p) => p.sites.single.alone), <bool>[
-      true,
-      true,
-      false,
-      false,
-      false,
-      false,
-      false,
-    ]);
-  });
+  test(
+    'alone allows spaces, bookmarks, proofing marks and comment marks only',
+    () {
+      String alone(String inner) => templateParagraph(inner);
+      final DocxDocument doc = _doc(
+        '${alone(templateRun('  {{#a}}  '))}'
+        '${alone('<w:bookmarkStart w:id="1" w:name="m"/>'
+        '<w:proofErr w:type="spellStart"/>${templateRun('{{#a}}')}'
+        '<w:bookmarkEnd w:id="1"/>')}'
+        '${alone('${templateRun('{{#a}}')}<w:r><w:tab/></w:r>')}'
+        '${alone('${templateRun('{{#a}}')}<w:fldSimple w:instr=" PAGE "/>')}'
+        '${alone('${templateRun('{{#a}}')}${tagInFieldResult('')}')}'
+        '${alone('${templateRun('{{#a}}')}${hyperlinkOf(<String>['x'])}')}'
+        '${alone(templateRun('{{#a}}{{b}}'))}'
+        '${alone('<w:commentRangeStart w:id="3"/>${templateRun('{{#a}}')}'
+        '<w:commentRangeEnd w:id="3"/><w:r><w:rPr><w:rStyle '
+        'w:val="CommentReference"/></w:rPr><w:commentReference w:id="3"/>'
+        '</w:r>')}'
+        '${alone('${templateRun('{{#a}}')}<w:r><w:footnoteReference w:id="1"/>'
+        '</w:r>')}'
+        '${alone('${templateRun('{{#a}}')}<w:r><w:commentReference w:id="3"/>'
+        '<w:tab/></w:r>')}',
+      );
+      final List<DocxBlock> blocks = doc.body.blocks;
+      final List<RegionParagraph> scanned = scanRegion(
+        BlockRegion(doc.body, blocks, 0, blocks.length, <String>[
+          for (int i = 0; i < blocks.length; i++) 'body/p[$i]',
+        ]),
+        256,
+      );
+      expect(scanned.map((RegionParagraph p) => p.sites.single.alone), <bool>[
+        true,
+        true,
+        false,
+        false,
+        false,
+        false,
+        false,
+        // A comment's range and reference; a footnote reference; a
+        // comment reference beside a tab.
+        true,
+        false,
+        false,
+      ]);
+    },
+  );
 
   test('a tag in a hyperlink has the hyperlink as its level', () {
     final DocxDocument doc = _doc(
