@@ -3,6 +3,8 @@
 # go in docs/decisions/ (AGENTS.md).
 docs/superpowers/
 .superpowers/
+# Claude Code worktrees of parallel sessions.
+.claude/worktrees/
 
 # See https://www.dartlang.org/guides/libraries/private-files
 

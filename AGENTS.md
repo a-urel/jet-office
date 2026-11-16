@@ -841,6 +841,16 @@ map for the writer is in `docs/xlsx-writer.md`, "Port map"; the reader's is in
 `docs/xlsx-reader.md`, "Port map", with the rules the reader enforces. Read
 the Quds file before porting it, and never import from it.
 
+`/spec-review <doc>` (`.claude/skills/spec-review/SKILL.md`) runs an
+independent, read-only review of a spec, plan or doc page by up to three CLIs
+(Codex, Copilot, Claude) through `scripts/ai_review.sh`, then merges,
+re-verifies and folds the findings back into the document. Each run is
+archived, never overwritten, in `docs/reviews/<date>-<slug>/`; git-ignored
+documents are archived in `docs/superpowers/reviews/` and never committed.
+The repository-specific settings are the config block at the top of the
+script. The script's self-test needs no network and no real CLI:
+`scripts/ai_review/selftest.sh`.
+
 `docs/superpowers/` is git-ignored: working designs and plans live there and
 are not repository history. Knowledge that must outlive a branch goes in a
 tracked page under `docs/`, a decision record, or this file.
