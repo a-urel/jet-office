@@ -161,6 +161,20 @@ ParagraphText paragraphTextOf(DocxParagraph paragraph) {
   return ParagraphText._(b.buffer.toString(), b.positions, b.standIns);
 }
 
+/// The searchable text of the inlines `[start, end)` of [inlines] (a
+/// paragraph's or a hyperlink's own list), mapped as [paragraphTextOf] maps a
+/// paragraph, so a section's copy of inline content is scanned alone (T2).
+/// Its first position is the range's first character; its runs are those
+/// of the range, so a tag found in it is filled in place.
+///
+/// Throws [RangeError] when the range is not inside [inlines].
+ParagraphText inlineRangeTextOf(List<DocxInline> inlines, int start, int end) {
+  RangeError.checkValidRange(start, end, inlines.length, 'start', 'end');
+  final _Builder b = _Builder();
+  b.walk(inlines.sublist(start, end), Region.fillable);
+  return ParagraphText._(b.buffer.toString(), b.positions, b.standIns);
+}
+
 final class _Builder {
   final StringBuffer buffer = StringBuffer();
   final List<TextPosition> positions = <TextPosition>[];

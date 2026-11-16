@@ -211,4 +211,43 @@ void main() {
       expect(paragraphTextOf(p).text, '{{firma.ad}}');
     });
   });
+
+  group('inlineRangeTextOf', () {
+    DocxParagraph paragraph(String inner) => DocxDocument.open(
+      templateDocument(<String>[inner]),
+    ).body.blocks.whereType<DocxParagraph>().first;
+
+    test('inlineRangeTextOf maps only its range', () {
+      final DocxParagraph p = paragraph(
+        '${templateRun('a{{')}${templateRun('#x}}b')}${templateRun('c')}',
+      );
+      final ParagraphText t = inlineRangeTextOf(p.inlines, 1, 3);
+      expect(t.text, '#x}}bc');
+      expect(t.positions, hasLength(6));
+      expect(t.positions[0].run, same(p.inlines[1]));
+      expect(t.positions[0].offset, 0);
+      expect(t.positions[5].run, same(p.inlines[2]));
+      expect(t.spanOf(0, 6).crossesBoundary, isFalse);
+      expect(inlineRangeTextOf(p.inlines, 0, 0).text, isEmpty);
+      expect(inlineRangeTextOf(p.inlines, 0, 3).text, paragraphTextOf(p).text);
+    });
+
+    test('a range inside a hyperlink maps the hyperlink\'s runs', () {
+      final DocxParagraph p = paragraph(
+        tagInHyperlink('x', <String>['{{', 'a}}', 'b'], 'y'),
+      );
+      final DocxHyperlink link = p.inlines.whereType<DocxHyperlink>().single;
+      final ParagraphText t = inlineRangeTextOf(link.inlines, 0, 2);
+      expect(t.text, '{{a}}');
+      expect(t.positions.first.run, same(link.inlines[0]));
+      expect(t.positions.first.region, Region.fillable);
+      expect(t.spanOf(0, 5).crossesBoundary, isFalse);
+    });
+
+    test('a range that is not inside the list throws', () {
+      final DocxParagraph p = paragraph(templateRun('a'));
+      expect(() => inlineRangeTextOf(p.inlines, 0, 2), throwsRangeError);
+      expect(() => inlineRangeTextOf(p.inlines, 1, 0), throwsRangeError);
+    });
+  });
 }
