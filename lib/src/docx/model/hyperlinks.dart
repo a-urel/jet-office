@@ -65,6 +65,22 @@ final class DocxHyperlink extends DocxInline {
     run._hyperlink = this;
   }
 
+  /// A copy of [source] holding [inlines], which are its from now on: the
+  /// targets or the start tag of [source], and what it says of runs and
+  /// fields.
+  DocxHyperlink._copy(DocxHyperlink source, List<DocxInline> inlines)
+    : _built = source._built,
+      _attributes = source._attributes,
+      _inlines = inlines,
+      _resolveUrl = source._resolveUrl,
+      _holdsRuns = source._holdsRuns,
+      _breaksFields = source._breaksFields,
+      super._() {
+    for (final DocxInline inline in _inlines) {
+      inline._hyperlink = this;
+    }
+  }
+
   /// The targets the API gave a built hyperlink; `null` for one read.
   final _BuiltTargets? _built;
 

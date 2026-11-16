@@ -34,6 +34,7 @@ import 'edit_sink.dart';
 import 'property_set.dart';
 import 'run_content.dart';
 import 'run_properties.dart';
+import 'template_copies.dart';
 
 part 'bookmarks.dart';
 part 'fields.dart';
@@ -546,6 +547,209 @@ void spliceHeldInline(DocxInline inline, List<DocxInline> replacements) {
   for (int i = 1; i < replacements.length; i++) {
     paragraph.insertInline(index + i, replacements[i]);
   }
+}
+
+/// Copies of [source], inlines of one list, for a section of the template
+/// fill that repeats (plan T2, Ruling 10): new objects in no paragraph, each
+/// marked as a copy (`isTemplateCopy`), so a save gives what they hold new
+/// ids; [source] is unchanged.
+///
+/// A copy leaves out every typed bookmark mark and every element of
+/// `copyDroppedNames`, wherever it is: an inline of the list, of a field or
+/// of a hyperlink, run content, or an element inside a kept inline or run
+/// content (`withoutAnnotations`). A run left empty keeps its properties.
+/// The result's `dropped` names what was left out.
+///
+/// A copied run keeps its `w:rPr` as read and the values set on it since,
+/// as [copyRunWithText] copies them, its `w:r` attributes and its removed
+/// count, and counts as read where its source was; later sets on either run
+/// do not reach the other. A field copies its runs and keeps its result's
+/// place, a hyperlink its start tag (or its targets, for one the API built)
+/// and its inlines, and a picture is a new one: one read keeps its element
+/// and its image, one the API built its image, size, name and description.
+/// An opaque inline keeps its visible text. Kept elements are read again,
+/// nested at most [maxDepth] deep; they were read under the part's limit
+/// already.
+CopyResult<DocxInline> copyInlines(
+  List<DocxInline> source, {
+  int maxDepth = 256,
+}) {
+  final Set<String> dropped = <String>{};
+  final List<DocxInline> items = _copyInlineList(source, dropped, maxDepth);
+  items.forEach(markTemplateCopy);
+  return (items: items, dropped: dropped);
+}
+
+/// Copies of [source] as [copyInlines] makes them, but not marked: the
+/// inlines of a copied paragraph, which is marked itself. What a copy leaves
+/// out is added to [dropped].
+List<DocxInline> copiedInlinesOf(
+  List<DocxInline> source,
+  Set<String> dropped,
+  int maxDepth,
+) => _copyInlineList(source, dropped, maxDepth);
+
+List<DocxInline> _copyInlineList(
+  List<DocxInline> source,
+  Set<String> dropped,
+  int maxDepth,
+) => <DocxInline>[
+  for (final DocxInline inline in source)
+    ?_copyInline(inline, dropped, maxDepth),
+];
+
+/// A copy of [inline], or `null` when a copy leaves it out; what it leaves
+/// out is added to [dropped].
+DocxInline? _copyInline(DocxInline inline, Set<String> dropped, int maxDepth) {
+  switch (inline) {
+    case DocxRun():
+      return _copyRun(inline, dropped, maxDepth);
+    case DocxBookmarkStart():
+      dropped.add('bookmarkStart');
+      return null;
+    case DocxBookmarkEnd():
+      dropped.add('bookmarkEnd');
+      return null;
+    case DocxOpaqueInline():
+      if (isDroppedByCopy(inline.namespaceUri, inline.localName)) {
+        dropped.add(inline.localName);
+        return null;
+      }
+      final (:OpaqueXml xml, dropped: Set<String> inside) = withoutAnnotations(
+        inline._xml,
+        maxDepth,
+      );
+      dropped.addAll(inside);
+      return DocxOpaqueInline._(
+        xml,
+        inline.text,
+        inline._holdsRuns,
+        inline._breaksFields,
+      );
+    case DocxField():
+      final List<DocxInline> inlines = <DocxInline>[];
+      int resultStart = inline._resultStart;
+      for (int i = 0; i < inline._inlines.length; i++) {
+        final DocxInline? copy = _copyInline(
+          inline._inlines[i],
+          dropped,
+          maxDepth,
+        );
+        if (copy != null) {
+          inlines.add(copy);
+        } else if (i < inline._resultStart) {
+          resultStart--;
+        }
+      }
+      return DocxField._read(inlines, resultStart);
+    case DocxHyperlink():
+      return DocxHyperlink._copy(
+        inline,
+        _copyInlineList(inline._inlines, dropped, maxDepth),
+      );
+  }
+}
+
+/// A copy of [source], as [copyInlines] copies a run.
+DocxRun _copyRun(DocxRun source, Set<String> dropped, int maxDepth) {
+  final List<DocxRunContent> content = <DocxRunContent>[];
+  for (final DocxRunContent c in source._content) {
+    switch (c) {
+      case DocxPicture():
+        content.add(copyOfPicture(c));
+      case DocxOpaqueRunContent():
+        final OpaqueXml xml = opaqueRunContentXml(c);
+        if (isDroppedByCopy(xml.namespaceUri, xml.localName)) {
+          dropped.add(xml.localName);
+          continue;
+        }
+        final (xml: OpaqueXml kept, dropped: Set<String> inside) =
+            withoutAnnotations(xml, maxDepth);
+        dropped.addAll(inside);
+        content.add(identical(kept, xml) ? c : opaqueRunContent(kept));
+      default:
+        content.add(c);
+    }
+  }
+  final DocxRun copy = DocxRun._read(
+    source._source,
+    source._attributes,
+    content,
+  );
+  propertySetOfRunProperties(
+    copy._properties,
+  ).takeValuesSetOn(propertySetOfRunProperties(source._properties));
+  copy
+    .._readIn = source._readIn
+    .._removed = source._removed;
+  return copy;
+}
+
+/// Splits [run] before the character [offset] of its content at
+/// [contentIndex], a [DocxText], and returns the new run: [run] keeps the
+/// content before, and a new run with [run]'s properties as they are now
+/// (as [copyRunWithText] copies them), its `w:r` attributes and the content
+/// from there on goes right after [run], in its paragraph or its hyperlink.
+/// The new run counts as read where [run] was, and is no copy
+/// (`isTemplateCopy`); [run] keeps its removed count.
+///
+/// An [offset] of 0 leaves [run] the content before the text, and one at
+/// the text's end leaves the new run the content after it; either may be
+/// empty. [offset] counts UTF-16 code units: split between characters.
+///
+/// It is one change: the text edit and the insertion are applied together
+/// through the paragraph's sink, so an undo gives one run back.
+///
+/// Throws [StateError] for a run in no paragraph or held by a [DocxField],
+/// [RangeError] for a [contentIndex] that is not one of [run]'s content or an
+/// [offset] outside 0 to the text's length, and [ArgumentError] for content
+/// that is not a [DocxText]; all before anything changes.
+DocxRun splitRunAt(DocxRun run, int contentIndex, int offset) {
+  final (DocxParagraph paragraph, DocxHyperlink? link, int index) = _holderOf(
+    run,
+  );
+  final List<DocxRunContent> content = run._content;
+  RangeError.checkValidIndex(contentIndex, content, 'contentIndex');
+  final DocxRunContent piece = content[contentIndex];
+  if (piece is! DocxText) {
+    throw ArgumentError.value(
+      contentIndex,
+      'contentIndex',
+      'must be the index of a DocxText',
+    );
+  }
+  final String text = piece.text;
+  RangeError.checkValueInInterval(offset, 0, text.length, 'offset');
+  final List<DocxRunContent> before = <DocxRunContent>[
+    ...content.sublist(0, contentIndex),
+    if (offset == text.length)
+      piece
+    else if (offset > 0)
+      DocxText(text.substring(0, offset)),
+  ];
+  final List<DocxRunContent> after = <DocxRunContent>[
+    if (offset == 0)
+      piece
+    else if (offset < text.length)
+      DocxText(text.substring(offset)),
+    ...content.sublist(contentIndex + 1),
+  ];
+  final DocxRun added = DocxRun._read(run._source, run._attributes, after);
+  propertySetOfRunProperties(
+    added._properties,
+  ).takeValuesSetOn(propertySetOfRunProperties(run._properties));
+  added._readIn = run._readIn;
+  editSinkOf(paragraph).atomically(() {
+    final DocxRunText previous = runTextOf(run);
+    run._apply(before, run._removed);
+    run._sink.runTextSet(run, previous);
+    if (link == null) {
+      paragraph.insertInline(index + 1, added);
+    } else {
+      link._edit(<DocxInline>[...link._inlines]..insert(index + 1, added));
+    }
+  });
+  return added;
 }
 
 /// The local names, in WordprocessingML, of the marks a filled field keeps

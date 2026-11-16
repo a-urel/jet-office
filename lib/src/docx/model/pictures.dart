@@ -127,6 +127,32 @@ DocxPicture readPicture(
   resolveImage,
 );
 
+/// A new picture that shows what [picture] shows, for a copy of its run: one
+/// read keeps its element, its size, name and description and finds its
+/// image as [picture] does; one the API built keeps its image, size, name and
+/// description. A save gives each its own drawing id.
+DocxPicture copyOfPicture(DocxPicture picture) {
+  final OpaqueXml? xml = picture._xml;
+  if (xml != null) {
+    return DocxPicture._read(
+      xml,
+      picture.widthPt,
+      picture.heightPt,
+      picture.name,
+      picture.description,
+      picture._embedId,
+      picture._resolveImage,
+    );
+  }
+  return DocxPicture._built(
+    picture._built!,
+    picture.widthPt!,
+    picture.heightPt!,
+    picture._givenName,
+    picture.description,
+  );
+}
+
 /// The element [picture] keeps, for the writer; `null` for a built picture.
 OpaqueXml? pictureXml(DocxPicture picture) => picture._xml;
 
