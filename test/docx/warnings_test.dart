@@ -370,12 +370,12 @@ void main() {
     });
 
     test(
-      'thirteen template codes',
+      'fourteen template codes',
       () => expect(
         DocxWarningCode.values.where(
           (DocxWarningCode c) => c.name.startsWith('template'),
         ),
-        hasLength(13),
+        hasLength(14),
       ),
     );
   });

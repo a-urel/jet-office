@@ -76,14 +76,14 @@ enum DocxWarningCode {
   /// written.
   templateSectionMalformed,
 
-  /// A list, a map or a picture (filled from T2) was given for a value tag;
+  /// A list, a map or a picture (filled from T3) was given for a value tag;
   /// the tag stays as written and [DocxWarning.detail] is the tag as
   /// written.
   templateValueNotText,
 
   /// Something that is not a picture was given for a picture placeholder; the
   /// placeholder picture stays and [DocxWarning.detail] is the tag as
-  /// written. Raised from T2.
+  /// written. Raised from T3.
   templateValueNotPicture,
 
   /// The number format engine warned about a format code on a tag;
@@ -117,12 +117,19 @@ enum DocxWarningCode {
 
   /// A comment, note reference or bookmark was kept in the first copy of a
   /// repeated section only; [DocxWarning.detail] is the section tag as
-  /// written. Raised from T3.
+  /// written. Raised from T2.
   templateRepeatDroppedAnnotation,
 
   /// Half of an annotation was removed with a section; [DocxWarning.detail]
-  /// is the section tag as written. Raised from T3.
+  /// is the section tag as written. Raised from T2.
   templateRemovalDroppedAnnotation,
+
+  /// A limit of the fill (the copies it may make, how deep sections may
+  /// nest, the tags it may fill) was reached: the section was left as
+  /// written, its content shown once in the scope around it, or a value tag
+  /// past the tag limit stays as written. [DocxWarning.detail] is the section
+  /// tag (or value tag) as written. Raised from T2.
+  templateLimitExceeded,
 }
 
 /// One data problem found while reading or writing a DOCX file, possibly
