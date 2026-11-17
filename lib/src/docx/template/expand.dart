@@ -19,6 +19,7 @@ import '../model/blocks.dart';
 import '../model/inlines.dart';
 import '../model/run_content.dart' show DocxText;
 import '../model/table_formatting.dart' show DocxVerticalMerge;
+import '../model/template_copies.dart' show isDroppedByCopy;
 import '../story_reader.dart' show readerOfCaptured;
 import 'paragraph_text.dart';
 import 'region.dart';
@@ -124,11 +125,7 @@ RepeatResult repeatSection(
         for (final List<DocxInline> c in copies) ...c,
       ]);
       return (
-        regions: <TemplateRegion>[
-          _inlineRegion(pair, at.list, content, openLocation),
-          for (final List<DocxInline> c in copies)
-            _inlineRegion(pair, at.list, c, openLocation),
-        ],
+        regions: _inlineRegions(pair, at.list, content, copies, openLocation),
         dropped: dropped,
         halves: halves,
       );
@@ -140,16 +137,18 @@ RepeatResult repeatSection(
       const bool halves = false;
       final List<DocxTableRow> original = table.rows.sublist(a, b + 1);
       final int length = original.length;
+      final List<DocxTableRow> copies = <DocxTableRow>[];
       for (int k = 1; k < count; k++) {
         final ({List<DocxTableRow> items, Set<String> dropped}) copy = copyRows(
           original,
           maxDepth: maxDepth,
         );
         dropped.addAll(copy.dropped);
-        for (int j = 0; j < length; j++) {
-          table.insertRow(b + 1 + (k - 1) * length + j, copy.items[j]);
-        }
+        copies.addAll(copy.items);
       }
+      // One edit for all copies: their place is found and the rows after
+      // them move once.
+      insertRowsAt(table, b + 1, copies);
       return (
         regions: <TemplateRegion>[
           for (int k = 0; k < count; k++)
@@ -176,6 +175,13 @@ RepeatResult repeatSection(
       );
       final List<DocxBlock> original = blocks.sublist(a + 1, b);
       final int length = original.length;
+      // A copy leaves out a bookmark or other mark that stands between
+      // blocks, so its blocks and their paths are the original's without
+      // those.
+      final List<String> copyPaths = <String>[
+        for (int i = 0; i < length; i++)
+          if (!_droppedBlock(original[i])) paths[i],
+      ];
       final List<DocxBlock> copies = <DocxBlock>[];
       for (int k = 1; k < count; k++) {
         final ({List<DocxBlock> items, Set<String> dropped}) copy = copyBlocks(
@@ -194,15 +200,17 @@ RepeatResult repeatSection(
         story,
         maxDepth,
       );
+      final int copyLength = copyPaths.length;
       return (
         regions: <TemplateRegion>[
-          for (int k = 0; k < count; k++)
+          BlockRegion(container, blocks, a, a + length, paths),
+          for (int k = 1; k < count; k++)
             BlockRegion(
               container,
               blocks,
-              a + k * length,
-              a + (k + 1) * length,
-              paths,
+              a + length + (k - 1) * copyLength,
+              a + length + k * copyLength,
+              copyPaths,
             ),
         ],
         dropped: dropped,
@@ -310,14 +318,17 @@ Object? firstUnitOf(TemplateRegion region) => switch (region) {
 
 /// [region] moved to where [first], its first unit as [firstUnitOf] gave it,
 /// is now, its length kept: the copies of a section are filled one by one,
-/// and filling one changes the length of what is before the next. [region]
-/// itself when it is empty or did not move.
-TemplateRegion rebased(TemplateRegion region, Object? first) {
+/// and filling one changes the length of what is before the next. [first] is
+/// looked for from [from] on (the start of the copy filled before it, so all
+/// copies together are searched once). [region] itself when it is empty or
+/// did not move.
+TemplateRegion rebased(TemplateRegion region, Object? first, {int from = 0}) {
   if (first == null) return region;
   switch (region) {
     case BlockRegion():
       final int at = region.blocks.indexWhere(
         (Object b) => identical(b, first),
+        from,
       );
       if (at < 0 || at == region.start) return region;
       return BlockRegion(
@@ -330,6 +341,7 @@ TemplateRegion rebased(TemplateRegion region, Object? first) {
     case RowRegion():
       final int at = region.table.rows.indexWhere(
         (Object r) => identical(r, first),
+        from,
       );
       if (at < 0 || at == region.start) return region;
       return RowRegion(
@@ -342,6 +354,7 @@ TemplateRegion rebased(TemplateRegion region, Object? first) {
     case InlineRegion():
       final int at = region.inlines.indexWhere(
         (Object i) => identical(i, first),
+        from,
       );
       if (at < 0 || at == region.start) return region;
       return InlineRegion(
@@ -353,6 +366,13 @@ TemplateRegion rebased(TemplateRegion region, Object? first) {
       );
   }
 }
+
+/// The index of [region]'s first unit in its list.
+int startOf(TemplateRegion region) => switch (region) {
+  BlockRegion() => region.start,
+  RowRegion() => region.start,
+  InlineRegion() => region.start,
+};
 
 /// The blocks of [container], a story or a table cell.
 List<DocxBlock> containerBlocks(Object container) => switch (container) {
@@ -418,6 +438,12 @@ bool _removeBlocks(
   _ensureParagraph(container);
   return marks.removeOrphans(story);
 }
+
+/// Whether a copy of blocks leaves [block] out: a mark kept as an opaque
+/// block (`copyDroppedNames`).
+bool _droppedBlock(DocxBlock block) =>
+    block is DocxOpaqueBlock &&
+    isDroppedByCopy(block.namespaceUri, block.localName);
 
 /// The table and the first and last row of a rows pair.
 (DocxTable, int, int) _rowsOf(SectionPair pair) {
@@ -609,19 +635,35 @@ void _removeRowTags(SectionPair pair) {
   }
 }
 
-TemplateRegion _inlineRegion(
+/// The regions of the original [content] and of each of [copies], which
+/// follow it in [list]: the original is looked for once, and each copy starts
+/// where the one before it ends, so many copies cost no search each.
+List<TemplateRegion> _inlineRegions(
   SectionPair pair,
   List<DocxInline> list,
   List<DocxInline> content,
+  List<List<DocxInline>> copies,
   String path,
 ) {
   final Object level = pair.open.level;
   final DocxParagraph paragraph = level is DocxParagraph
       ? level
       : paragraphOf(level as DocxHyperlink)!;
-  if (content.isEmpty) return InlineRegion(paragraph, list, 0, 0, path);
-  final int start = _indexIn(list, content.first);
-  return InlineRegion(paragraph, list, start, start + content.length, path);
+  if (content.isEmpty) {
+    return <TemplateRegion>[
+      for (int k = 0; k <= copies.length; k++)
+        InlineRegion(paragraph, list, 0, 0, path),
+    ];
+  }
+  // A copy may be shorter than the original: it leaves bookmarks out.
+  int start = _indexIn(list, content.first);
+  final List<TemplateRegion> out = <TemplateRegion>[];
+  for (int k = 0; k <= copies.length; k++) {
+    final int length = k == 0 ? content.length : copies[k - 1].length;
+    out.add(InlineRegion(paragraph, list, start, start + length, path));
+    start += length;
+  }
+  return out;
 }
 
 /// The kinds of paired marks, by their `w:` local name: the kind and

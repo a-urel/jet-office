@@ -298,6 +298,62 @@ void main() {
     expect(r.lines, <String>['1', '2', '3', 'son']);
   });
 
+  group('100,000 items repeat in linear time', () {
+    // Review of P3: each copy was inserted, and looked for, from the start of
+    // its list, so the default copy limit took about 25 s.
+    final List<Object?> items = List<Object?>.filled(100000, 1);
+    for (final (String form, String body) in <(String, String)>[
+      (
+        'rows',
+        '${_tbl(<String>[
+          _tr(<String>[_tc(_p('{{#a}}'))]),
+          _tr(<String>[_tc(_p('x{{/a}}'))]),
+          _tr(<String>[_tc(_p('total'))]),
+        ])}${_p('son')}',
+      ),
+      ('blocks', '${_p('{{#a}}')}${_p('x')}${_p('{{/a}}')}${_p('son')}'),
+      ('inline', '${_p('{{#a}}x{{/a}}')}${_p('son')}'),
+    ]) {
+      test(form, () {
+        final DocxDocument doc = DocxDocument.open(_bytes(body));
+        final Stopwatch watch = Stopwatch()..start();
+        final List<DocxWarning> warnings = fillTemplate(doc, <String, Object?>{
+          'a': items,
+        }, _turkish);
+        expect(watch.elapsed, lessThan(const Duration(seconds: 12)));
+        expect(warnings, isEmpty);
+        final List<DocxBlock> blocks = doc.body.blocks;
+        switch (form) {
+          case 'rows':
+            expect((blocks.first as DocxTable).rows, hasLength(200001));
+          case 'blocks':
+            expect(blocks, hasLength(100001));
+          default:
+            expect((blocks.first as DocxParagraph).text, 'x' * 100000);
+        }
+      }, timeout: const Timeout(Duration(minutes: 2)));
+    }
+  });
+
+  test('copies without a bookmark are filled where they are', () {
+    // A copy leaves the bookmark out, so it is shorter than the original:
+    // the next copy starts where it ends.
+    final r = _fill(
+      '${_p('{{#a}}')}<w:bookmarkStart w:id="3" w:name="b"/>${_p('x {{.}}')}'
+      '<w:bookmarkEnd w:id="3"/>${_p('{{/a}}')}'
+      '${templateParagraph('${templateRun('[{{#a}}')}'
+      '<w:bookmarkStart w:id="4" w:name="c"/>${templateRun('{{.}}')}'
+      '<w:bookmarkEnd w:id="4"/>${templateRun('{{/a}}]')}')}',
+      <String, Object?>{
+        'a': <Object?>[1, 2, 3],
+      },
+    );
+    expect(r.lines, <String>['x 1', 'x 2', 'x 3', '[123]']);
+    final DocxWarning w = r.warnings.single;
+    expect(w.code, DocxWarningCode.templateRepeatDroppedAnnotation);
+    expect(w.count, 2);
+  });
+
   test('outer tags and an inline section in one paragraph', () {
     final r = _fill(
       _p('Durum: {{#odendi}}Ödendi{{/odendi}} {{tarih:dd.mm.yyyy}} {{x}}'),

@@ -613,11 +613,15 @@ final class _Fill {
         final List<Object?> firsts = <Object?>[
           for (final TemplateRegion r in result.regions) firstUnitOf(r),
         ];
+        int from = 0;
         for (int k = 0; k < result.regions.length; k++) {
-          _region(story, rebased(result.regions[k], firsts[k]), <Object?>[
-            ...scopes,
-            d.items[k],
-          ], d.depth);
+          final TemplateRegion region = rebased(
+            result.regions[k],
+            firsts[k],
+            from: from,
+          );
+          from = startOf(region);
+          _region(story, region, <Object?>[...scopes, d.items[k]], d.depth);
         }
       case SectionEffect.once || SectionEffect.scope || null:
         final ShowResult shown = showSection(
