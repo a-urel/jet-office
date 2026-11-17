@@ -176,11 +176,20 @@ void main() {
       }
     });
 
-    test('an id of eleven digits is reserved', () {
+    test('an id of eleven digits is reserved, and a new id stays a 32-bit '
+        'one', () {
       final SaveIds saveIds = SaveIds(
-        _open(_package(_document(_paragraph(_bookmark('12345678901'))))),
+        _open(
+          _package(
+            _document(
+              _paragraph(_bookmark('12345678901')) + _paragraph(_bookmark('0')),
+            ),
+          ),
+        ),
       );
-      expect(saveIds.nextBookmarkId(), 12345678902);
+      // Past the largest 32-bit integer, the lowest id no part holds.
+      expect(saveIds.nextBookmarkId(), 1);
+      expect(saveIds.nextBookmarkId(), 2);
     });
 
     test('with none, drawings start at 1 and bookmarks at 0', () {

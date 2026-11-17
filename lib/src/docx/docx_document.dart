@@ -74,7 +74,7 @@ import 'section_property_codecs.dart'
     show AddedSectionReference, SectionReference, SectionReferenceType;
 import 'settings_part.dart';
 import 'story_part.dart';
-import 'story_writer.dart' show listSetOf;
+import 'story_writer.dart' show CopyIds, listSetOf;
 import 'styles_part.dart';
 import 'warnings.dart';
 
@@ -850,13 +850,15 @@ final class DocxDocument {
         main
           ..bookmarkId = null
           ..drawingId = null
-          ..relationshipId = null;
+          ..relationshipId = null
+          ..copyIds = null;
       }
       for (final StoryPart story in _storyParts) {
         story
           ..bookmarkId = null
           ..drawingId = null
-          ..relationshipId = null;
+          ..relationshipId = null
+          ..copyIds = null;
       }
     }
   }
@@ -908,17 +910,27 @@ final class DocxDocument {
       final Map<DocxPicture, int> drawingIds = Map<DocxPicture, int>.identity();
       int drawingId(DocxPicture picture) =>
           drawingIds.putIfAbsent(picture, () => _saveIds.nextDrawingId());
+      // A copy's new ids come from the same counters, so they never meet an
+      // id a built picture or bookmark takes (plan T2, Rulings 3 and 4).
+      final SaveIds ids = _saveIds;
+      final CopyIds copyIds = CopyIds(
+        ids.nextDrawingId,
+        ids.nextAnnotationId,
+        ids.nextContentControlId,
+      );
       main
         ..listDefined = listDefined
         ..styleDefined = styleDefined
         ..bookmarkId = bookmarkId
-        ..drawingId = drawingId;
+        ..drawingId = drawingId
+        ..copyIds = copyIds;
       for (final StoryPart story in _storyParts) {
         story
           ..listDefined = listDefined
           ..styleDefined = styleDefined
           ..bookmarkId = bookmarkId
-          ..drawingId = drawingId;
+          ..drawingId = drawingId
+          ..copyIds = copyIds;
       }
     }
     // A styles part the document lacked is added once it holds something

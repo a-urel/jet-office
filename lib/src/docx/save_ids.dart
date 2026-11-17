@@ -1,5 +1,7 @@
 /// The ids a save gives what the model built: drawing ids, bookmark ids and
-/// relationship ids (plan D5, Rulings 7, 11 and 12).
+/// relationship ids (plan D5, Rulings 7, 11 and 12), and the ids a save
+/// renews in the template fill's copies: drawing, annotation and content
+/// control ids (plan T2, Rulings 4 and 9).
 ///
 /// Not ported from Quds; written for jet_office.
 ///
@@ -37,8 +39,13 @@ final class SaveIds {
 
   final DocxPackage _package;
 
-  int? _drawing;
-  int? _bookmark;
+  _IdSpace? _drawing;
+
+  /// The annotation ids: bookmark ids and the `w:id` of comment ranges, move
+  /// ranges and revisions share them (plan T2, Ruling 4).
+  _IdSpace? _annotation;
+
+  _IdSpace? _contentControl;
   final Map<String, Set<String>> _references = <String, Set<String>>{};
 
   /// The relationships of each part [addRelationship] added to, as they were
@@ -61,19 +68,43 @@ final class SaveIds {
   };
 
   /// A new `wp:docPr/@id` (which a picture's `pic:cNvPr/@id` repeats): one
-  /// more than the highest in the original bytes of every story part and
-  /// than any this save gave before, and at least 1.
+  /// more than the highest `wp:docPr/@id` or `cNvPr/@id` (of any
+  /// DrawingML namespace) in the original bytes of every story part and
+  /// than any this save gave before, and at least 1; past the largest
+  /// `xsd:unsignedInt` the type allows, the lowest id from 1 that no part
+  /// holds and this save did not give.
   int nextDrawingId() {
     if (_drawing == null) _scanIds();
-    return _drawing = _drawing! + 1;
+    return _drawing!.next();
   }
 
-  /// A new bookmark id (`w:id` of `w:bookmarkStart` and its `w:bookmarkEnd`):
-  /// one more than the highest in the original bytes of every story part and
-  /// than any this save gave before, and at least 0.
-  int nextBookmarkId() {
-    if (_bookmark == null) _scanIds();
-    return _bookmark = _bookmark! + 1;
+  /// A new bookmark id (`w:id` of `w:bookmarkStart` and its `w:bookmarkEnd`),
+  /// as [nextAnnotationId]: bookmarks share one id space with comment ranges
+  /// and revisions (plan T2, Ruling 4).
+  int nextBookmarkId() => nextAnnotationId();
+
+  /// A new annotation id, for a built bookmark or for a revision of a copy
+  /// (plan T2, Rulings 4 and 9): one more than the highest `w:id` of every
+  /// bookmark mark, comment range mark, move range mark and revision element
+  /// ([revisionNames]) in the original bytes of every story part and than any
+  /// this save gave before, and at least 0; past 2147483647, the largest
+  /// 32-bit integer, which Word reads, the lowest id from 0 that no part
+  /// holds and this save did not give.
+  int nextAnnotationId() {
+    if (_annotation == null) _scanIds();
+    return _annotation!.next();
+  }
+
+  /// A new content control id (`w:sdtPr/w:id/@w:val`), for a copy (plan T2,
+  /// Ruling 9): one more than the highest `w:val` of a `w:id` element in the
+  /// original bytes of every story part and than any this save gave before,
+  /// and at least 1; past 2147483647 (Word writes random 32-bit ids), the
+  /// lowest id from 1 that no part holds and this save did not give. A
+  /// negative id, which Word also writes, is below it anyway; `w:id` is an
+  /// element of `w:sdtPr` alone, so every one counts.
+  int nextContentControlId() {
+    if (_contentControl == null) _scanIds();
+    return _contentControl!.next();
   }
 
   /// Every relationship id the original bytes of [part] name: the value of
@@ -139,10 +170,12 @@ final class SaveIds {
     _marks.clear();
   }
 
-  /// Finds the highest drawing and bookmark ids of every story part.
+  /// Finds the highest drawing, annotation and content control ids of every
+  /// story part.
   void _scanIds() {
-    int drawing = 0;
-    int bookmark = -1;
+    final _IdSpace drawing = _IdSpace(1, _maxUnsignedInt);
+    final _IdSpace annotation = _IdSpace(0, _maxInt32);
+    final _IdSpace contentControl = _IdSpace(1, _maxInt32);
     final OpcPackage opc = _package.package;
     final String main = _package.mainPart;
     // D4 accepts a header or footer part of any content type when a
@@ -166,20 +199,27 @@ final class SaveIds {
       _scan(part, (XmlPullReader r) {
         final String ns = r.namespaceUri;
         final String name = r.localName;
-        if (ns == Ns.wp && name == 'docPr') {
+        // A picture of a group repeats no drawing's id but has one of its
+        // own (`pic:cNvPr`), which a copy's new ids must not take either.
+        if ((ns == Ns.wp && name == 'docPr') || name == 'cNvPr') {
           final int? id = parseOfficeId(r.getAttribute('id', namespaceUri: ''));
-          if (id != null && id > drawing) drawing = id;
-        } else if (ns == Ns.w &&
-            (name == 'bookmarkStart' || name == 'bookmarkEnd')) {
+          if (id != null) drawing.take(id);
+        } else if (ns == Ns.w && annotationNames.contains(name)) {
           final int? id = parseOfficeId(
             r.getAttribute('id', namespaceUri: Ns.w),
           );
-          if (id != null && id > bookmark) bookmark = id;
+          if (id != null) annotation.take(id);
+        } else if (ns == Ns.w && name == 'id') {
+          final int? id = parseOfficeId(
+            r.getAttribute('val', namespaceUri: Ns.w),
+          );
+          if (id != null) contentControl.take(id);
         }
       });
     }
     _drawing ??= drawing;
-    _bookmark ??= bookmark;
+    _annotation ??= annotation;
+    _contentControl ??= contentControl;
   }
 
   /// Calls [onStart] on every start element of the original bytes of
@@ -204,6 +244,98 @@ final class SaveIds {
     }
   }
 }
+
+/// The largest 32-bit integer, the largest annotation or content control id
+/// Word reads.
+const int _maxInt32 = 2147483647;
+
+/// The largest `xsd:unsignedInt`, the type of `wp:docPr/@id`.
+const int _maxUnsignedInt = 4294967295;
+
+/// The ids of one kind: those the parts hold and this save gave, and the
+/// highest of them.
+final class _IdSpace {
+  _IdSpace(this._lowest, this._max) : _highest = _lowest - 1;
+
+  /// The lowest id of the kind.
+  final int _lowest;
+
+  /// The largest id the kind's type allows.
+  final int _max;
+
+  int _highest;
+
+  final Set<int> _used = <int>{};
+
+  /// Where the search for a free id below [_max] goes on from.
+  int? _cursor;
+
+  /// Records [id] as held.
+  void take(int id) {
+    _used.add(id);
+    if (id > _highest) _highest = id;
+  }
+
+  /// A new id: one more than the highest, or the lowest free one once that
+  /// would pass [_max].
+  int next() {
+    if (_highest < _max) {
+      take(_highest + 1);
+      return _highest;
+    }
+    int id = _cursor ?? _lowest;
+    while (_used.contains(id)) {
+      id++;
+    }
+    _cursor = id + 1;
+    _used.add(id);
+    return id;
+  }
+}
+
+/// The local names, in WordprocessingML, of the revision elements whose
+/// `w:id` a save renews in a copy (plan T2, Ruling 9).
+const Set<String> revisionNames = <String>{
+  'ins',
+  'del',
+  'moveFrom',
+  'moveTo',
+  'rPrChange',
+  'pPrChange',
+  'sectPrChange',
+  'tblPrChange',
+  'tblGridChange',
+  'trPrChange',
+  'tcPrChange',
+  'cellIns',
+  'cellDel',
+  'cellMerge',
+  'numberingChange',
+};
+
+/// The local names, in WordprocessingML, of the elements whose `w:id` is in
+/// the one annotation id space ([SaveIds.nextAnnotationId], plan T2,
+/// Ruling 4): bookmark, comment range, move range and custom XML range marks,
+/// and the [revisionNames].
+const Set<String> annotationNames = <String>{
+  'bookmarkStart',
+  'bookmarkEnd',
+  'commentRangeStart',
+  'commentRangeEnd',
+  'moveFromRangeStart',
+  'moveFromRangeEnd',
+  'moveToRangeStart',
+  'moveToRangeEnd',
+  'customXmlInsRangeStart',
+  'customXmlInsRangeEnd',
+  'customXmlDelRangeStart',
+  'customXmlDelRangeEnd',
+  'customXmlMoveFromRangeStart',
+  'customXmlMoveFromRangeEnd',
+  'customXmlMoveToRangeStart',
+  'customXmlMoveToRangeEnd',
+  ...revisionNames,
+};
 
 /// The largest id the model reads or counts: 15 decimal digits, which keeps
 /// every value exact on the web. Reading a bookmark's id and reserving ids at

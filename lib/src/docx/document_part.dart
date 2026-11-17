@@ -160,6 +160,11 @@ final class DocumentPart implements PartContent {
   /// The save sets it before it writes the part.
   String? Function(Object built)? relationshipId;
 
+  /// The new ids this save gives what the template fill's copies hold
+  /// (plan T2, Ruling 9); `null` outside a save. The save sets it before it
+  /// writes the part.
+  CopyIds? copyIds;
+
   /// The warnings the last [encode] raised; empty before the first.
   ///
   /// Each [encode] starts a new collector, so encoding twice reports each
@@ -231,6 +236,7 @@ final class DocumentPart implements PartContent {
         bookmarkId: bookmarkId,
         drawingId: drawingId,
         relationshipId: relationshipId,
+        copyIds: copyIds,
       ),
       this,
     );

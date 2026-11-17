@@ -46,6 +46,7 @@ import 'sections.dart';
 import 'styles.dart' show DocxStyleType;
 import 'table_formatting.dart';
 import 'table_properties.dart';
+import 'template_copies.dart';
 
 /// How deep tables may nest in a part that is read: a table in a cell of a
 /// table is at nesting 2.
@@ -1217,8 +1218,16 @@ final class DocxTableCell {
 
   /// A cell of [_blocks], which are in it from now on. A block already in a
   /// container throws [StateError].
-  DocxTableCell._read(this._source, this._attributes, this._blocks)
-    : _readUnclosed = readUnclosedOf(_blocks) {
+  ///
+  /// With [closes] the cell is written with a closing paragraph whenever its
+  /// blocks need one, as a cell edited since it was read is: a copy of such a
+  /// cell.
+  DocxTableCell._read(
+    this._source,
+    this._attributes,
+    this._blocks, {
+    bool closes = false,
+  }) : _readUnclosed = closes ? null : readUnclosedOf(_blocks) {
     for (final DocxBlock block in _blocks) {
       if (block._container != null) {
         throw StateError('The block is already in a container.');
@@ -1525,6 +1534,180 @@ DocxTableCell readTableCell({
   required List<KeptAttribute> attributes,
   required List<DocxBlock> blocks,
 }) => DocxTableCell._read(properties, attributes, blocks);
+
+/// Copies of [rows], for a section of the template fill that repeats rows
+/// (plan T2, Ruling 10): new rows in no table, each marked as a copy
+/// (`isTemplateCopy`), so a save gives what they hold new ids; [rows] are
+/// unchanged.
+///
+/// A row keeps its `w:trPr` as read and the values set on it since, its
+/// attributes and its other children; each cell likewise, with copies of its
+/// blocks as [copyBlocks] makes them. What a copy leaves out, and which
+/// paragraph it refuses, is as [copyBlocks] says; The result's `dropped` names
+/// what was left out.
+CopyResult<DocxTableRow> copyRows(
+  List<DocxTableRow> rows, {
+  required int maxDepth,
+}) {
+  final Set<String> dropped = <String>{};
+  final List<DocxTableRow> items = <DocxTableRow>[
+    for (final DocxTableRow row in rows) _copyRow(row, dropped, maxDepth),
+  ];
+  items.forEach(markTemplateCopy);
+  return (items: items, dropped: dropped);
+}
+
+/// Copies of [blocks], for a section of the template fill that repeats
+/// blocks (plan T2, Ruling 10): new blocks in no container, each marked as a
+/// copy (`isTemplateCopy`), so a save gives what they hold new ids; [blocks]
+/// are unchanged.
+///
+/// A paragraph keeps its `w:pPr` as read and the values set on it since, its
+/// attributes, and copies of its inlines as `copyInlines` makes them; it
+/// counts as read where its source was. A table keeps its properties, its
+/// grid as it is now and its other children, and copies its rows as
+/// [copyRows] does, so a nested table is copied too. A copy leaves out every
+/// element of `copyDroppedNames`: an opaque block, or a kept child of a
+/// table or a row, that is one, and those inside a kept element
+/// (`withoutAnnotations`), besides what `copyInlines` leaves out of the
+/// inlines. The result's `dropped` names what was left out. Kept elements are
+/// read again, nested at most [maxDepth] deep: give the document's
+/// `DocxReadLimits.maxDepth`; a deeper one throws a `DocxReadException`.
+///
+/// A paragraph with a section break is never copied (plan T2, Ruling 14):
+/// [ArgumentError], before anything is copied.
+CopyResult<DocxBlock> copyBlocks(
+  List<DocxBlock> blocks, {
+  required int maxDepth,
+}) {
+  final Set<String> dropped = <String>{};
+  final List<DocxBlock> items = _copyBlockList(blocks, dropped, maxDepth);
+  items.forEach(markTemplateCopy);
+  return (items: items, dropped: dropped);
+}
+
+List<DocxBlock> _copyBlockList(
+  List<DocxBlock> blocks,
+  Set<String> dropped,
+  int maxDepth,
+) {
+  for (final DocxBlock block in blocks) {
+    visitBlocks(block, (DocxBlock b) {
+      if (b is DocxParagraph && b._section != null) {
+        throw ArgumentError.value(
+          blocks,
+          'blocks',
+          'must not hold a paragraph with a section break',
+        );
+      }
+    });
+  }
+  return <DocxBlock>[
+    for (final DocxBlock block in blocks) ?_copyBlock(block, dropped, maxDepth),
+  ];
+}
+
+DocxBlock? _copyBlock(DocxBlock block, Set<String> dropped, int maxDepth) {
+  switch (block) {
+    case DocxParagraph():
+      final DocxParagraph copy = DocxParagraph._read(
+        block._source,
+        block._attributes,
+      );
+      // A break read and taken away since stays away.
+      if (copy._section != null) setParagraphSection(copy, null);
+      propertySetOfParagraphProperties(
+        copy._properties,
+      ).takeValuesSetOn(propertySetOfParagraphProperties(block._properties));
+      for (final DocxInline inline in copiedInlinesOf(
+        block._inlines,
+        dropped,
+        maxDepth,
+      )) {
+        copy._inlines.add(inline);
+        setParagraphOf(inline, copy);
+      }
+      copy._readIn = block._readIn;
+      return copy;
+    case DocxTable():
+      final DocxTable copy = DocxTable._read(
+        block._source,
+        block._attributes,
+        block._gridRead,
+        _copyChildren(block._children, dropped, maxDepth),
+        isNew: block._isNew,
+      );
+      copy._gridColumnsPt = block._gridColumnsPt;
+      propertySetOfTableProperties(
+        copy._properties,
+      ).takeValuesSetOn(propertySetOfTableProperties(block._properties));
+      copy._readIn = block._readIn;
+      return copy;
+    case DocxOpaqueBlock():
+      final OpaqueXml? xml = _withoutAnnotations(block._xml, dropped, maxDepth);
+      return xml == null ? null : DocxOpaqueBlock._(xml);
+  }
+}
+
+/// [xml] as a copy keeps it, or `null` when a copy leaves it out; what it
+/// leaves out is added to [dropped].
+OpaqueXml? _withoutAnnotations(
+  OpaqueXml xml,
+  Set<String> dropped,
+  int maxDepth,
+) {
+  if (isDroppedByCopy(xml.namespaceUri, xml.localName)) {
+    dropped.add(xml.localName);
+    return null;
+  }
+  final (xml: OpaqueXml kept, dropped: Set<String> inside) = withoutAnnotations(
+    xml,
+    maxDepth,
+  );
+  dropped.addAll(inside);
+  return kept;
+}
+
+/// Copies of the children of a `w:tbl` or a `w:tr`: rows and cells copied,
+/// kept elements as a copy keeps them, properties and the grid shared.
+List<Object> _copyChildren(
+  List<Object> children,
+  Set<String> dropped,
+  int maxDepth,
+) => <Object>[
+  for (final Object child in children)
+    ?switch (child) {
+      final DocxTableRow row => _copyRow(row, dropped, maxDepth),
+      final DocxTableCell cell => _copyCell(cell, dropped, maxDepth),
+      final OpaqueXml xml => _withoutAnnotations(xml, dropped, maxDepth),
+      _ => child,
+    },
+];
+
+DocxTableRow _copyRow(DocxTableRow row, Set<String> dropped, int maxDepth) {
+  final DocxTableRow copy = DocxTableRow._read(
+    row._source,
+    row._attributes,
+    _copyChildren(row._children, dropped, maxDepth),
+  );
+  propertySetOfTableRowProperties(
+    copy._properties,
+  ).takeValuesSetOn(propertySetOfTableRowProperties(row._properties));
+  return copy;
+}
+
+DocxTableCell _copyCell(DocxTableCell cell, Set<String> dropped, int maxDepth) {
+  final DocxTableCell copy = DocxTableCell._read(
+    cell._source,
+    cell._attributes,
+    _copyBlockList(cell._blocks, dropped, maxDepth),
+    closes: cellNeedsClosingParagraph(cell),
+  );
+  propertySetOfTableCellProperties(
+    copy._properties,
+  ).takeValuesSetOn(propertySetOfTableCellProperties(cell._properties));
+  return copy;
+}
 
 /// The elements of type [T] among [children], in order.
 List<T> _ofType<T>(List<Object> children) => children.whereType<T>().toList();

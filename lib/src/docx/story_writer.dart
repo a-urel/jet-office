@@ -11,11 +11,21 @@
 /// ([DocxWarningCode.numberingNotFound]), a style it does not define
 /// ([DocxWarningCode.styleNotFound]) and the characters a run lost when its
 /// text was set ([DocxWarningCode.invalidCharactersRemoved]).
+///
+/// A unit the template fill copied (`isTemplateCopy`: an inline, a row or a
+/// block) is written as any other, then renewed (plan T2, Ruling 9): its
+/// drawings get new `wp:docPr` ids (and their `pic:cNvPr` the same), its
+/// revisions new `w:id`s, its content controls new `w:sdtPr/w:id`s, and its
+/// elements lose `w14:paraId`, `w14:textId`, `wp14:anchorId` and
+/// `wp14:editId`. Within one unit one old id gives one new id; a copy inside
+/// a copy is renewed by its own mark alone. A unit that is no copy is
+/// written exactly as before.
 library;
 
 import '../opc/ooxml.dart' show Ns;
 import '../opc/opaque_xml.dart';
-import '../xml/xml_escape.dart' show scrubXmlText;
+import '../xml/xml_escape.dart' show escapeXmlAttribute, scrubXmlText;
+import '../xml/xml_pull_reader.dart';
 import '../xml/xml_writer.dart';
 import 'drawing.dart' show writeInlineDrawing;
 import 'model/blocks.dart';
@@ -24,7 +34,9 @@ import 'model/inlines.dart';
 import 'model/property_set.dart';
 import 'model/run_content.dart';
 import 'model/styles.dart' show DocxStyleType;
+import 'model/template_copies.dart' show isTemplateCopy, templateCopiesMade;
 import 'properties.dart' show PropertyContainer;
+import 'save_ids.dart' show parseOfficeId, revisionNames;
 import 'warnings.dart';
 
 /// The list [paragraph] was put in through the API: the value of a
@@ -64,6 +76,23 @@ void checkTablesHaveRows(List<DocxBlock> blocks, String path) {
   }
 }
 
+/// The new ids a save gives what the template fill's copies hold (plan T2,
+/// Ruling 9): a `wp:docPr` id, an annotation id for a revision and a content
+/// control id, each new on every call.
+final class CopyIds {
+  /// Ids from [drawing], [annotation] and [contentControl].
+  CopyIds(this.drawing, this.annotation, this.contentControl);
+
+  /// A new `wp:docPr` id.
+  final int Function() drawing;
+
+  /// A new `w:id` of a revision, in the id space bookmarks share.
+  final int Function() annotation;
+
+  /// A new `w:sdtPr/w:id/@w:val`.
+  final int Function() contentControl;
+}
+
 /// One write of the blocks of a story, inside the open root of its part.
 ///
 /// A story is a part's run of blocks: the body of the main part, and later
@@ -75,8 +104,9 @@ final class StoryWriter {
   /// as [_p]), the root's bindings [scope], and warnings for the part
   /// [_partName], asking [_listDefined] and [_styleDefined] about what the
   /// API set, [bookmarkId] for the id of a built bookmark, [drawingId] for
-  /// the `wp:docPr` id of a built picture and [relationshipId] for the
-  /// relationship of a built hyperlink or picture.
+  /// the `wp:docPr` id of a built picture, [relationshipId] for the
+  /// relationship of a built hyperlink or picture and [copyIds] for the ids
+  /// of the template fill's copies.
   StoryWriter(
     this._w,
     this._p,
@@ -89,11 +119,14 @@ final class StoryWriter {
     int Function(DocxBookmarkStart start)? bookmarkId,
     int Function(DocxPicture picture)? drawingId,
     String? Function(Object built)? relationshipId,
+    CopyIds? copyIds,
   }) : _bookmarkId = bookmarkId,
        _drawingId = drawingId,
-       _relationshipId = relationshipId;
+       _relationshipId = relationshipId,
+       _copyIds = copyIds;
 
-  final XmlWriter _w;
+  /// The writer of the part, or a scratch writer while a copy is written.
+  XmlWriter _w;
 
   /// The WordprocessingML prefix with its colon, such as `w:`.
   final String _p;
@@ -130,6 +163,24 @@ final class StoryWriter {
 
   final Map<DocxPicture, int> _ownDrawingIds = Map<DocxPicture, int>.identity();
 
+  /// The new ids of this save for the template fill's copies; `null` outside
+  /// a save, when the writer numbers each kind itself, from one more than the
+  /// highest id of that kind it has met in a copy.
+  final CopyIds? _copyIds;
+
+  /// Whether any copy exists yet: without one, no unit is looked up.
+  final bool _copies = templateCopiesMade;
+
+  /// The highest drawing, annotation and content control ids the writer met
+  /// in a copy or gave one, when it numbers them itself.
+  int _ownDrawing = 0;
+  int _ownAnnotation = -1;
+  int _ownContentControl = 0;
+
+  /// The part's writer while a copy is written to a scratch one; `null`
+  /// outside a copy.
+  XmlWriter? _outsideCopy;
+
   /// The writer of the part's XML, for what surrounds the blocks.
   XmlWriter get writer => _w;
 
@@ -143,11 +194,28 @@ final class StoryWriter {
     for (final DocxBlock block in blocks) {
       switch (block) {
         case DocxParagraph():
-          _paragraph(block, '$path/p[${paragraphs++}]');
+          final String at = '$path/p[${paragraphs++}]';
+          if (_copies) {
+            _unit(block, () => _paragraph(block, at));
+          } else {
+            _paragraph(block, at);
+          }
         case DocxTable():
-          _table(block, '$path/tbl[${tables++}]');
+          final String at = '$path/tbl[${tables++}]';
+          if (_copies) {
+            _unit(block, () => _table(block, at));
+          } else {
+            _table(block, at);
+          }
         case DocxOpaqueBlock():
-          opaqueBlockXml(block).writeTo(_w, declaredAbove: scope);
+          if (_copies) {
+            _unit(
+              block,
+              () => opaqueBlockXml(block).writeTo(_w, declaredAbove: scope),
+            );
+          } else {
+            opaqueBlockXml(block).writeTo(_w, declaredAbove: scope);
+          }
       }
     }
   }
@@ -178,7 +246,12 @@ final class StoryWriter {
           _newGrid(widths!);
           gridPending = false;
         }
-        _row(child, '$path/tr[${rows++}]');
+        final String at = '$path/tr[${rows++}]';
+        if (_copies) {
+          _unit(child, () => _row(child, at));
+        } else {
+          _row(child, at);
+        }
       } else if (child is PropertyContainer) {
         writePropertySet(tblPr, 'tblPr');
       } else if (child is TableGrid) {
@@ -320,12 +393,13 @@ final class StoryWriter {
     // hyperlink writes its start tag as read around its inlines, whose runs
     // count among the paragraph's in file order.
     int runs = 0;
-    void write(DocxInline inline) {
+    late final void Function(DocxInline inline) write;
+    void writeInline(DocxInline inline) {
       switch (inline) {
         case DocxRun():
           _run(inline, '$path/r[${runs++}]');
         case DocxOpaqueInline():
-          opaqueInlineXml(inline).writeTo(w, declaredAbove: scope);
+          opaqueInlineXml(inline).writeTo(_w, declaredAbove: scope);
         case DocxBookmarkStart():
           _bookmarkStart(inline, path);
         case DocxBookmarkEnd():
@@ -336,20 +410,23 @@ final class StoryWriter {
           if (hyperlinkIsBuilt(inline)) {
             _builtHyperlinkStart(inline);
             inline.inlines.forEach(write);
-            w.end();
+            _w.end();
             break;
           }
           final List<KeptAttribute> attributes = hyperlinkAttributesOf(inline);
-          w.start('${_p}hyperlink');
-          writeKeptAttributes(w, attributes, declaredAbove: scope);
+          _w.start('${_p}hyperlink');
+          writeKeptAttributes(_w, attributes, declaredAbove: scope);
           final Map<String, String> around = scope;
           scope = scopeInside(attributes, around);
           inline.inlines.forEach(write);
           scope = around;
-          w.end();
+          _w.end();
       }
     }
 
+    write = _copies
+        ? (DocxInline inline) => _unit(inline, () => writeInline(inline))
+        : writeInline;
     p.inlines.forEach(write);
     scope = outer;
     w.end();
@@ -555,6 +632,202 @@ final class StoryWriter {
   int _ownDrawingId(DocxPicture picture) =>
       _ownDrawingIds.putIfAbsent(picture, () => _ownDrawingIds.length + 1);
 
+  /// Writes [unit] by [write]: as it is when it is no copy, else renewed as
+  /// the library comment says. A copy inside a copy is written between two
+  /// processing instructions ([_copyStart], [_copyEnd]) that the renewal of
+  /// the outer copy reads as its own mark and takes out.
+  void _unit(Object unit, void Function() write) {
+    if (!isTemplateCopy(unit)) {
+      write();
+      return;
+    }
+    if (_outsideCopy != null) {
+      _w.raw('<?$_copyStart?>');
+      write();
+      _w.raw('<?$_copyEnd?>');
+      return;
+    }
+    final XmlWriter outer = _w;
+    final Map<String, String> around = scope;
+    final StringBuffer scratch = StringBuffer();
+    _outsideCopy = outer;
+    _w = XmlWriter(scratch);
+    try {
+      write();
+    } finally {
+      _w = outer;
+      _outsideCopy = null;
+    }
+    outer.raw(_renewed(scratch.toString(), around));
+  }
+
+  /// [xml], a copy written with the bindings [scope] in scope, with its ids
+  /// renewed and the attributes Word regenerates taken out.
+  String _renewed(String xml, Map<String, String> scope) {
+    final CopyIds ids = _copyIds ?? _ownIds(xml, scope);
+    final XmlPullReader r = _readerOf(xml, scope);
+    final StringBuffer out = StringBuffer();
+    int copied = r.eventEnd;
+    void flush(int to) {
+      if (to > copied) out.write(r.sourceText(copied, to));
+    }
+
+    final List<_CopyMaps> maps = <_CopyMaps>[_CopyMaps()];
+    // The namespace and local name of each open element, innermost last.
+    final List<(String, String)> open = <(String, String)>[];
+    int? drawing;
+    // The old drawing ids of each open mc:AlternateContent, innermost last:
+    // its Choice and its Fallback show one drawing, so they share its new id.
+    // Elsewhere every drawing gets an id of its own.
+    final List<Map<String, int>> alternates = <Map<String, int>>[];
+    int newDrawing(String kind, String old) => alternates.isEmpty
+        ? ids.drawing()
+        : alternates.last.putIfAbsent('$kind $old', ids.drawing);
+    while (r.next()) {
+      switch (r.eventType) {
+        case XmlEventType.processingInstruction:
+          final String target = r.localName;
+          if (target != _copyStart && target != _copyEnd) break;
+          flush(r.eventStart);
+          copied = r.eventEnd;
+          if (target == _copyStart) {
+            maps.add(_CopyMaps());
+          } else if (maps.length > 1) {
+            // A kept element of a file may hold such an instruction too; it
+            // can never take the copy's own maps.
+            maps.removeLast();
+          }
+        case XmlEventType.startElement:
+          final String ns = r.namespaceUri;
+          final String name = r.localName;
+          final (String, String)? parent = open.lastOrNull;
+          if (!r.isEmptyElement) open.add((ns, name));
+          final _CopyMaps m = maps.last;
+          String? Function(int i)? renew;
+          if (ns == Ns.mc && name == 'AlternateContent' && !r.isEmptyElement) {
+            alternates.add(<String, int>{});
+          }
+          if (ns == Ns.wp && name == 'docPr') {
+            renew = (int i) {
+              if (r.attributeNamespace(i) != '' ||
+                  r.attributeLocalName(i) != 'id') {
+                return null;
+              }
+              final int id = newDrawing('docPr', r.attributeValue(i));
+              drawing = id;
+              return '$id';
+            };
+          } else if (ns == _pic && name == 'cNvPr') {
+            // A picture of a group is a shape of its own; the one picture of
+            // a drawing repeats the drawing's id.
+            final bool inGroup = open.any(
+              ((String, String) e) => e.$2 == 'wgp' || e.$2 == 'grpSp',
+            );
+            final int? own = inGroup ? null : drawing;
+            renew = (int i) =>
+                r.attributeNamespace(i) == '' && r.attributeLocalName(i) == 'id'
+                ? '${own ?? newDrawing('cNvPr', r.attributeValue(i))}'
+                : null;
+          } else if (ns == Ns.w && revisionNames.contains(name)) {
+            renew = (int i) =>
+                r.attributeNamespace(i) == Ns.w &&
+                    r.attributeLocalName(i) == 'id'
+                ? '${m.annotation.putIfAbsent(r.attributeValue(i), ids.annotation)}'
+                : null;
+          } else if (ns == Ns.w && name == 'id' && parent == (Ns.w, 'sdtPr')) {
+            renew = (int i) =>
+                r.attributeNamespace(i) == Ns.w &&
+                    r.attributeLocalName(i) == 'val'
+                ? '${m.contentControl.putIfAbsent(r.attributeValue(i), ids.contentControl)}'
+                : null;
+          }
+          final String? tag = _renewedStartTag(r, renew);
+          if (tag != null) {
+            flush(r.eventStart);
+            out.write(tag);
+            copied = r.eventEnd;
+          }
+        case XmlEventType.endElement:
+          if (r.depth == 0) {
+            flush(r.eventStart);
+            return out.toString();
+          }
+          // An empty element's end is its `/>`, and it was never open.
+          if (r.eventEnd - r.eventStart == 2) break;
+          final (String ns, String name) = open.removeLast();
+          if (ns == Ns.wp && (name == 'inline' || name == 'anchor')) {
+            drawing = null;
+          } else if (ns == Ns.mc && name == 'AlternateContent') {
+            alternates.removeLast();
+          }
+        default:
+          break;
+      }
+    }
+    flush(r.eventEnd);
+    return out.toString();
+  }
+
+  /// The ids of a copy when the writer numbers them itself: one more than the
+  /// highest it met in a copy, [xml] included, or gave one.
+  CopyIds _ownIds(String xml, Map<String, String> scope) {
+    final XmlPullReader r = _readerOf(xml, scope);
+    final List<(String, String)> open = <(String, String)>[];
+    while (r.next()) {
+      if (r.eventType == XmlEventType.endElement) {
+        // An empty element's end is its `/>`, and it was never open.
+        if (r.eventEnd - r.eventStart != 2 && open.isNotEmpty) {
+          open.removeLast();
+        }
+        continue;
+      }
+      if (r.eventType != XmlEventType.startElement) continue;
+      final String ns = r.namespaceUri;
+      final String name = r.localName;
+      final (String, String)? parent = open.lastOrNull;
+      if (!r.isEmptyElement) open.add((ns, name));
+      int? id;
+      if ((ns == Ns.wp && name == 'docPr') || name == 'cNvPr') {
+        id = parseOfficeId(r.getAttribute('id', namespaceUri: ''));
+        if (id != null && id > _ownDrawing) _ownDrawing = id;
+      } else if (ns == Ns.w && revisionNames.contains(name)) {
+        id = parseOfficeId(r.getAttribute('id', namespaceUri: Ns.w));
+        if (id != null && id > _ownAnnotation) _ownAnnotation = id;
+      } else if (ns == Ns.w && name == 'id' && parent == (Ns.w, 'sdtPr')) {
+        id = parseOfficeId(r.getAttribute('val', namespaceUri: Ns.w));
+        if (id != null && id > _ownContentControl) _ownContentControl = id;
+      }
+    }
+    return CopyIds(
+      () => ++_ownDrawing,
+      () => ++_ownAnnotation,
+      () => ++_ownContentControl,
+    );
+  }
+
+  /// [xml] inside a root that declares [scope], on that root's start.
+  static XmlPullReader _readerOf(String xml, Map<String, String> scope) {
+    final StringBuffer source = StringBuffer('<r');
+    scope.forEach((String prefix, String uri) {
+      source
+        ..write(prefix.isEmpty ? ' xmlns="' : ' xmlns:$prefix="')
+        ..write(escapeXmlAttribute(scrubXmlText(uri).text))
+        ..write('"');
+    });
+    source
+      ..write('>')
+      ..write(xml)
+      ..write('</r>');
+    // The model wrote it, so it nests as deep as the model holds, which the
+    // read limits and the table nesting bound already.
+    final XmlPullReader r = XmlPullReader(
+      source.toString(),
+      maxDepth: _copyMaxDepth,
+    );
+    r.next();
+    return r;
+  }
+
   /// Writes `w:<localName>` with the attributes [c] kept and no content.
   void _empty(String localName, DocxRunContent c) {
     _w.start('$_p$localName');
@@ -583,3 +856,67 @@ bool _needsPreserve(String text) {
 /// Whether [unit] is XML whitespace.
 bool _isSpace(int unit) =>
     unit == 0x20 || unit == 0x09 || unit == 0x0A || unit == 0x0D;
+
+/// The processing instructions around a copy written inside a copy.
+const String _copyStart = 'jet-office-copy';
+const String _copyEnd = 'jet-office-copy-end';
+
+/// How deep the writer reads a copy back: far beyond what a part may nest
+/// when it is read, and what the API may build.
+const int _copyMaxDepth = 1 << 16;
+
+/// The DrawingML picture namespace, of `pic:cNvPr`.
+const String _pic = 'http://schemas.openxmlformats.org/drawingml/2006/picture';
+
+/// The Word 2010 drawing namespace, of `wp14:anchorId` and `wp14:editId`.
+const String _wp14 =
+    'http://schemas.microsoft.com/office/word/2010/wordprocessingDrawing';
+
+/// The old revision and content control ids of one copy and the new ids they
+/// became: within one copy one old id gives one new id.
+final class _CopyMaps {
+  final Map<String, int> annotation = <String, int>{};
+  final Map<String, int> contentControl = <String, int>{};
+}
+
+/// Whether the attribute [i] of the element [r] is on is one Word
+/// regenerates and a copy leaves out: `w14:paraId`, `w14:textId`,
+/// `wp14:anchorId`, `wp14:editId`.
+bool _regenerated(XmlPullReader r, int i) {
+  final String ns = r.attributeNamespace(i);
+  final String name = r.attributeLocalName(i);
+  return (ns == Ns.w14 && (name == 'paraId' || name == 'textId')) ||
+      (ns == _wp14 && (name == 'anchorId' || name == 'editId'));
+}
+
+/// The start tag of the element [r] is on, with each attribute [renew] gives
+/// a value for renewed and the [_regenerated] ones left out; `null` when
+/// nothing changes, so the tag is copied as written.
+String? _renewedStartTag(XmlPullReader r, String? Function(int i)? renew) {
+  bool changed = false;
+  final List<String?> values = List<String?>.filled(r.attributeCount, null);
+  for (int i = 0; i < r.attributeCount; i++) {
+    if (_regenerated(r, i)) {
+      changed = true;
+      continue;
+    }
+    final String value = r.attributeValue(i);
+    final String? renewed = renew?.call(i);
+    if (renewed != null && renewed != value) changed = true;
+    values[i] = renewed ?? value;
+  }
+  if (!changed) return null;
+  final StringBuffer tag = StringBuffer('<')..write(r.qualifiedName);
+  for (int i = 0; i < r.attributeCount; i++) {
+    final String? value = values[i];
+    if (value == null) continue;
+    tag
+      ..write(' ')
+      ..write(r.attributeQualifiedName(i))
+      ..write('="')
+      ..write(escapeXmlAttribute(scrubXmlText(value).text))
+      ..write('"');
+  }
+  tag.write(r.isEmptyElement ? '/>' : '>');
+  return tag.toString();
+}
