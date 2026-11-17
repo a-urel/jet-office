@@ -128,9 +128,11 @@ enum DocxWarningCode {
   templateRemovalDroppedAnnotation,
 
   /// A limit of the fill (the copies it may make, how deep sections may
-  /// nest, the tags it may fill) was reached at a section: the section was
-  /// left as written and its content shown once in the scope around it.
-  /// [DocxWarning.detail] is the section tag as written. Raised from T2.
+  /// nest, the tags it may fill) was reached at a tag or a section: a value
+  /// tag past the tags it may fill was left as written; a section was left
+  /// as written and its content shown once in the scope around it.
+  /// [DocxWarning.detail] is the tag or section tag as written. Raised from
+  /// T2.
   templateLimitExceeded,
 }
 

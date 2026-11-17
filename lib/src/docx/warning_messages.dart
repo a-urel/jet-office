@@ -217,10 +217,10 @@ String formatDocxWarning(DocxWarning w, OfficeLocale locale) {
     (DocxWarningCode.templateRemovalDroppedAnnotation, OfficeLocale.tr) =>
       '$part$locations içindeki $detail bölümüyle birlikte bir açıklamanın, not başvurusunun veya yer işaretinin yarısı kaldırıldı.',
     (DocxWarningCode.templateLimitExceeded, OfficeLocale.en) =>
-      'A limit of the fill was reached at $detail in $part$locations; the section was left as written and its content shown once.',
+      "A limit of the fill was reached at $detail in $part$locations; the tag or section was left as written, a section's content shown once.",
     (DocxWarningCode.templateLimitExceeded, OfficeLocale.de) =>
-      'Ein Grenzwert der Befüllung wurde bei $detail in $part$locations erreicht; der Abschnitt blieb unverändert und sein Inhalt wurde einmal gezeigt.',
+      'Ein Grenzwert der Befüllung wurde bei $detail in $part$locations erreicht; das Tag oder der Abschnitt blieb unverändert, der Inhalt eines Abschnitts wurde einmal gezeigt.',
     (DocxWarningCode.templateLimitExceeded, OfficeLocale.tr) =>
-      '$part$locations içindeki $detail için doldurmanın bir sınırına ulaşıldı; bölüm olduğu gibi bırakıldı ve içeriği bir kez gösterildi.',
+      '$part$locations içindeki $detail için doldurmanın bir sınırına ulaşıldı; etiket ya da bölüm olduğu gibi bırakıldı, bölümün içeriği bir kez gösterildi.',
   };
 }
