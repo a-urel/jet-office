@@ -4,6 +4,7 @@
 // every fixture back unchanged. The owner's Word files are in
 // `template_owner_test.dart` (VM only). Documents are built in memory, so the
 // tests run on the web as well.
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:jet_office/jet_office.dart';
@@ -13,6 +14,7 @@ import 'package:test/test.dart';
 import '../../../tool/src/part_compare.dart';
 import '../../../tool/src/text_compare.dart' show docxFullText, docxStoriesText;
 import '../../fixtures/docx_fixtures.dart';
+import '../../support/read_xlsx.dart';
 import '../support/styles_documents.dart' show readDocxText;
 import '../support/template_documents.dart';
 
@@ -177,6 +179,111 @@ void main() {
     final DocxDocument doc = DocxDocument.open(filled.bytes);
     expect(docxFullText(doc), merge.expectedText);
     expect(DocxTemplate.tagsOf(doc), isEmpty);
+  });
+
+  test('t2_values: the invoice repeats its lines, shows paid, lists notes', () {
+    final DocxFixture fixture = docxFixtures().singleWhere(
+      (DocxFixture f) => f.name == 't2_values',
+    );
+    final DocxResult result = fixture.build();
+    final DocxDocument doc = DocxDocument.open(result.bytes);
+    expect(docxFullText(doc), fixture.expectedText);
+    expect(docxStoriesText(doc), fixture.headerFooterText);
+    expect(
+      result.warnings.map((DocxWarning w) => (w.code, w.detail)).toList(),
+      unorderedEquals(<(DocxWarningCode, String?)>[
+        (DocxWarningCode.templateValueMissing, '{{#yok}}'),
+        (DocxWarningCode.templateRepeatDroppedAnnotation, '{{#kalemler}}'),
+        (DocxWarningCode.templateRemovalDroppedAnnotation, '{{#iskonto}}'),
+      ]),
+    );
+    final String xml = utf8.decode(
+      readXlsxBytes(result.bytes)['word/document.xml']!,
+    );
+    expect(RegExp('w:name="kalem"').allMatches(xml), hasLength(1));
+    expect(xml, isNot(contains('iskonto_aralik')));
+    // The header row stays a header row.
+    final DocxTable table = doc.body.blocks.whereType<DocxTable>().single;
+    expect(table.rows.first.properties.repeatAsHeader, isTrue);
+    expect(table.rows, hasLength(5));
+  });
+
+  test('t2_empty: no lines, unpaid, discount shown', () {
+    final DocxFixture fixture = docxFixtures().singleWhere(
+      (DocxFixture f) => f.name == 't2_empty',
+    );
+    final DocxResult result = fixture.build();
+    final DocxDocument doc = DocxDocument.open(result.bytes);
+    expect(docxFullText(doc), fixture.expectedText);
+    expect(docxStoriesText(doc), fixture.headerFooterText);
+    expect(
+      result.warnings.map((DocxWarning w) => (w.code, w.detail)).toList(),
+      unorderedEquals(<(DocxWarningCode, String?)>[
+        (DocxWarningCode.templateValueMissing, '{{#yok}}'),
+        (DocxWarningCode.templateRemovalDroppedAnnotation, '{{^iskonto}}'),
+      ]),
+    );
+  });
+
+  test('t2_nested gives t2NestedText', () {
+    final DocxFixture fixture = docxFixtures().singleWhere(
+      (DocxFixture f) => f.name == 't2_nested',
+    );
+    final DocxResult result = fixture.build();
+    final DocxDocument doc = DocxDocument.open(result.bytes);
+    expect(docxFullText(doc), t2NestedText.join('\n'));
+    expect(
+      result.warnings.map((DocxWarning w) => (w.code, w.detail)).toList(),
+      <(DocxWarningCode, String?)>[
+        (DocxWarningCode.templateRepeatDroppedAnnotation, '{{#gruplar}}'),
+      ],
+    );
+    final String xml = utf8.decode(
+      readXlsxBytes(result.bytes)['word/document.xml']!,
+    );
+    // The comment stays with the first group; each group has its picture,
+    // its insertion and its content control, with ids of their own.
+    expect(RegExp('<w:commentReference').allMatches(xml), hasLength(1));
+    expect(RegExp('<w:commentRangeStart').allMatches(xml), hasLength(1));
+    List<String> ids(String pattern) => <String>[
+      for (final Match m in RegExp(pattern).allMatches(xml)) m[1]!,
+    ];
+    expect(ids(r'<wp:docPr id="(\d+)"'), hasLength(2));
+    expect(ids(r'<wp:docPr id="(\d+)"').toSet(), hasLength(2));
+    expect(ids(r'<w:ins w:id="(-?\d+)"').toSet(), hasLength(2));
+    expect(ids(r'<w:id w:val="(-?\d+)"').toSet(), hasLength(2));
+  });
+
+  test('t2 templates list their sections with no problem', () {
+    for (final String name in <String>['t2_template', 't2_nested_template']) {
+      final DocxTemplate template = DocxTemplate(
+        docxFixtures()
+            .singleWhere((DocxFixture f) => f.name == name)
+            .build()
+            .bytes,
+      );
+      final List<DocxTemplateTag> tags = template.tags;
+      expect(
+        tags.where((DocxTemplateTag t) => t.problem != null),
+        isEmpty,
+        reason: name,
+      );
+      expect(
+        tags.where(
+          (DocxTemplateTag t) => t.kind == DocxTemplateTagKind.section,
+        ),
+        isNotEmpty,
+      );
+    }
+    final List<DocxTemplateTag> nested = DocxTemplate(t2NestedTemplate()).tags;
+    expect(
+      nested.firstWhere((DocxTemplateTag t) => t.text == '{{#acil}}').depth,
+      2,
+    );
+    expect(
+      nested.firstWhere((DocxTemplateTag t) => t.text == '{{baslik}}').depth,
+      1,
+    );
   });
 
   test('fill warnings are the fill\'s, then the save\'s', () {

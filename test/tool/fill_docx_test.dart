@@ -260,4 +260,83 @@ void main() {
     );
     expect(out.toString(), contains('[Content_Types].xml'));
   });
+
+  test('fills sections and checks tags inside them', () {
+    put('t2_template.docx', fixture('t2_template'));
+    put('t2_nested_template.docx', fixture('t2_nested_template'));
+    final StringBuffer out = StringBuffer();
+    final StringBuffer err = StringBuffer();
+    expect(
+      run(out: out, err: err),
+      0,
+      reason: '$out$err',
+    );
+    final DocxDocument values = DocxDocument.open(
+      File('${output.path}/t2_template.docx').readAsBytesSync(),
+    );
+    expect(docxFullText(values), t2ValuesText.join('\n'));
+    final DocxDocument nested = DocxDocument.open(
+      File('${output.path}/t2_nested_template.docx').readAsBytesSync(),
+    );
+    expect(docxFullText(nested), t2NestedText.join('\n'));
+  });
+
+  test('reports a section tag the data names that is left', () {
+    put('t2_template.docx', fixture('t2_template'));
+    final StringBuffer out = StringBuffer();
+    expect(
+      run(
+        out: out,
+        corruptForTest: (String name, Uint8List saved) => rewriteDocxPart(
+          saved,
+          'word/document.xml',
+          (String xml) => xml.replaceFirst('Durum: ', 'Durum: {{#odendi}}'),
+        ),
+      ),
+      1,
+    );
+    expect(
+      out.toString(),
+      contains(
+        't2_template.docx: {{#odendi}} in /word/document.xml was not filled',
+      ),
+    );
+  });
+
+  test('reports a tag inside a section that is left', () {
+    put('t2_template.docx', fixture('t2_template'));
+    final StringBuffer out = StringBuffer();
+    expect(
+      run(
+        out: out,
+        corruptForTest: (String name, Uint8List saved) => rewriteDocxPart(
+          saved,
+          'word/document.xml',
+          (String xml) => xml.replaceFirst('Kurulum', '{{aciklama}}'),
+        ),
+      ),
+      1,
+    );
+    expect(out.toString(), contains('{{aciklama}} in a section'));
+  });
+
+  test('reports an id written twice', () {
+    put('t2_nested_template.docx', fixture('t2_nested_template'));
+    final StringBuffer out = StringBuffer();
+    expect(
+      run(
+        out: out,
+        corruptForTest: (String name, Uint8List saved) => rewriteDocxPart(
+          saved,
+          'word/document.xml',
+          (String xml) => xml.replaceAllMapped(
+            RegExp(r'<wp:docPr id="\d+"'),
+            (Match m) => '<wp:docPr id="7"',
+          ),
+        ),
+      ),
+      1,
+    );
+    expect(out.toString(), contains('drawing id 7 written 2 times'));
+  });
 }

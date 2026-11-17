@@ -15,6 +15,7 @@ import 'dart:typed_data';
 import 'package:jet_office/jet_office.dart';
 import 'package:jet_office/src/opc/ooxml.dart';
 
+import '../../fixtures/m4_fixtures.dart' show png4x2;
 import '../../support/read_xlsx.dart';
 import 'docx_builder.dart';
 
@@ -151,52 +152,147 @@ Uint8List templateWithStories({
   required String body,
   required String header,
   required String footer,
+}) => templateDocx(body: body, header: header, footer: footer);
+
+/// A DOCX as [templateWithStories] builds it, its header and footer each
+/// left out when `null`, with a comments part of [comments] (`w:comment`
+/// elements) when given, and with `word/media/image1.png` (a 4 by 2 PNG,
+/// relationship `rId14`, for [inlinePictureRun]) when [picture] is true.
+Uint8List templateDocx({
+  required String body,
+  String? header,
+  String? footer,
+  String? comments,
+  bool picture = false,
 }) {
   final Map<String, Uint8List> blank = readXlsxBytes(
     DocxDocument().save().bytes,
   );
   String text(String name) => utf8.decode(blank[name]!);
+  final StringBuffer types = StringBuffer();
+  final StringBuffer rels = StringBuffer();
+  final StringBuffer refs = StringBuffer();
+  if (picture) {
+    types.write('<Default Extension="png" ContentType="${ContentType.png}"/>');
+    rels.write(
+      '<Relationship Id="rId14" Type="${RelType.image}" '
+      'Target="media/image1.png"/>',
+    );
+  }
+  if (header != null) {
+    types.write(
+      '<Override PartName="/word/header1.xml" '
+      'ContentType="${ContentType.wmlHeader}"/>',
+    );
+    rels.write(
+      '<Relationship Id="rId11" Type="${RelType.header}" '
+      'Target="header1.xml"/>',
+    );
+    refs.write('<w:headerReference w:type="default" r:id="rId11"/>');
+  }
+  if (footer != null) {
+    types.write(
+      '<Override PartName="/word/footer1.xml" '
+      'ContentType="${ContentType.wmlFooter}"/>',
+    );
+    rels.write(
+      '<Relationship Id="rId12" Type="${RelType.footer}" '
+      'Target="footer1.xml"/>',
+    );
+    refs.write('<w:footerReference w:type="default" r:id="rId12"/>');
+  }
+  if (comments != null) {
+    types.write(
+      '<Override PartName="/word/comments.xml" '
+      'ContentType="${ContentType.wmlComments}"/>',
+    );
+    rels.write(
+      '<Relationship Id="rId13" Type="${RelType.comments}" '
+      'Target="comments.xml"/>',
+    );
+  }
+  const String declaration =
+      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\r\n';
   return buildZip(<String, List<int>>{
     ...blank,
     '[Content_Types].xml': utf8.encode(
-      text('[Content_Types].xml').replaceFirst(
-        '</Types>',
-        '<Override PartName="/word/header1.xml" '
-            'ContentType="${ContentType.wmlHeader}"/>'
-            '<Override PartName="/word/footer1.xml" '
-            'ContentType="${ContentType.wmlFooter}"/></Types>',
-      ),
+      text('[Content_Types].xml').replaceFirst('</Types>', '$types</Types>'),
     ),
     'word/_rels/document.xml.rels': utf8.encode(
-      text('word/_rels/document.xml.rels').replaceFirst(
-        '</Relationships>',
-        '<Relationship Id="rId11" Type="${RelType.header}" '
-            'Target="header1.xml"/>'
-            '<Relationship Id="rId12" Type="${RelType.footer}" '
-            'Target="footer1.xml"/></Relationships>',
-      ),
+      text(
+        'word/_rels/document.xml.rels',
+      ).replaceFirst('</Relationships>', '$rels</Relationships>'),
     ),
     'word/document.xml': utf8.encode(
       _documentXml(
         body,
-        '<w:sectPr><w:headerReference w:type="default" r:id="rId11"/>'
-        '<w:footerReference w:type="default" r:id="rId12"/>'
-        '<w:pgSz w:w="11906" w:h="16838"/>'
+        '<w:sectPr>$refs<w:pgSz w:w="11906" w:h="16838"/>'
         '<w:pgMar w:top="1417" w:right="1417" w:bottom="1417" w:left="1417" '
         'w:header="708" w:footer="708" w:gutter="0"/><w:cols w:space="708"/>'
         '<w:docGrid w:linePitch="360"/></w:sectPr>',
       ),
     ),
-    'word/header1.xml': utf8.encode(
-      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\r\n'
-      '<w:hdr xmlns:w="${Ns.w}" xmlns:r="${Ns.rel}">$header</w:hdr>',
-    ),
-    'word/footer1.xml': utf8.encode(
-      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\r\n'
-      '<w:ftr xmlns:w="${Ns.w}" xmlns:r="${Ns.rel}">$footer</w:ftr>',
-    ),
+    if (header != null)
+      'word/header1.xml': utf8.encode(
+        '$declaration<w:hdr xmlns:w="${Ns.w}" xmlns:r="${Ns.rel}">$header'
+        '</w:hdr>',
+      ),
+    if (footer != null)
+      'word/footer1.xml': utf8.encode(
+        '$declaration<w:ftr xmlns:w="${Ns.w}" xmlns:r="${Ns.rel}">$footer'
+        '</w:ftr>',
+      ),
+    if (comments != null)
+      'word/comments.xml': utf8.encode(
+        '$declaration<w:comments xmlns:w="${Ns.w}">$comments</w:comments>',
+      ),
+    if (picture) 'word/media/image1.png': png4x2,
   });
 }
+
+/// A run holding an inline picture of `word/media/image1.png` (relationship
+/// `rId14` of [templateDocx] with `picture: true`), 4 by 2 points, whose
+/// `wp:docPr` and `pic:cNvPr` have the id [id], as Word writes one; the
+/// DrawingML namespaces are declared on its `w:drawing`.
+String inlinePictureRun({int id = 7}) =>
+    '<w:r $_rsid><w:drawing xmlns:wp="${Ns.wp}" xmlns:a="$_a" '
+    'xmlns:pic="$_pic"><wp:inline distT="0" distB="0" distL="0" distR="0">'
+    '<wp:extent cx="50800" cy="25400"/><wp:effectExtent l="0" t="0" r="0" '
+    'b="0"/><wp:docPr id="$id" name="Picture $id"/><wp:cNvGraphicFramePr>'
+    '<a:graphicFrameLocks noChangeAspect="1"/></wp:cNvGraphicFramePr>'
+    '<a:graphic><a:graphicData uri="$_pic"><pic:pic><pic:nvPicPr>'
+    '<pic:cNvPr id="$id" name="image1.png"/><pic:cNvPicPr/></pic:nvPicPr>'
+    '<pic:blipFill><a:blip r:embed="rId14"/><a:stretch><a:fillRect/>'
+    '</a:stretch></pic:blipFill><pic:spPr><a:xfrm><a:off x="0" y="0"/>'
+    '<a:ext cx="50800" cy="25400"/></a:xfrm><a:prstGeom prst="rect">'
+    '<a:avLst/></a:prstGeom></pic:spPr></pic:pic></a:graphicData>'
+    '</a:graphic></wp:inline></w:drawing></w:r>';
+
+/// [text] as a tracked insertion of the revision id [id], `w:ins`.
+String insertion(String text, {required int id}) =>
+    '<w:ins w:id="$id" w:author="Ada" w:date="2026-01-01T00:00:00Z">'
+    '${_run(text)}</w:ins>';
+
+/// [inner] (inline XML) inside the bookmark [name] of the id [id].
+String bookmarkAround(String inner, {required int id, required String name}) =>
+    '<w:bookmarkStart w:id="$id" w:name="$name"/>$inner'
+    '<w:bookmarkEnd w:id="$id"/>';
+
+/// [text] in an inline content control of the id [id], `w:sdt`.
+String inlineSdt(String text, {required int id}) =>
+    '<w:sdt><w:sdtPr><w:alias w:val="Kontrol"/><w:id w:val="$id"/>'
+    '</w:sdtPr><w:sdtContent>${_run(text)}</w:sdtContent></w:sdt>';
+
+/// The `w:comment` [id] of a comments part, by Ada, holding [text].
+String commentOf(int id, String text) =>
+    '<w:comment w:id="$id" w:author="Ada" w:date="2026-01-01T00:00:00Z" '
+    'w:initials="A"><w:p><w:r><w:t>$text</w:t></w:r></w:p></w:comment>';
+
+/// [inner] (inline XML) inside the range of comment [id], then the run of
+/// its reference.
+String commentAround(String inner, {required int id}) =>
+    '<w:commentRangeStart w:id="$id"/>$inner<w:commentRangeEnd w:id="$id"/>'
+    '<w:r $_rsid><w:commentReference w:id="$id"/></w:r>';
 
 /// A complex field of [instruction] whose cached result is [result], as Word
 /// writes a merge field (`«Ad»`): begin, instruction, separate, result and end,
@@ -218,6 +314,7 @@ String templateRun(String text, {String rPr = ''}) =>
 const String _wps =
     'http://schemas.microsoft.com/office/word/2010/wordprocessingShape';
 const String _a = 'http://schemas.openxmlformats.org/drawingml/2006/main';
+const String _pic = 'http://schemas.openxmlformats.org/drawingml/2006/picture';
 
 /// An anchored `w:drawing` whose text box holds [paragraphs], each a `w:p`
 /// of one run.
