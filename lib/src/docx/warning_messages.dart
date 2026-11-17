@@ -151,11 +151,11 @@ String formatDocxWarning(DocxWarning w, OfficeLocale locale) {
     (DocxWarningCode.templateTagMalformed, OfficeLocale.tr) =>
       '$part$locations içindeki $detail geçerli bir etiket değil; metin olarak bırakıldı.',
     (DocxWarningCode.templateSectionMalformed, OfficeLocale.en) =>
-      'A section tag in $part$locations was left as written: sections are not filled yet ($detail).',
+      'A section tag in $part$locations was left as written: it does not pair, nest or stand where a section can ($detail).',
     (DocxWarningCode.templateSectionMalformed, OfficeLocale.de) =>
-      'Ein Abschnitts-Tag in $part$locations blieb unverändert: Abschnitte werden noch nicht gefüllt ($detail).',
+      'Ein Abschnitts-Tag in $part$locations blieb unverändert: Es bildet kein Paar, ist falsch verschachtelt oder steht an einer Stelle, an der kein Abschnitt stehen kann ($detail).',
     (DocxWarningCode.templateSectionMalformed, OfficeLocale.tr) =>
-      '$part$locations içindeki bir bölüm etiketi olduğu gibi bırakıldı: bölümler henüz doldurulmuyor ($detail).',
+      '$part$locations içindeki bir bölüm etiketi olduğu gibi bırakıldı: eşi yok, yanlış iç içe geçmiş ya da bölüm olamayacak bir yerde ($detail).',
     (DocxWarningCode.templateValueNotText, OfficeLocale.en) =>
       'The value for $detail in $part$locations is a list, a map or a picture, not text (pictures are filled later); the tag was left as written.',
     (DocxWarningCode.templateValueNotText, OfficeLocale.de) =>

@@ -112,6 +112,7 @@ final class InlineRegion extends TemplateRegion {
 }
 
 /// One paragraph of a region as the fill meets it: its template path, the
+/// steps from the region to it (an opaque block's own [BlockStep] last), the
 /// paragraph and its text (both `null` for an opaque block, whose entries
 /// can none be filled), its entries in reading order and its section tag
 /// sites.
@@ -121,6 +122,7 @@ final class InlineRegion extends TemplateRegion {
 /// entry; any other section tag is an entry with its problem and no site.
 typedef RegionParagraph = ({
   String location,
+  List<SiteStep> steps,
   DocxParagraph? paragraph,
   ParagraphText? map,
   List<TemplateEntry> entries,
@@ -141,7 +143,9 @@ List<RegionParagraph> scanRegion(
   int maxDepth, {
   FormatLocale locale = FormatLocale.enUS,
 }) {
-  final _RegionWalk walk = _RegionWalk(maxDepth, locale);
+  // The fields a story keeps as runs, from the region's start: a region the
+  // fill expands starts outside any (Ruling 22).
+  final _RegionWalk walk = _RegionWalk(maxDepth, locale, LooseFields());
   switch (region) {
     case BlockRegion():
       RangeError.checkValidRange(
@@ -212,10 +216,11 @@ List<RegionParagraph> scanRegion(
 }
 
 final class _RegionWalk {
-  _RegionWalk(this.maxDepth, this.locale);
+  _RegionWalk(this.maxDepth, this.locale, this.fields);
 
   final int maxDepth;
   final FormatLocale locale;
+  final LooseFields fields;
   final List<RegionParagraph> out = <RegionParagraph>[];
 
   /// Walks [block], the [index]-th of [container], whose template path is
@@ -258,6 +263,10 @@ final class _RegionWalk {
         if (entries.isNotEmpty) {
           out.add((
             location: path,
+            steps: List<SiteStep>.unmodifiable(<SiteStep>[
+              ...prefix,
+              BlockStep(container, index),
+            ]),
             paragraph: null,
             map: null,
             entries: entries,
@@ -318,8 +327,8 @@ final class _RegionWalk {
   ) {
     final bool whole = start == 0 && end == inlines.length;
     final ParagraphText map = whole && identical(inlines, paragraph.inlines)
-        ? paragraphTextOf(paragraph)
-        : inlineRangeTextOf(inlines, start, end);
+        ? paragraphTextOf(paragraph, fields: fields)
+        : inlineRangeTextOf(inlines, start, end, fields: fields);
     final List<TemplateEntry> entries = rangeEntries(
       map,
       inlines,
@@ -362,6 +371,7 @@ final class _RegionWalk {
     }
     out.add((
       location: path,
+      steps: steps,
       paragraph: paragraph,
       map: map,
       entries: entries,

@@ -249,9 +249,12 @@ final class DocxTemplateTag {
   final String? location;
 
   /// The warning a fill raises for the tag's form, or `null` for a tag a
-  /// fill can fill (it may still warn for the data it gets).
+  /// fill can fill (it may still warn for the data it gets): a section tag
+  /// that does not pair into a well-formed section has
+  /// [DocxWarningCode.templateSectionMalformed].
   final DocxWarningCode? problem;
 
-  /// How many section tags are open around it in its story.
+  /// How many well-formed sections are around it in its story; a section's
+  /// own tags count the sections outside it.
   final int depth;
 }
