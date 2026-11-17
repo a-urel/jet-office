@@ -355,9 +355,15 @@ final class _Cover {
   }
 }
 
-/// Whether the entry [e] is one of [pair]'s own two tags.
-bool _isTagOf(SectionPair pair, TemplateEntry e) =>
-    identical(pair.open.payload, e) || identical(pair.close.payload, e);
+/// Whether the fill fills [e] and counts it against `maxTags`: a value tag
+/// or a merge field that can be filled where it stands; never a section tag.
+bool _fillable(TemplateEntry e) =>
+    e.problem == null &&
+    (e.field != null ||
+        (e.match != null &&
+            e.kind != TagKind.section &&
+            e.kind != TagKind.invertedSection &&
+            e.kind != TagKind.sectionEnd));
 
 /// A site standing where the entry [e] of [p] is, to ask a pair whether it
 /// holds the entry ([SectionPair.contains]).
@@ -395,7 +401,13 @@ FoundTag _found(
 
 /// A well-formed section of a region and what the fill does with it.
 final class _Decided {
-  _Decided(this.pair, this.depth, this.effect, this.items);
+  _Decided(
+    this.pair,
+    this.depth,
+    this.effect,
+    this.items, {
+    this.prepaid = false,
+  });
 
   final SectionPair pair;
 
@@ -408,6 +420,10 @@ final class _Decided {
 
   /// The items of [effect].
   final List<Object?> items;
+
+  /// Whether the tags of its content, in every copy, were counted against
+  /// `maxTags` when it was decided, so filling them counts nothing more.
+  final bool prepaid;
 }
 
 /// One edit of a paragraph, applied from the last offset to the first.
@@ -454,12 +470,18 @@ final class _Fill {
   /// outside the sections it expands (a paragraph's inline sections in the
   /// same pass, from the last to the first), then expands its other
   /// sections from the last to the first, each copy a region of its own.
+  ///
+  /// [prepaid] says the region's tags were counted against `maxTags` when
+  /// its section was decided. Otherwise the tags outside its sections are
+  /// counted first, when all of them fit, before any section is decided,
+  /// so a section cannot take what they need (a review of P3).
   void _region(
     TemplateStory story,
     TemplateRegion region,
     List<Object?> scopes,
-    int depth,
-  ) {
+    int depth, {
+    bool prepaid = false,
+  }) {
     final List<RegionParagraph> paragraphs = scanRegion(
       region,
       maxDepth,
@@ -481,6 +503,24 @@ final class _Fill {
     final Set<SectionTagSite> malformed = Set<SectionTagSite>.identity()
       ..addAll(layout.malformed);
     final Set<SectionTagSite> kept = Set<SectionTagSite>.identity();
+    // The tags outside every section, counted at once when they all fit.
+    bool outsidePaid = prepaid;
+    if (!prepaid) {
+      final _Cover roots = _Cover(paragraphs, layout.roots);
+      int outside = 0;
+      for (int i = 0; i < paragraphs.length; i++) {
+        for (final TemplateEntry e in paragraphs[i].entries) {
+          if (_fillable(e) && roots.count(i, e) == 0) outside++;
+        }
+      }
+      if (_tags + outside <= settings.maxTags) {
+        _tags += outside;
+        outsidePaid = true;
+      }
+    }
+    final _Cover rootCover = outsidePaid && !prepaid
+        ? _Cover(paragraphs, layout.roots)
+        : _Cover(paragraphs, const <SectionPair>[]);
     final List<_Decided> expanded = _decide(
       story,
       region,
@@ -491,6 +531,7 @@ final class _Fill {
       at,
       malformed,
       kept,
+      prepaid: prepaid,
     );
     final Set<SectionTagSite> expandedTags = Set<SectionTagSite>.identity();
     final Map<Object, List<_Decided>> inline =
@@ -539,7 +580,16 @@ final class _Fill {
           continue;
         }
         if (inside(e)) continue;
-        _entry(e, scopes, warn, edits, fields);
+        // A tag in a section left as written was not counted with the
+        // tags outside every section.
+        _entry(
+          e,
+          scopes,
+          warn,
+          edits,
+          fields,
+          counted: prepaid || (outsidePaid && rootCover.count(i, e) == 0),
+        );
       }
       edits.sort((_Edit a, _Edit b) => b.offset.compareTo(a.offset));
       for (final _Edit edit in edits) {
@@ -570,8 +620,9 @@ final class _Fill {
     int depth,
     Map<SectionTagSite, String> at,
     Set<SectionTagSite> malformed,
-    Set<SectionTagSite> kept,
-  ) {
+    Set<SectionTagSite> kept, {
+    required bool prepaid,
+  }) {
     final List<_Decided> out = <_Decided>[];
     // The paragraphs each section may hold, to count its tags.
     final _Cover ranges = _Cover(paragraphs, const <SectionPair>[]);
@@ -617,11 +668,25 @@ final class _Fill {
         keep();
         continue;
       }
+      // What the content's tags cost, once: nothing more when this region's
+      // tags were counted, as its copy is one of them.
+      int once() => prepaid ? 0 : _fillableIn(pair, ranges);
+      // A section shown once is counted when its tags fit; otherwise each
+      // tag is counted as it fills.
+      bool payOnce() {
+        final int tags = once();
+        if (_tags + tags > settings.maxTags) return false;
+        _tags += tags;
+        return true;
+      }
+
       final Lookup found = lookupInScopes(scopes, pair.open.path);
       if (found is! Found) {
         warn(DocxWarningCode.templateValueMissing);
         if (settings.removeMissing) {
-          out.add(_Decided(pair, level, null, const <Object?>[]));
+          out.add(
+            _Decided(pair, level, null, const <Object?>[], prepaid: payOnce()),
+          );
         } else {
           keep();
         }
@@ -640,19 +705,37 @@ final class _Fill {
         keep();
         continue;
       }
-      if (effect.effect == SectionEffect.repeat) {
-        final int count = effect.items.length;
-        final int tags = _fillableIn(pair, ranges) * count;
-        if (_copies + count - 1 > settings.maxCopies ||
-            _tags + tags > settings.maxTags) {
-          warn(DocxWarningCode.templateLimitExceeded);
-          keep();
-          continue;
-        }
-        // Counted now, so the sections decided after it count them.
-        _copies += count - 1;
+      switch (effect.effect) {
+        case SectionEffect.repeat:
+          final int count = effect.items.length;
+          // A prepaid region counted one copy of the content already.
+          final int extra =
+              _fillableIn(pair, ranges) * (prepaid ? count - 1 : count);
+          if (_copies + count - 1 > settings.maxCopies ||
+              _tags + extra > settings.maxTags) {
+            warn(DocxWarningCode.templateLimitExceeded);
+            keep();
+            continue;
+          }
+          // Counted now, so the sections decided after it count them.
+          _copies += count - 1;
+          _tags += extra;
+          out.add(
+            _Decided(pair, level, effect.effect, effect.items, prepaid: true),
+          );
+        case SectionEffect.remove:
+          out.add(_Decided(pair, level, effect.effect, effect.items));
+        case SectionEffect.once || SectionEffect.scope:
+          out.add(
+            _Decided(
+              pair,
+              level,
+              effect.effect,
+              effect.items,
+              prepaid: prepaid || payOnce(),
+            ),
+          );
       }
-      out.add(_Decided(pair, level, effect.effect, effect.items));
     }
     return out;
   }
@@ -676,11 +759,7 @@ final class _Fill {
     for (int i = lo; i <= hi; i++) {
       final RegionParagraph p = cover.paragraphs[i];
       for (final TemplateEntry e in p.entries) {
-        if (e.problem == null &&
-            !_isTagOf(pair, e) &&
-            pair.contains(_probe(p, e))) {
-          n++;
-        }
+        if (_fillable(e) && pair.contains(_probe(p, e))) n++;
       }
     }
     return n;
@@ -736,7 +815,13 @@ final class _Fill {
             from: from,
           );
           from = startOf(region);
-          _region(story, region, <Object?>[...scopes, d.items[k]], d.depth);
+          _region(
+            story,
+            region,
+            <Object?>[...scopes, d.items[k]],
+            d.depth,
+            prepaid: d.prepaid,
+          );
         }
       case SectionEffect.once || SectionEffect.scope || null:
         final ShowResult shown = showSection(
@@ -749,7 +834,13 @@ final class _Fill {
         if (shown.halves) {
           warn(DocxWarningCode.templateRemovalDroppedAnnotation);
         }
-        _region(story, shown.region, <Object?>[...scopes, ...d.items], d.depth);
+        _region(
+          story,
+          shown.region,
+          <Object?>[...scopes, ...d.items],
+          d.depth,
+          prepaid: d.prepaid,
+        );
     }
   }
 
@@ -760,19 +851,22 @@ final class _Fill {
     List<Object?> scopes,
     void Function(DocxWarningCode, String) warn,
     List<_Edit> edits,
-    List<_Edit> fields,
-  ) {
+    List<_Edit> fields, {
+    required bool counted,
+  }) {
     final DocxWarningCode? problem = e.problem;
     if (problem != null) {
       warn(problem, e.text);
       return;
     }
     if (e.match == null && e.field == null) return;
-    if (_tags >= settings.maxTags) {
-      warn(DocxWarningCode.templateLimitExceeded, e.text);
-      return;
+    if (!counted) {
+      if (_tags >= settings.maxTags) {
+        warn(DocxWarningCode.templateLimitExceeded, e.text);
+        return;
+      }
+      _tags++;
     }
-    _tags++;
     if (e.match != null) {
       final String? text = _tagText(e, scopes, warn);
       if (text != null) {

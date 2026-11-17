@@ -522,6 +522,74 @@ void main() {
     expect(r2.warnings.first.code, DocxWarningCode.templateLimitExceeded);
   });
 
+  group('limit boundaries', () {
+    test('n items with maxCopies n - 1 repeat', () {
+      final r = _fill(_p('{{#a}}{{.}}{{/a}}'), <String, Object?>{
+        'a': <Object?>[1, 2, 3],
+      }, settings: const FillSettings(maxCopies: 2));
+      expect(r.warnings, isEmpty);
+      expect(r.lines, <String>['123']);
+    });
+
+    test('a section does not take the tags outside it need', () {
+      // Review of P3: the section repeated part-way, `12{{.}}X`.
+      final r = _fill(_p('{{#a}}{{.}}{{/a}}{{x}}'), <String, Object?>{
+        'a': <Object?>[1, 2, 3],
+        'x': 'X',
+      }, settings: const FillSettings(maxTags: 3));
+      expect(r.lines, <String>['{{#a}}{{.}}{{/a}}X']);
+      expect(_codes(r.warnings), <DocxWarningCode>[
+        DocxWarningCode.templateLimitExceeded,
+        DocxWarningCode.templateValueNotText,
+      ]);
+      expect(r.warnings.first.detail, '{{#a}}');
+      final r4 = _fill(_p('{{#a}}{{.}}{{/a}}{{x}}'), <String, Object?>{
+        'a': <Object?>[1, 2, 3],
+        'x': 'X',
+      }, settings: const FillSettings(maxTags: 4));
+      expect(r4.warnings, isEmpty);
+      expect(r4.lines, <String>['123X']);
+    });
+
+    test('a sibling section counts the tags of the one before it', () {
+      final r = _fill(
+        _p('{{#a}}{{.}}{{/a}};{{#b}}{{.}}{{/b}}'),
+        <String, Object?>{
+          'a': <Object?>[1, 2],
+          'b': <Object?>[3, 4],
+        },
+        settings: const FillSettings(maxTags: 3),
+      );
+      expect(r.lines, <String>['12;{{#b}}{{.}}{{/b}}']);
+      expect(r.warnings.first.code, DocxWarningCode.templateLimitExceeded);
+      expect(r.warnings.first.detail, '{{#b}}');
+    });
+
+    test('a nested repeat counts only its extra copies', () {
+      final Map<String, Object?> data = <String, Object?>{
+        'a': <Object?>[
+          <String, Object?>{
+            'b': <Object?>[1, 2],
+          },
+          <String, Object?>{
+            'b': <Object?>[3],
+          },
+        ],
+      };
+      const String body =
+          '<w:p><w:r><w:t>{{#a}}{{#b}}{{.}}{{/b}}{{/a}}</w:t></w:r></w:p>';
+      final r3 = _fill(body, data, settings: const FillSettings(maxTags: 3));
+      expect(r3.warnings, isEmpty);
+      expect(r3.lines, <String>['123']);
+      final r2 = _fill(body, data, settings: const FillSettings(maxTags: 2));
+      expect(
+        _codes(r2.warnings),
+        contains(DocxWarningCode.templateLimitExceeded),
+      );
+      expect(r2.lines.single, startsWith('{{#b}}'));
+    });
+  });
+
   test('a fill with sections is one change set, undone whole', () {
     final Uint8List template = _bytes(
       '${_invoiceTable()}${_p('{{#notlar}}')}${_p('Not: {{.}}')}'

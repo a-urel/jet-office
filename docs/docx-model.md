@@ -520,7 +520,12 @@ final DocxResult result = DocxTemplate(bytes).fill(
   checked before it repeats; or nested past `maxSectionDepth`) keeps its tags
   as written, shows its content once in the outer scope (its own sections
   decided there, one level deeper, so each deeper section is refused too) and
-  warns `templateLimitExceeded` with the opening tag. **A value tag or merge
+  warns `templateLimitExceeded` with the opening tag. Tags are counted ahead:
+  a region's tags outside its sections first, when they all fit, then each
+  section as it is decided, in reading order, a repeat counting its content's
+  tags times its items (its copies' own sections counting only their extra
+  copies), so a section never repeats part-way or takes what the tags after
+  it need. **A value tag or merge
   field past `maxTags`** stays as written and warns the same code with the tag
   as detail: the approved message speaks of a section, and for a tag "the
   section" is the tag itself, left as written; no code or message was added
