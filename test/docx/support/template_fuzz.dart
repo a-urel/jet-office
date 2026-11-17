@@ -1,4 +1,5 @@
-/// Test helper: seeded mutation fuzzing of `DocxTemplate` (decision 0024, T1).
+/// Test helper: seeded mutation fuzzing of `DocxTemplate` (decision 0024, T1
+/// and T2).
 ///
 /// New in jet_office. [templateFuzzCorpus] is the set of templates the fuzzer
 /// starts from, [templateFuzzCases] derives mutated copies of them from a
@@ -23,10 +24,15 @@ import 'dart:typed_data';
 
 import 'package:jet_office/jet_office.dart';
 
+import '../../../tool/src/docx_ids.dart';
 import '../../../tool/src/fill_data.dart';
 import '../../../tool/src/part_compare.dart';
 import '../../fixtures/docx_fixtures.dart'
-    show t1MergeFieldsTemplate, t1ValuesTemplate;
+    show
+        t1MergeFieldsTemplate,
+        t1ValuesTemplate,
+        t2NestedTemplate,
+        t2ValuesTemplate;
 import '../../support/fuzz_mutations.dart';
 import '../../support/read_xlsx.dart';
 import '../../xlsx/read/support/zip_builder.dart';
@@ -43,8 +49,14 @@ export '../../support/fuzz_mutations.dart' show FuzzCase, mutatedPart;
 /// `wordSplitTag` in the header and one with its first brace bold in the
 /// body) and `word_split_kinds` (a tag split by `wordSplitTag`, one over a
 /// hyperlink's edge, around a tab, in a field result, in a tracked insertion,
-/// in a content control, a section and a malformed tag), each rebuilt with
-/// stored entries.
+/// in a content control, a section and a malformed tag), `t2_template` (the
+/// template of the `t2_values` fixture: a map section, inline conditions, a
+/// repeated table row with a bookmark under a header row, block lists and a
+/// missing section), `t2_nested_template` (the template of `t2_nested`:
+/// groups repeating blocks with a tracked insertion, a comment, a picture,
+/// a content control and a table whose row repeats with an inline
+/// condition) and `sections_by_hand` ([sectionsByHand]: the section hard
+/// cases), each rebuilt with stored entries.
 List<({String name, Uint8List bytes})> templateFuzzCorpus() =>
     <({String name, Uint8List bytes})>[
       (name: 't1_template', bytes: _rebuild(t1ValuesTemplate())),
@@ -71,7 +83,59 @@ List<({String name, Uint8List bytes})> templateFuzzCorpus() =>
           ]),
         ),
       ),
+      (name: 't2_template', bytes: _rebuild(t2ValuesTemplate())),
+      (name: 't2_nested_template', bytes: _rebuild(t2NestedTemplate())),
+      (name: 'sections_by_hand', bytes: _rebuild(sectionsByHand())),
     ];
+
+/// A paragraph of one run of [text].
+String _para(String text) => templateParagraph(templateRun(text));
+
+/// A template of the section fill's hard cases: crossing sections, an
+/// unclosed opener, a stray closer, an inline section across a hyperlink's
+/// edge, a blocks section whose tag paragraph carries a section break, one
+/// whose tag paragraph holds other text, a rows section across a vertical
+/// merge, 34 sections nested with `{{#a}}` alone in each paragraph (past the
+/// default depth of 32), and an inline section holding a bookmark's start
+/// whose end is outside it. The body ends in a paragraph.
+Uint8List sectionsByHand() {
+  const String restart = '<w:tcPr><w:vMerge w:val="restart"/></w:tcPr>';
+  const String continues = '<w:tcPr><w:vMerge/></w:tcPr>';
+  return templateWithStories(
+    body: <String>[
+      _para('{{#a}}{{#b}}{{/a}}{{/b}}'),
+      _para('{{#u}}unclosed'),
+      _para('stray {{/s}}'),
+      templateParagraph(
+        templateRun('{{#odendi}}x') + hyperlinkOf(<String>['y{{/odendi}}']),
+      ),
+      '<w:p><w:pPr><w:sectPr><w:pgSz w:w="11906" w:h="16838"/></w:sectPr>'
+          '</w:pPr>${templateRun('{{#odendi}}')}</w:p>',
+      _para('z'),
+      _para('{{/odendi}}'),
+      _para('text {{#notlar}}'),
+      _para('{{.}}'),
+      _para('{{/notlar}}'),
+      '<w:tbl><w:tblPr><w:tblW w:w="0" w:type="auto"/></w:tblPr>'
+          '<w:tblGrid><w:gridCol w:w="3000"/></w:tblGrid>'
+          '<w:tr><w:tc>$restart${_para('top')}</w:tc></w:tr>'
+          '<w:tr><w:tc>$continues${_para('{{#kalemler}}')}</w:tc></w:tr>'
+          '<w:tr><w:tc>${_para('{{aciklama}}{{/kalemler}}')}</w:tc></w:tr>'
+          '</w:tbl>',
+      for (int i = 0; i < 34; i++) _para('{{#a}}'),
+      _para('{{.}}'),
+      for (int i = 0; i < 34; i++) _para('{{/a}}'),
+      templateParagraph(
+        '${templateRun('{{#iskonto}}')}'
+        '<w:bookmarkStart w:id="40" w:name="yarim"/>'
+        '${templateRun('in{{/iskonto}} out')}<w:bookmarkEnd w:id="40"/>',
+      ),
+      _para('son'),
+    ].join(),
+    header: _para('{{#odendi}}H{{/odendi}}'),
+    footer: _para('{{firma.adres}}'),
+  );
+}
 
 /// [zip] with the same entries in the same order, written again stored.
 Uint8List _rebuild(Uint8List zip) => buildZipOrdered(<(String, List<int>)>[
@@ -85,7 +149,14 @@ bool _storyPart(String name) =>
     RegExp(r'^word/(document|header\d*|footer\d*)\.xml$').hasMatch(name);
 
 /// The texts [_insertTagText] puts into a `w:t`, besides a random body.
-const List<String> _tagTexts = <String>['{{', '}}', '{{a}}', '{{#a}}'];
+const List<String> _tagTexts = <String>[
+  '{{',
+  '}}',
+  '{{a}}',
+  '{{#a}}',
+  '{{/a}}',
+  '{{^a}}',
+];
 
 /// The characters of a random tag body: path, format, section and brace
 /// characters, a space, a digit, a quote and a Turkish letter; never U+FFFC,
@@ -231,8 +302,18 @@ const DocxTemplateOptions _options = DocxTemplateOptions(
   locale: FormatLocale.trTR,
 );
 
+/// The data of every fill: `fillDocxData()` and `a`, a list of two maps
+/// that each have an `a`, so `{{#a}}` repeats and a nested `{{#a}}` finds
+/// the item's.
+Map<String, Object?> _data() => fillDocxData()
+  ..['a'] = <Object?>[
+    <String, Object?>{'a': 1},
+    <String, Object?>{'a': 2},
+  ];
+
 /// Opens [bytes] as a template, reads every tag, fills it with
-/// `fillDocxData()` and with data that names nothing, and checks both.
+/// `fillDocxData()` (and `a`) and with data that names nothing, and checks
+/// both.
 ///
 /// Throws [DocxReadException] only from `DocxTemplate(bytes)` (a file that
 /// cannot be read) or from a fill (a part it loads that cannot be read);
@@ -242,6 +323,9 @@ const DocxTemplateOptions _options = DocxTemplateOptions(
 /// * every tag's fields read, and every warning renders in every locale;
 /// * the filled bytes open and their body and stories load, unless the
 ///   template's own refuse the same part: a failure there is a [StateError];
+/// * the filled story parts write no drawing, revision or content control id
+///   more often than the template did (`duplicateIds`): a [StateError]
+///   otherwise;
 /// * `fill({})` changes nothing: `comparePackages` finds no difference
 ///   between it and the template opened, with its body and stories loaded as
 ///   the fill loads them, and saved unchanged (a [StateError] otherwise). That
@@ -264,8 +348,12 @@ void exerciseTemplate(Uint8List bytes, {bool exact = false}) {
     tag.problem?.name;
     tag.depth.isNegative;
   }
-  final DocxResult filled = template.fill(fillDocxData(), options: _options);
+  final DocxResult filled = template.fill(_data(), options: _options);
   _render(filled.warnings);
+  final List<String> twice = duplicateIds(filled.bytes, template: bytes);
+  if (twice.isNotEmpty) {
+    throw StateError('the filled file repeats an id: ${twice.first}');
+  }
   try {
     _loaded(filled.bytes);
   } on DocxReadException catch (e) {

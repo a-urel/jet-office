@@ -276,6 +276,28 @@ void main() {
     },
   );
 
+  test('copies of a block section holding a repeating one fill in place', () {
+    // Pinned from the template fuzz: filling the first copy changed how many
+    // blocks it had, and the next copy was looked for at its old index.
+    final r = _fill(
+      '${_p('{{#a}}')}${_p('{{#b}}')}${_p('{{.}}')}${_p('{{/b}}')}'
+      '${_p('{{/a}}')}${_p('son')}',
+      <String, Object?>{
+        'a': <Object?>[
+          <String, Object?>{
+            'b': <Object?>[1, 2],
+          },
+          <String, Object?>{
+            'b': <Object?>[3],
+          },
+          <String, Object?>{'b': <Object?>[]},
+        ],
+      },
+    );
+    expect(r.warnings, isEmpty);
+    expect(r.lines, <String>['1', '2', '3', 'son']);
+  });
+
   test('outer tags and an inline section in one paragraph', () {
     final r = _fill(
       _p('Durum: {{#odendi}}Ödendi{{/odendi}} {{tarih:dd.mm.yyyy}} {{x}}'),

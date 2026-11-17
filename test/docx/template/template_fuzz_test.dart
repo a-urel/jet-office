@@ -1,9 +1,11 @@
-// Fuzzes DocxTemplate (decision 0024, T1): seeded mutations of templates
-// whose tags are split as Word splits them, of merge fields and of the
-// template fill's hard cases, with tags and switches inserted into their
-// text. Only DocxReadException may come out of opening a template or filling
-// it; the filled file must read back, and data that names nothing must give
-// the template back. The same cases run on the VM and in Chrome.
+// Fuzzes DocxTemplate (decision 0024, T1 and T2): seeded mutations of
+// templates whose tags are split as Word splits them, of merge fields, of
+// sections and of the template fill's hard cases, with tags and switches
+// inserted into their text. Only DocxReadException may come out of opening a
+// template or filling it; the filled file must read back and write no
+// drawing, revision or content control id twice, and data that names
+// nothing must give the template back. The same cases run on the VM and in
+// Chrome.
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -22,9 +24,10 @@ const int _cases = 300;
 
 /// Adler-32 of every case's mutation and bytes, computed once on the VM. The
 /// Chrome leg compares it, which proves both get the same cases. A change to
-/// the corpus (the `t1_*` templates, `template_documents.dart`), to the
+/// the corpus (the `t1_*` and `t2_*` templates, `template_documents.dart`,
+/// `sectionsByHand`), to the
 /// mutations or to the `package:archive` version resolved changes it.
-const int _casesDigest = 1085579129;
+const int _casesDigest = 314726648;
 
 /// Adler-32 of [data], in arithmetic that stays exact in a browser.
 int _adler32(List<int> data) {
@@ -38,7 +41,7 @@ int _adler32(List<int> data) {
 }
 
 void main() {
-  test('the corpus is the four templates, and each opens and fills', () {
+  test('the corpus is the seven templates, and each opens and fills', () {
     final List<({String name, Uint8List bytes})> corpus = templateFuzzCorpus();
     expect(
       <String>[for (final c in corpus) c.name],
@@ -47,6 +50,9 @@ void main() {
         't1_merge_fields',
         'word_split_header',
         'word_split_kinds',
+        't2_template',
+        't2_nested_template',
+        'sections_by_hand',
       ],
     );
     for (final ({String name, Uint8List bytes}) entry in corpus) {

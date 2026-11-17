@@ -298,6 +298,62 @@ ShowResult showSection(
   return (region: result.regions.single, halves: result.halves);
 }
 
+/// The first block, row or inline of [region], or `null` when it is empty.
+Object? firstUnitOf(TemplateRegion region) => switch (region) {
+  BlockRegion() =>
+    region.start < region.end ? region.blocks[region.start] : null,
+  RowRegion() =>
+    region.start < region.end ? region.table.rows[region.start] : null,
+  InlineRegion() =>
+    region.start < region.end ? region.inlines[region.start] : null,
+};
+
+/// [region] moved to where [first], its first unit as [firstUnitOf] gave it,
+/// is now, its length kept: the copies of a section are filled one by one,
+/// and filling one changes the length of what is before the next. [region]
+/// itself when it is empty or did not move.
+TemplateRegion rebased(TemplateRegion region, Object? first) {
+  if (first == null) return region;
+  switch (region) {
+    case BlockRegion():
+      final int at = region.blocks.indexWhere(
+        (Object b) => identical(b, first),
+      );
+      if (at < 0 || at == region.start) return region;
+      return BlockRegion(
+        region.container,
+        region.blocks,
+        at,
+        at + region.end - region.start,
+        region.paths,
+      );
+    case RowRegion():
+      final int at = region.table.rows.indexWhere(
+        (Object r) => identical(r, first),
+      );
+      if (at < 0 || at == region.start) return region;
+      return RowRegion(
+        region.table,
+        at,
+        at + region.end - region.start,
+        region.templateRows,
+        region.tablePath,
+      );
+    case InlineRegion():
+      final int at = region.inlines.indexWhere(
+        (Object i) => identical(i, first),
+      );
+      if (at < 0 || at == region.start) return region;
+      return InlineRegion(
+        region.paragraph,
+        region.inlines,
+        at,
+        at + region.end - region.start,
+        region.path,
+      );
+  }
+}
+
 /// The blocks of [container], a story or a table cell.
 List<DocxBlock> containerBlocks(Object container) => switch (container) {
   final DocxStory story => story.blocks,
@@ -679,7 +735,6 @@ final class _Marks {
         (mark.$2 ? endsOnly.contains(mark.$1) : startsOnly.contains(mark.$1));
 
     final List<DocxInline> inlines = <DocxInline>[];
-    final List<(Object, DocxBlock)> blocks = <(Object, DocxBlock)>[];
     void walkInlines(List<DocxInline> list) {
       for (final DocxInline inline in list) {
         if (orphan(_inlineMark(inline))) inlines.add(inline);
@@ -697,7 +752,9 @@ final class _Marks {
               row.cells.forEach(walkBlocks);
             }
           case DocxOpaqueBlock():
-            if (orphan(_blockMark(block))) blocks.add((container, block));
+            // A mark between blocks stays: removing a block would move the
+            // blocks the fill still has to reach by their index.
+            break;
         }
       }
     }
@@ -706,11 +763,6 @@ final class _Marks {
     for (final DocxInline inline in inlines.reversed) {
       removeHeldInline(inline);
     }
-    for (final (Object container, DocxBlock block) in blocks.reversed) {
-      final List<DocxBlock> list = containerBlocks(container);
-      final int i = list.indexWhere((DocxBlock b) => identical(b, block));
-      if (i >= 0) removeContainerBlockAt(container, i);
-    }
-    return inlines.isNotEmpty || blocks.isNotEmpty;
+    return inlines.isNotEmpty;
   }
 }

@@ -608,8 +608,13 @@ final class _Fill {
         if (result.halves) {
           warn(DocxWarningCode.templateRemovalDroppedAnnotation);
         }
+        // Filling a copy changes how many blocks, rows or inlines it has, so
+        // each later copy is found again by its first unit before it fills.
+        final List<Object?> firsts = <Object?>[
+          for (final TemplateRegion r in result.regions) firstUnitOf(r),
+        ];
         for (int k = 0; k < result.regions.length; k++) {
-          _region(story, result.regions[k], <Object?>[
+          _region(story, rebased(result.regions[k], firsts[k]), <Object?>[
             ...scopes,
             d.items[k],
           ], d.depth);
