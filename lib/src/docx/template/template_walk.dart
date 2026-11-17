@@ -190,19 +190,26 @@ void _walkBlocks(
         final String name = block.localName;
         final int index = opaque[name] ?? 0;
         opaque[name] = index + 1;
-        final DocxWarningCode code = block.namespaceUri == Ns.w && name == 'sdt'
-            ? DocxWarningCode.templatePlaceholderInContentControl
-            : DocxWarningCode.templatePlaceholderNotTyped;
-        final List<TemplateEntry> entries = <TemplateEntry>[
-          for (final String s in placeholdersIn(
-            opaqueBlockXml(block),
-            maxDepth: maxDepth,
-          ))
-            placeholderEntry(s, code),
-        ];
+        final List<TemplateEntry> entries = opaqueBlockEntries(block, maxDepth);
         if (entries.isNotEmpty) onParagraph('$path/$name[$index]', entries);
     }
   }
+}
+
+/// The entries of the opaque block [block]: every tag and `MERGEFIELD` its
+/// XML holds, none of which can be filled.
+List<TemplateEntry> opaqueBlockEntries(DocxOpaqueBlock block, int maxDepth) {
+  final DocxWarningCode code =
+      block.namespaceUri == Ns.w && block.localName == 'sdt'
+      ? DocxWarningCode.templatePlaceholderInContentControl
+      : DocxWarningCode.templatePlaceholderNotTyped;
+  return <TemplateEntry>[
+    for (final String s in placeholdersIn(
+      opaqueBlockXml(block),
+      maxDepth: maxDepth,
+    ))
+      placeholderEntry(s, code),
+  ];
 }
 
 /// The entry for [written], a tag or a `MERGEFIELD` instruction found in
@@ -243,20 +250,59 @@ TemplateEntry placeholderEntry(
 /// The entries of [paragraph] in reading order: its text tags, its merge
 /// fields, and what its opaque content holds; a merge field's `\#` picture
 /// read with [locale]'s separators.
+///
+/// A section tag that could be filled where it stands is
+/// `templateSectionMalformed` (T1's Ruling 12) unless [sections] is true;
+/// with [sections] it has no problem and keeps its map and match, for the
+/// section fill (T2) to pair.
 List<TemplateEntry> paragraphEntries(
   DocxParagraph paragraph,
   int maxDepth, {
   FormatLocale locale = FormatLocale.enUS,
+  bool sections = false,
+}) => _entries(
+  paragraphTextOf(paragraph),
+  paragraph.inlines,
+  maxDepth,
+  locale,
+  sections,
+);
+
+/// The entries of the inlines `[start, end)` of [inlines] (a paragraph's or
+/// a hyperlink's own list), as [paragraphEntries] gives a paragraph's; [map]
+/// is `inlineRangeTextOf(inlines, start, end)`, and each entry's offset is in
+/// it.
+///
+/// Throws [RangeError] when the range is not inside [inlines].
+List<TemplateEntry> rangeEntries(
+  ParagraphText map,
+  List<DocxInline> inlines,
+  int start,
+  int end,
+  int maxDepth, {
+  FormatLocale locale = FormatLocale.enUS,
+  bool sections = false,
 }) {
-  final ParagraphText map = paragraphTextOf(paragraph);
+  RangeError.checkValidRange(start, end, inlines.length, 'start', 'end');
+  return _entries(map, inlines.sublist(start, end), maxDepth, locale, sections);
+}
+
+List<TemplateEntry> _entries(
+  ParagraphText map,
+  List<DocxInline> inlines,
+  int maxDepth,
+  FormatLocale locale,
+  bool sections,
+) {
   final List<TemplateEntry> entries = <TemplateEntry>[
-    for (final TagMatch m in scanTags(map.text)) _tagEntry(map, m),
+    for (final TagMatch m in scanTags(map.text))
+      _tagEntry(map, m, sections: sections),
   ];
   _InlineWalk(
     entries,
     maxDepth,
     locale,
-  ).walk(paragraph.inlines, direct: true, counting: true);
+  ).walk(inlines, direct: true, counting: true);
   // A stable sort by offset; at one offset a field comes before the tag
   // that starts in its result, which cannot be filled anyway.
   final List<int> order = List<int>.generate(entries.length, (int i) => i)
@@ -267,7 +313,11 @@ List<TemplateEntry> paragraphEntries(
   return <TemplateEntry>[for (final int i in order) entries[i]];
 }
 
-TemplateEntry _tagEntry(ParagraphText map, TagMatch m) {
+TemplateEntry _tagEntry(
+  ParagraphText map,
+  TagMatch m, {
+  required bool sections,
+}) {
   final ParsedTag? tag = m.tag;
   DocxWarningCode? problem;
   if (tag == null) {
@@ -290,10 +340,11 @@ TemplateEntry _tagEntry(ParagraphText map, TagMatch m) {
       };
     }
     if (problem == null &&
+        !sections &&
         (tag.kind == TagKind.section ||
             tag.kind == TagKind.invertedSection ||
             tag.kind == TagKind.sectionEnd)) {
-      // Ruling 12: sections are filled from T2; until then they stay.
+      // Ruling 12: T1's callers leave sections as written.
       problem = DocxWarningCode.templateSectionMalformed;
     }
   }

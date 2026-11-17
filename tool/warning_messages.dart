@@ -193,6 +193,7 @@ DocxWarning _docxSample(DocxWarningCode code, {bool one = false}) {
     case DocxWarningCode.templatePlaceholderNotTyped:
     case DocxWarningCode.templateRepeatDroppedAnnotation:
     case DocxWarningCode.templateRemovalDroppedAnnotation:
+    case DocxWarningCode.templateLimitExceeded:
       collector.add(
         code,
         part: '/word/document.xml',

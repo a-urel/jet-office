@@ -187,6 +187,156 @@ void main() {
       expect(lookupKey(data, 'z'), isA<Missing>());
     });
   });
+
+  group('sections', () {
+    void expectEffect(
+      Object? value,
+      SectionEffect effect,
+      List<Object?> items, {
+      bool inverted = false,
+    }) {
+      final ({SectionEffect effect, List<Object?> items}) r = sectionEffect(
+        value,
+        inverted: inverted,
+      );
+      expect(r.effect, effect, reason: '$value');
+      expect(r.items, items, reason: '$value');
+    }
+
+    Object? found(Lookup lookup) {
+      expect(lookup, isA<Found>());
+      return (lookup as Found).value;
+    }
+
+    test('a non-empty list repeats with its items', () {
+      expectEffect(<Object?>[1, 2], SectionEffect.repeat, <Object?>[1, 2]);
+    });
+
+    test('false, null, empty text and an empty list remove', () {
+      for (final Object? value in <Object?>[false, null, '', <Object?>[]]) {
+        expectEffect(value, SectionEffect.remove, const <Object?>[]);
+      }
+    });
+
+    test('zero, true, text, a date, a duration, a decimal, an image show '
+        'once', () {
+      final OfficeImage image = OfficeImage(Uint8List.fromList(<int>[1]));
+      for (final Object value in <Object>[
+        0,
+        0.0,
+        true,
+        'x',
+        DateTime(2026),
+        Duration.zero,
+        FormatDecimal('0'),
+        image,
+      ]) {
+        expectEffect(value, SectionEffect.once, <Object?>[value]);
+      }
+    });
+
+    test('a map, even empty, is a scope', () {
+      final Map<String, Object?> empty = <String, Object?>{};
+      expectEffect(empty, SectionEffect.scope, <Object?>[empty]);
+      final Map<String, Object?> map = <String, Object?>{'a': 1};
+      expectEffect(map, SectionEffect.scope, <Object?>[map]);
+    });
+
+    test('inverted shows once exactly when the section would remove', () {
+      for (final Object? value in <Object?>[false, null, '', <Object?>[]]) {
+        expectEffect(
+          value,
+          SectionEffect.once,
+          const <Object?>[],
+          inverted: true,
+        );
+      }
+      for (final Object? value in <Object?>[
+        <Object?>[1],
+        <String, Object?>{},
+        true,
+        0,
+        'x',
+      ]) {
+        expectEffect(
+          value,
+          SectionEffect.remove,
+          const <Object?>[],
+          inverted: true,
+        );
+      }
+    });
+
+    test('lookup goes from the innermost scope outward', () {
+      final List<Object?> scopes = <Object?>[
+        <String, Object?>{
+          'a': 1,
+          'b': <String, Object?>{'c': 2},
+        },
+        <String, Object?>{'a': 3},
+      ];
+      expect(found(lookupInScopes(scopes, <String>['a'])), 3);
+      expect(found(lookupInScopes(scopes, <String>['b', 'c'])), 2);
+      expect(lookupInScopes(scopes, <String>['z']), isA<Missing>());
+    });
+
+    test('the first map with the segment decides, no further fallback', () {
+      final List<Object?> scopes = <Object?>[
+        <String, Object?>{
+          'b': <String, Object?>{'c': 2},
+        },
+        <String, Object?>{'b': <String, Object?>{}},
+      ];
+      expect(lookupInScopes(scopes, <String>['b', 'c']), isA<Missing>());
+    });
+
+    test('a null or a text on the way breaks the path, no fallback', () {
+      for (final Object? inner in <Object?>[null, 'x']) {
+        final List<Object?> scopes = <Object?>[
+          <String, Object?>{
+            'a': <String, Object?>{'b': 1},
+          },
+          <String, Object?>{'a': inner},
+        ];
+        expect(lookupInScopes(scopes, <String>['a', 'b']), isA<Missing>());
+      }
+    });
+
+    test('non-map scopes are skipped', () {
+      final List<Object?> scopes = <Object?>[
+        <String, Object?>{'a': 1},
+        'item',
+        null,
+        <Object?>[1],
+      ];
+      expect(found(lookupInScopes(scopes, <String>['a'])), 1);
+      expect(found(lookupKeyInScopes(scopes, 'a')), 1);
+    });
+
+    test('a key present with null is found', () {
+      final List<Object?> scopes = <Object?>[
+        <String, Object?>{'a': 1},
+        <String, Object?>{'a': null},
+      ];
+      expect(found(lookupInScopes(scopes, <String>['a'])), isNull);
+      expect(found(lookupKeyInScopes(scopes, 'a')), isNull);
+    });
+
+    test('a merge field key is looked up through scopes as one key', () {
+      final List<Object?> scopes = <Object?>[
+        <String, Object?>{'Müşteri Adı': 'x', 'a.b': 1},
+        <String, Object?>{},
+      ];
+      expect(found(lookupKeyInScopes(scopes, 'Müşteri Adı')), 'x');
+      expect(found(lookupKeyInScopes(scopes, 'a.b')), 1);
+      expect(lookupKeyInScopes(scopes, 'a'), isA<Missing>());
+    });
+
+    test('no scopes find nothing', () {
+      expect(lookupInScopes(const <Object?>[], <String>['a']), isA<Missing>());
+      expect(lookupKeyInScopes(const <Object?>[], 'a'), isA<Missing>());
+    });
+  });
 }
 
 /// The element reads of every [_CountingList] that shares it.

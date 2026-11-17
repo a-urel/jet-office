@@ -72,7 +72,12 @@ final class TextPosition {
 
 /// The text of a paragraph a tag scan reads, and where each character is.
 final class ParagraphText {
-  ParagraphText._(this.text, this.positions, this._standIns);
+  ParagraphText._(
+    this.text,
+    this.positions,
+    this._standIns,
+    this._commentReferences,
+  );
 
   /// The scanned text: every visible character of the paragraph's inlines in
   /// order, [nonText] for a position without text of its own.
@@ -86,6 +91,15 @@ final class ParagraphText {
   /// space for a tab, a break or a carriage return; nothing for anything
   /// else.
   final Map<int, String> _standIns;
+
+  /// The [nonText] positions that stand for a `w:commentReference`.
+  final Set<int> _commentReferences;
+
+  /// Whether the position [index] is a [nonText] standing for a
+  /// `w:commentReference`, a mark with no text that a section tag's
+  /// paragraph may hold and still count as alone (T2, Ruling 8). Footnote
+  /// and endnote references are not: they show a number.
+  bool isCommentReference(int index) => _commentReferences.contains(index);
 
   /// The span `[start, end)` of [text] as written, for a warning's detail or
   /// a listed tag: each [nonText] position shown as what it stands for (a
@@ -158,13 +172,38 @@ const Set<String> _transparent = <String>{
 ParagraphText paragraphTextOf(DocxParagraph paragraph) {
   final _Builder b = _Builder();
   b.walk(paragraph.inlines, Region.fillable);
-  return ParagraphText._(b.buffer.toString(), b.positions, b.standIns);
+  return ParagraphText._(
+    b.buffer.toString(),
+    b.positions,
+    b.standIns,
+    b.commentReferences,
+  );
+}
+
+/// The searchable text of the inlines `[start, end)` of [inlines] (a
+/// paragraph's or a hyperlink's own list), mapped as [paragraphTextOf] maps a
+/// paragraph, so a section's copy of inline content is scanned alone (T2).
+/// Its first position is the range's first character; its runs are those
+/// of the range, so a tag found in it is filled in place.
+///
+/// Throws [RangeError] when the range is not inside [inlines].
+ParagraphText inlineRangeTextOf(List<DocxInline> inlines, int start, int end) {
+  RangeError.checkValidRange(start, end, inlines.length, 'start', 'end');
+  final _Builder b = _Builder();
+  b.walk(inlines.sublist(start, end), Region.fillable);
+  return ParagraphText._(
+    b.buffer.toString(),
+    b.positions,
+    b.standIns,
+    b.commentReferences,
+  );
 }
 
 final class _Builder {
   final StringBuffer buffer = StringBuffer();
   final List<TextPosition> positions = <TextPosition>[];
   final Map<int, String> standIns = <int, String>{};
+  final Set<int> commentReferences = <int>{};
   int _segment = 0;
 
   void _cut() => _segment++;
@@ -241,6 +280,10 @@ final class _Builder {
           switch (c) {
             case DocxTab() || DocxBreak() || DocxCarriageReturn():
               standIns[positions.length] = ' ';
+            case DocxOpaqueRunContent()
+                when c.namespaceUri == Ns.w &&
+                    c.localName == 'commentReference':
+              commentReferences.add(positions.length);
             default:
               break;
           }
