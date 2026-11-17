@@ -5,11 +5,14 @@
 /// lists written by `DocxListExport` (D6); and the template fill's of T1
 /// (decision 0024): a template filled by `DocxTemplate` (`t1_values`,
 /// `t1_merge_fields`) and those templates unfilled (`t1_template`,
-/// `t1_merge_fields_template`).
+/// `t1_merge_fields_template`); and the section fill's of T2: an invoice
+/// template filled with the fixed data and with the empty data (`t2_values`,
+/// `t2_empty`), a template of nested groups filled (`t2_nested`), and both
+/// templates unfilled (`t2_template`, `t2_nested_template`).
 ///
 /// New in jet_office. Every D fixture starts from `DocxDocument()`, the blank
 /// document, so what LibreOffice and the Open XML SDK see is what the model
-/// writes. A T1 template is written by hand
+/// writes. A T1 or T2 template is written by hand
 /// (`test/docx/support/template_documents.dart`), as Word for Mac writes one,
 /// with its tags split over runs, so the fill meets them as it would in a
 /// user's file; a filled one is what `DocxTemplate.fill` saves. `tool/write_fixtures.dart` writes each as `<name>.docx` with its
@@ -200,6 +203,46 @@ List<DocxFixture> docxFixtures() => <DocxFixture>[
     _t1TemplateText.join('\n'),
     () => DocxDocument.open(t1ValuesTemplate()).save(),
     headerFooterText: _t1TemplateStories.join('\n'),
+  ),
+  DocxFixture(
+    't2_template',
+    t2TemplateText.join('\n'),
+    () => DocxDocument.open(t2ValuesTemplate()).save(),
+    headerFooterText: _t2TemplateStories.join('\n'),
+  ),
+  DocxFixture(
+    't2_values',
+    t2ValuesText.join('\n'),
+    () => _filled(t2ValuesTemplate()),
+    headerFooterText: _t2ValuesStories.join('\n'),
+    expectedWarnings: const <DocxWarningCode, int>{
+      DocxWarningCode.templateValueMissing: 1,
+      DocxWarningCode.templateRepeatDroppedAnnotation: 1,
+      DocxWarningCode.templateRemovalDroppedAnnotation: 1,
+    },
+  ),
+  DocxFixture(
+    't2_empty',
+    t2EmptyText.join('\n'),
+    () => _filled(t2ValuesTemplate(), data: fillDocxEmptyData()),
+    headerFooterText: _t2EmptyStories.join('\n'),
+    expectedWarnings: const <DocxWarningCode, int>{
+      DocxWarningCode.templateValueMissing: 1,
+      DocxWarningCode.templateRemovalDroppedAnnotation: 1,
+    },
+  ),
+  DocxFixture(
+    't2_nested_template',
+    t2NestedTemplateText.join('\n'),
+    () => DocxDocument.open(t2NestedTemplate()).save(),
+  ),
+  DocxFixture(
+    't2_nested',
+    t2NestedText.join('\n'),
+    () => _filled(t2NestedTemplate()),
+    expectedWarnings: const <DocxWarningCode, int>{
+      DocxWarningCode.templateRepeatDroppedAnnotation: 1,
+    },
   ),
 ];
 
@@ -1097,10 +1140,11 @@ DocxFixture _listFixture(
 
 /// [template] filled with `fillDocxData()` in Turkish, as
 /// `tool/fill_docx.dart` fills every document.
-DocxResult _filled(Uint8List template) => DocxTemplate(template).fill(
-  fillDocxData(),
-  options: const DocxTemplateOptions(locale: FormatLocale.trTR),
-);
+DocxResult _filled(Uint8List template, {Map<String, Object?>? data}) =>
+    DocxTemplate(template).fill(
+      data ?? fillDocxData(),
+      options: const DocxTemplateOptions(locale: FormatLocale.trTR),
+    );
 
 /// The format of the date tags of `t1_values`.
 const String _t1Date = '{{tarih:dd.mm.yyyy}}';
@@ -1269,4 +1313,199 @@ const List<String> _t1MergeFieldsTemplateText = <String>[
   'Eski alan: «Ad»',
   'Değerli «Ad», teklifimiz ektedir.',
   'Saygılarımızla.',
+];
+
+/// A cell of one paragraph of [inner] runs, [width] twentieths wide.
+String _cell(String inner, {int width = 3024}) =>
+    '<w:tc><w:tcPr><w:tcW w:w="$width" w:type="dxa"/></w:tcPr>${_p(inner)}'
+    '</w:tc>';
+
+/// The template of `t2_template`, `t2_values` and `t2_empty`, an invoice as
+/// Word for Mac writes it: the firm's name split over runs; a map section
+/// `musteri`; paid and unpaid inline conditions; a table under a header row
+/// whose line row repeats `kalemler` with the bookmark `kalem` around its
+/// description; the block list `notlar` of `{{.}}`; the discount blocks
+/// `iskonto` and `^iskonto` sharing the bookmark `iskonto_aralik`; the
+/// missing section `yok`; a header with an inline condition and a footer.
+/// The body ends in a paragraph.
+Uint8List t2ValuesTemplate() {
+  String alone(String tag) => _p(templateRun(tag));
+  return templateWithStories(
+    body: <String>[
+      _p(templateRun('Fatura: ') + wordSplitTag('{{firma.unvan}}')),
+      _p(
+        templateRun('{{#musteri}}') +
+            templateRun('Sayın {{ad}},') +
+            templateRun('{{/musteri}}'),
+      ),
+      _p(
+        templateRun('Durum: ') +
+            templateRun('{{#odendi}}Ödendi{{/odendi}}') +
+            templateRun('{{^odendi}}Ödenmedi{{/odendi}}'),
+      ),
+      '<w:tbl><w:tblPr><w:tblW w:w="9072" w:type="dxa"/></w:tblPr>'
+          '<w:tblGrid><w:gridCol w:w="3024"/><w:gridCol w:w="3024"/>'
+          '<w:gridCol w:w="3024"/></w:tblGrid>'
+          '<w:tr><w:trPr><w:tblHeader/></w:trPr>'
+          '${_cell(templateRun('Açıklama'))}${_cell(templateRun('Miktar'))}'
+          '${_cell(templateRun('Tutar'))}</w:tr>'
+          '<w:tr>${_cell(templateRun('{{#kalemler}}') + bookmarkAround(templateRun('{{aciklama}}'), id: 11, name: 'kalem'))}'
+          '${_cell(templateRun('{{miktar:#,##0.##}}'))}'
+          '${_cell(templateRun('$_t1Amount{{/kalemler}}'))}</w:tr>'
+          '<w:tr>${_cell(templateRun('Toplam'))}${_cell('')}'
+          '${_cell(templateRun(_t1Amount))}</w:tr></w:tbl>',
+      alone('{{#notlar}}'),
+      _p(templateRun('Not: {{.}}')),
+      alone('{{/notlar}}'),
+      alone('{{#iskonto}}'),
+      _p(
+        '<w:bookmarkStart w:id="12" w:name="iskonto_aralik"/>'
+        '${templateRun('İskonto uygulandı.')}',
+      ),
+      alone('{{/iskonto}}'),
+      alone('{{^iskonto}}'),
+      _p('${templateRun('İskonto yok.')}<w:bookmarkEnd w:id="12"/>'),
+      alone('{{/iskonto}}'),
+      _p(templateRun('Eksik: {{#yok}}gizli{{/yok}}')),
+      _p(templateRun('Saygılarımızla.')),
+    ].join(),
+    header: _p(
+      templateRun('{{firma.unvan}}') +
+          templateRun('{{#odendi}} – ÖDENDİ{{/odendi}}'),
+    ),
+    footer: _p(templateRun('{{firma.adres}}')),
+  );
+}
+
+/// The text of `t2_template`: the tags as written.
+const List<String> t2TemplateText = <String>[
+  'Fatura: {{firma.unvan}}',
+  '{{#musteri}}Sayın {{ad}},{{/musteri}}',
+  'Durum: {{#odendi}}Ödendi{{/odendi}}{{^odendi}}Ödenmedi{{/odendi}}',
+  'Açıklama\tMiktar\tTutar',
+  '{{#kalemler}}{{aciklama}}\t{{miktar:#,##0.##}}\t$_t1Amount{{/kalemler}}',
+  'Toplam\t\t$_t1Amount',
+  '{{#notlar}}',
+  'Not: {{.}}',
+  '{{/notlar}}',
+  '{{#iskonto}}',
+  'İskonto uygulandı.',
+  '{{/iskonto}}',
+  '{{^iskonto}}',
+  'İskonto yok.',
+  '{{/iskonto}}',
+  'Eksik: {{#yok}}gizli{{/yok}}',
+  'Saygılarımızla.',
+];
+
+/// What the header and footer of `t2_template` show: the tags as written.
+const List<String> _t2TemplateStories = <String>[
+  '1 header: {{firma.unvan}}{{#odendi}} – ÖDENDİ{{/odendi}}',
+  '1 footer: {{firma.adres}}',
+];
+
+/// The text of `t2_values`, written by hand from `fillDocxData()` in
+/// Turkish: three lines, paid, two notes, the discount not given, and the
+/// missing section as written.
+const List<String> t2ValuesText = <String>[
+  'Fatura: Acme A.Ş.',
+  'Sayın Ayşe Yılmaz,',
+  'Durum: Ödendi',
+  'Açıklama\tMiktar\tTutar',
+  'Danışmanlık\t2,5\t1.000,00 ₺',
+  'Yazılım lisansı\t1,5\t234,56 ₺',
+  'Kurulum\t0,75\t0,00 ₺',
+  'Toplam\t\t1.234,56 ₺',
+  'Not: Teslim 30 gün içindedir.',
+  'Not: Fiyatlara KDV dahildir.',
+  'İskonto yok.',
+  'Eksik: {{#yok}}gizli{{/yok}}',
+  'Saygılarımızla.',
+];
+
+/// What the header and footer of `t2_values` show, filled.
+const List<String> _t2ValuesStories = <String>[
+  '1 header: Acme A.Ş. – ÖDENDİ',
+  '1 footer: Atatürk Bulvarı No: 1, Çankaya / Ankara',
+];
+
+/// The text of `t2_empty`, written by hand from `fillDocxEmptyData()`.
+const List<String> t2EmptyText = <String>[
+  'Fatura: Acme A.Ş.',
+  'Sayın Ayşe Yılmaz,',
+  'Durum: Ödenmedi',
+  'Açıklama\tMiktar\tTutar',
+  'Toplam\t\t1.234,56 ₺',
+  'İskonto uygulandı.',
+  'Eksik: {{#yok}}gizli{{/yok}}',
+  'Saygılarımızla.',
+];
+
+/// What the header and footer of `t2_empty` show, filled.
+const List<String> _t2EmptyStories = <String>[
+  '1 header: Acme A.Ş.',
+  '1 footer: Atatürk Bulvarı No: 1, Çankaya / Ankara',
+];
+
+/// The template of `t2_nested_template` and `t2_nested`: the block section
+/// `gruplar` holding a group title with a tracked insertion and a comment, a
+/// paragraph of an inline PNG, an inline content control and a table whose
+/// line row repeats `kalemler` with the inline condition `acil`. No header
+/// or footer. The body ends in a paragraph.
+Uint8List t2NestedTemplate() {
+  String alone(String tag) => _p(templateRun(tag));
+  return templateDocx(
+    body: <String>[
+      alone('{{#gruplar}}'),
+      _p(
+        commentAround(templateRun('Grup'), id: 0) +
+            templateRun(': {{baslik}}') +
+            insertion(' (yeni)', id: 90),
+      ),
+      _p(inlinePictureRun()),
+      _p(inlineSdt('Kontrol', id: -1520)),
+      '<w:tbl><w:tblPr><w:tblW w:w="9072" w:type="dxa"/></w:tblPr>'
+          '<w:tblGrid><w:gridCol w:w="4536"/><w:gridCol w:w="4536"/>'
+          '</w:tblGrid>'
+          '<w:tr><w:trPr><w:tblHeader/></w:trPr>${_tc(templateRun('Ürün'))}'
+          '${_tc(templateRun('Tutar'))}</w:tr>'
+          '<w:tr>${_tc(templateRun('{{#kalemler}}{{ad}}'))}'
+          '${_tc(templateRun('$_t1Amount{{#acil}} (acil){{/acil}}{{/kalemler}}'))}'
+          '</w:tr></w:tbl>',
+      alone('{{/gruplar}}'),
+      _p(templateRun('Son.')),
+    ].join(),
+    comments: commentOf(0, 'Kontrol edildi'),
+    picture: true,
+  );
+}
+
+/// The text of `t2_nested_template`: the tags as written, the insertion's
+/// text, an empty line for the picture and the content control's text.
+const List<String> t2NestedTemplateText = <String>[
+  '{{#gruplar}}',
+  'Grup: {{baslik}} (yeni)',
+  '',
+  'Kontrol',
+  'Ürün\tTutar',
+  '{{#kalemler}}{{ad}}\t$_t1Amount{{#acil}} (acil){{/acil}}{{/kalemler}}',
+  '{{/gruplar}}',
+  'Son.',
+];
+
+/// The text of `t2_nested`, written by hand from the `gruplar` of
+/// `fillDocxData()` in Turkish.
+const List<String> t2NestedText = <String>[
+  'Grup: Donanım (yeni)',
+  '',
+  'Kontrol',
+  'Ürün\tTutar',
+  'Klavye\t450,00 ₺ (acil)',
+  'Grup: Hizmet (yeni)',
+  '',
+  'Kontrol',
+  'Ürün\tTutar',
+  'Kurulum\t300,00 ₺',
+  'Eğitim\t1.250,50 ₺',
+  'Son.',
 ];

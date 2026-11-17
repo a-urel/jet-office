@@ -902,6 +902,59 @@ checked`; `Notes` says what was seen.
 |  |  | `build/t1/owner/template_letter.docx` | not checked | Needs the owner's template. |
 |  |  | Save in Word | not checked |  |
 
+## T2
+
+T2 fills sections of a template: repeated table rows and blocks, conditions
+and scopes (decision [`0024`](decisions/0024-docx-template-fill.md)). Write
+the files with:
+
+```bash
+dart run tool/write_t2_check.dart build/t2
+dotnet run --project tool/ooxml_validate -- build/t2
+```
+
+No repair prompt in any of them, and each saves in Word without a prompt. Read
+every statement here as what to expect until the owner has looked.
+
+### Fixtures: `build/t2/*.docx`
+- `t2_values.docx`: three lines, `Durum: Ödendi`, two notes, `İskonto yok.`,
+  the header `Acme A.Ş. – ÖDENDİ`; `Eksik: {{#yok}}gizli{{/yok}}` is visible
+  as written. Insert > Bookmark lists `kalem` once.
+- `t2_empty.docx`: the line table keeps its header row and totals row only;
+  `Durum: Ödenmedi`; no notes; `İskonto uygulandı.`.
+- `t2_lines_1.docx` and `t2_lines_40.docx`: 1 and 40 lines; in the 40-line one
+  the table runs over two pages and the header row repeats on page 2.
+- `t2_nested.docx`: two groups, each with its picture, its content control
+  `Kontrol`, its tracked insertion ` (yeni)` and its table; the Review pane
+  lists two insertions, each accepted or rejected on its own; the comment
+  `Kontrol edildi` shows once, beside the first group.
+- `t2_template.docx` and `t2_nested_template.docx` look as written.
+
+### Owner templates: `build/t2/owner/*.docx`
+- `template_invoice_1`, `_40`, `_0`: 1, 40 and 0 lines (the row gone, the
+  header row left), the paid and unpaid variants, the comment still anchored,
+  the header and footer filled on every page, page numbers updating.
+
+### Save in Word
+For `t2_values`, `t2_nested`, `t2_lines_40` and every owner file: change one
+word, save, close, reopen: no repair prompt, the edit there.
+
+### Results
+
+| Date | Word | File | Result | Notes |
+|---|---|---|---|---|
+|  |  | `build/t2/t2_values.docx` | not checked |  |
+|  |  | `build/t2/t2_empty.docx` | not checked |  |
+|  |  | `build/t2/t2_lines_1.docx` | not checked |  |
+|  |  | `build/t2/t2_lines_40.docx` | not checked |  |
+|  |  | `build/t2/t2_nested.docx` | not checked |  |
+|  |  | `build/t2/t2_template.docx` | not checked |  |
+|  |  | `build/t2/t2_nested_template.docx` | not checked |  |
+|  |  | `build/t2/owner/template_invoice_1.docx` | not checked | Needs the owner's template. |
+|  |  | `build/t2/owner/template_invoice_40.docx` | not checked | Needs the owner's template. |
+|  |  | `build/t2/owner/template_invoice_0.docx` | not checked | Needs the owner's template. |
+|  |  | Save in Word | not checked |  |
+
 ## Results
 
 One row per file or check. `Result` is `ok`, `sorun` (a problem) or `not

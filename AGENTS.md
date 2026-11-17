@@ -33,7 +33,11 @@ covered in the end; template fill first; macros stay out; supersedes part of
 the end; level, model and order undecided; files and PDF keep the whole
 chart) and `0024` (DOCX template fill: `{{}}` tags and `MERGEFIELD`, filled in
 place on the model, one document per record, milestones T1 to T3; settles what
-`0010` left to its own record) before any design change.
+`0010` left to its own record) and `0025` (proposed: T2's sections, scopes and
+limits, and the rules of `0024` a review found wrong, which it supersedes: a
+missing section name, which problems throw, how tags and merge fields look
+names up, what a fill consumes and what `comparePackages` proves, and the
+fill rules a spec review found loose) before any design change.
 
 Phase 3, the workbook model, is complete at W6 (proof and release readiness):
 its names are fixed, so a rename of a public name of `XlsxWorkbook` is breaking
@@ -60,7 +64,10 @@ Milestone T1 (DOCX template fill, values: `DocxTemplate`, `{{}}` tags and
 `MERGEFIELD`, decision 0024; `docs/docx-model.md`, "What T1 does") is built:
 the owner's Word check (`tool/write_t1_check.dart`, `docs/word-checks.md`,
 "T1") is open, and waits for the owner's `template_invoice.docx` and
-`template_letter.docx`. Sections and repeats come in T2, pictures in T3.
+`template_letter.docx`. Milestone T2 (sections: repeated rows and blocks,
+conditions, scopes, nesting; `docs/docx-model.md`, "What T2 does") is built:
+the owner's Word check (`tool/write_t2_check.dart`, `docs/word-checks.md`,
+"T2") is open and waits for the same templates. Pictures come in T3.
 `packages/jet_charts_flutter` is its Flutter backend (decision 0016), with its
 own `AGENTS.md`; milestones J3 and J4 are done. This
 package never depends on it. `packages/jet_charts_flutter/docs/app-themes.md`
@@ -201,9 +208,18 @@ dotnet run --project tool/ooxml_validate -- build/excel_gallery
   `w:fldSimple` and a field inside a sentence, filled the same way;
   `t1_template` and `t1_merge_fields_template`, those two templates unfilled,
   so LibreOffice and the SDK see the tags and fields as written, and
-  `tool/fill_docx.dart` fills both kinds in CI). A fixture with a
+  `tool/fill_docx.dart` fills both kinds in CI) and the T2 template fill's
+  (`t2_template`, an invoice template with a map section, paid and unpaid
+  inline conditions, a repeated table row with a bookmark under a header row,
+  a block list of notes with `{{.}}`, two discount blocks sharing a bookmark
+  and a missing section; `t2_values` and `t2_empty`, it filled with
+  `fillDocxData()` and `fillDocxEmptyData()`; `t2_nested_template`, groups
+  repeating blocks that hold a tracked insertion, a comment, a picture, a
+  content control and a table whose row repeats with an inline condition;
+  `t2_nested`, it filled). A fixture with a
   `DocxFixture.headerFooterText` (`d4_headers`, `d4_fields`, `d5_pictures`,
-  `d5_links`, `d6_list`, `d6_list_landscape`, the four `t1_*`) also gets
+  `d5_links`, `d6_list`, `d6_list_landscape`, the four `t1_*`, `t2_template`,
+  `t2_values`, `t2_empty`) also gets
   `<name>.stories.txt`,
   what its headers and footers show. No fixture ends in a table, because
   LibreOffice's text export of one never ends (see below), or in a section
@@ -390,6 +406,19 @@ dotnet run --project tool/ooxml_validate -- build/excel_gallery
   build/t1` validates its output, and the owner's steps are in
   `docs/word-checks.md`, "T1". Exit 2 on unusable arguments, 1 on any error.
   `test/tool/write_t1_check_test.dart` (VM) tests it.
+- `tool/write_t2_check.dart <out-dir>` writes the files of the owner's T2
+  Word check (`build/t2`): `t2_values.docx`, `t2_empty.docx`,
+  `t2_template.docx`, `t2_nested.docx` and `t2_nested_template.docx` (the T2
+  fixtures), `t2_lines_1.docx` and `t2_lines_40.docx` (the invoice template
+  filled with `fillDocxLines(1, paid: true)` and `fillDocxLines(40, paid:
+  false)`), and `owner/`: each `test/fixtures/owner/docx/template_invoice*.docx`
+  filled with 1 line paid, 40 lines unpaid and `fillDocxEmptyData()` as
+  `<name>_1.docx`, `<name>_40.docx` and `<name>_0.docx`, and each other
+  `template_*.docx` filled with `fillDocxData()` (none exist yet: it says so
+  and exits 0). It is not part of the CI chain; `dotnet run --project
+  tool/ooxml_validate -- build/t2` validates its output, and the owner's steps
+  are in `docs/word-checks.md`, "T2". Exit 2 on unusable arguments, 1 on any
+  error. `test/tool/write_t2_check_test.dart` (VM) tests it.
 - `tool/compare_text.dart` compares LibreOffice's text export of every DOCX
   fixture (`txt:Text (encoded):UTF8`) with its `<name>.expected.txt`, or its
   `<name>.libreoffice.txt` (`DocxFixture.libreOfficeText`: list labels such as
@@ -486,13 +515,18 @@ dotnet run --project tool/ooxml_validate -- build/excel_gallery
   (decision 0024, T1), lists its tags and fills it with `fillDocxData()`
   (`tool/src/fill_data.dart`, the data the `t1_*` fixtures are filled with:
   `firma.unvan`, `firma.adres`, `tarih` 2026-11-14, `musteri.ad`, `tutar`
-  1234.56, `miktar` 2.5 and the merge field keys `Ad`, `Müşteri Adı` and
-  `Tarih`) in Turkish, saves to the second directory and reads the result back
+  1234.56, `miktar` 2.5, the merge field keys `Ad`, `Müşteri Adı` and
+  `Tarih`, and for the `t2_*` sections `kalemler`, `odendi`, `notlar`,
+  `iskonto` and `gruplar`) in Turkish, saves to the second directory and reads the result back
   with `DocxDocument`: no fillable tag (a value tag of the body, a header or a
   footer whose form raises no warning) whose name the data has may be left,
   listed or in its part's text; every fillable tag and merge field the data
   lacks must still be there and warned `templateValueMissing`; no
-  `MERGEFIELD` the data names may be left; `comparePackages` must find
+  `MERGEFIELD` the data names may be left; a tag inside a section, or a
+  section tag, is checked by the fill's warnings: warned missing, it stays;
+  otherwise it is gone; the saved story parts hold no drawing, revision or
+  content control id twice (`tool/src/docx_ids.dart`); `comparePackages`
+  must find
   differences only in the main part and in the header and footer parts that
   held a tag the fill fills (fillable, named by the data), never in
   `[Content_Types].xml`; and `fill({})`
@@ -686,8 +720,8 @@ past the length limit must lex in bounded time. Pin a failure as a unit test
 in `test/xlsx/formula/formula_lexer_test.dart` first.
 
 `test/docx/fuzz_test.dart` does the same for `DocxDocument` (seeds 1 to 4, 1400
-cases each, over the fixtures (the `d3_*`, `d4_*`, `d5_*`, `d6_*` and `t1_*`
-ones among them), a hand-made table with every element of the table values, a hand-made
+cases each, over the fixtures (the `d3_*`, `d4_*`, `d5_*`, `d6_*`, `t1_*` and
+`t2_*` ones among them), a hand-made table with every element of the table values, a hand-made
 `sections_by_hand` (every section child, six stories, broken references and
 broken fields), a hand-made `drawings_by_hand` (inline, anchored, linked and
 broken pictures, external, anchor and broken hyperlinks, bookmarks with bad ids,
@@ -734,21 +768,27 @@ four T1 fixtures, 1350 left `word/footer4.xml` of `d4_headers` unmutated).
 When a new part name or corpus entry joins the corpus, run that test and raise
 the count again if it fails.
 
-`test/docx/template/template_fuzz_test.dart` fuzzes `DocxTemplate` (T1,
-decision 0024; seeds 1 to 4, 300 cases each, the same cases on the VM and in
+`test/docx/template/template_fuzz_test.dart` fuzzes `DocxTemplate` (T1 and
+T2, decision 0024; seeds 1 to 4, 300 cases each, the same cases on the VM and in
 Chrome, which a digest of the cases proves; a change to the corpus or the
 mutations changes it). Its corpus (`test/docx/support/template_fuzz.dart`) is
 the template of `t1_values` (`t1_template`), the template of
 `t1_merge_fields`, a `wordSplitTag` header document and a document of the fill's
 hard cases (a tag over a hyperlink's edge, around a tab, in a field result, in a
-tracked insertion, in a content control, a section and a malformed tag). The
+tracked insertion, in a content control, a section and a malformed tag), the
+templates of `t2_values` and `t2_nested` and a document of the section hard
+cases (`sections_by_hand`: crossing, unclosed, a stray closer, across a
+hyperlink edge, a section break, a tag paragraph with other text, a vertical
+merge, 34 levels deep, a bookmark half inside an inline section). The
 mutations are the DOCX fuzz's (the archive and byte mutations with its tokens,
 and the attribute mutation) and, on the main, header and footer parts, `{{`,
-`}}`, `{{a}}`, `{{#a}}` or a random tag body inserted into a `w:t` text and a
+`}}`, `{{a}}`, `{{#a}}`, `{{/a}}`, `{{^a}}` or a random tag body inserted into a `w:t` text and a
 switch (`\* Upper`, `\@ "`, `\v`, a lone `\`, `MERGEFIELD Ad` and the like)
 into a `w:instrText` text. Only `DocxReadException` may come out of
-`DocxTemplate(...)` or a fill; the tags read, the filled file must read back
-(body and every story), and `fill({})` must change nothing: `comparePackages`
+`DocxTemplate(...)` or a fill (with `fillDocxData()` and `a`, a list of two
+maps that each have an `a`); the tags read, the filled file must read back
+(body and every story) and write no drawing, revision or content control id
+twice in the filled file, and `fill({})` must change nothing: `comparePackages`
 finds no difference from the template opened, its stories loaded and saved
 unchanged, which is the template itself unless the model's own save rewrites a
 mutated package part (`exact` for the unmutated corpus: the template itself).

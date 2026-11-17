@@ -25,9 +25,15 @@ import 'opaque_scan.dart';
 import 'paragraph_text.dart';
 import 'tag_scanner.dart';
 
-/// A story the fill walks: its blocks, the absolute name of its part and the
-/// first segment of its paragraphs' paths (`body`, `header1.xml`).
-typedef TemplateStory = ({List<DocxBlock> blocks, String part, String prefix});
+/// A story the fill walks: the story, its blocks, the absolute name of its
+/// part and the first segment of its paragraphs' paths (`body`,
+/// `header1.xml`).
+typedef TemplateStory = ({
+  DocxStory story,
+  List<DocxBlock> blocks,
+  String part,
+  String prefix,
+});
 
 /// The stories of [document] in reading order: the body, then for each
 /// section its header, first header, even header, footer, first footer and
@@ -36,6 +42,7 @@ typedef TemplateStory = ({List<DocxBlock> blocks, String part, String prefix});
 List<TemplateStory> templateStories(DocxDocument document) {
   final List<TemplateStory> out = <TemplateStory>[
     (
+      story: document.body,
       blocks: document.body.blocks,
       part: docxPackageOf(document).mainPart,
       prefix: 'body',
@@ -56,6 +63,7 @@ List<TemplateStory> templateStories(DocxDocument document) {
       final String? part = storyPartNameOf(story);
       if (part == null || !parts.add(part)) continue;
       out.add((
+        story: story,
         blocks: story.blocks,
         part: part,
         prefix: part.substring(part.lastIndexOf('/') + 1),
@@ -330,8 +338,15 @@ TemplateEntry _tagEntry(
     if (span.crossesBoundary) {
       problem = DocxWarningCode.templateTagMalformed;
     } else {
+      final bool section =
+          tag.kind == TagKind.section ||
+          tag.kind == TagKind.invertedSection ||
+          tag.kind == TagKind.sectionEnd;
       problem = switch (span.region) {
         Region.fillable => null,
+        // A section tag in a field's result is no section (Ruling 22 of T2).
+        Region.fieldResult when sections && section =>
+          DocxWarningCode.templateSectionMalformed,
         Region.fieldResult => DocxWarningCode.templateTagMalformed,
         Region.revision => DocxWarningCode.templatePlaceholderInRevision,
         Region.contentControl =>

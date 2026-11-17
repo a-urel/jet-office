@@ -70,10 +70,13 @@ enum DocxWarningCode {
   /// written.
   templateTagMalformed,
 
-  /// Section tags in a template do not pair or nest, or a repeat crosses a
-  /// vertical merge, or sections were used before they are filled (T2); the
-  /// section tags were left as written and [DocxWarning.detail] is the tag as
-  /// written.
+  /// A section tag of a template does not pair or nest, or its pair stands
+  /// where no section can (two inline lists, two containers, a tag paragraph
+  /// that is not alone or carries a section break, rows across a vertical
+  /// merge or selecting the rows of the section around it), or the content
+  /// it would copy or remove holds a section break; the tag was left as
+  /// written, its content filled once in the scope around it, and
+  /// [DocxWarning.detail] is the tag as written.
   templateSectionMalformed,
 
   /// A list, a map or a picture (filled from T3) was given for a value tag;

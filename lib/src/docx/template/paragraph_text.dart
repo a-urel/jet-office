@@ -166,11 +166,38 @@ const Set<String> _transparent = <String>{
   'permEnd',
 };
 
+/// The state of the fields a story keeps as runs (`DocxFieldMark`s in its
+/// runs, such as a field across paragraphs), carried from one paragraph to
+/// the next in reading order (T2, Ruling 22): `begin` opens a field,
+/// `separate` starts its result and `end` closes it, nested fields counted.
+/// Text in the result of such a field is [Region.fieldResult], as a typed
+/// field's result is, so a tag there is not filled.
+final class LooseFields {
+  /// Whether each open field, the innermost last, is past its `separate`.
+  final List<bool> _open = <bool>[];
+
+  /// Whether text met now is in the result of an open field.
+  bool get inResult => _open.contains(true);
+
+  void _mark(DocxFieldMarkType type) {
+    switch (type) {
+      case DocxFieldMarkType.begin:
+        _open.add(false);
+      case DocxFieldMarkType.separate:
+        if (_open.isNotEmpty) _open[_open.length - 1] = true;
+      case DocxFieldMarkType.end:
+        if (_open.isNotEmpty) _open.removeLast();
+    }
+  }
+}
+
 /// The searchable text of [paragraph] and the position of each character.
+/// [fields], when given, carries the loose fields of the paragraphs before
+/// it and is updated with this one's marks (Ruling 22).
 ///
 /// Never throws; a paragraph without inlines gives an empty text.
-ParagraphText paragraphTextOf(DocxParagraph paragraph) {
-  final _Builder b = _Builder();
+ParagraphText paragraphTextOf(DocxParagraph paragraph, {LooseFields? fields}) {
+  final _Builder b = _Builder(fields ?? LooseFields());
   b.walk(paragraph.inlines, Region.fillable);
   return ParagraphText._(
     b.buffer.toString(),
@@ -186,10 +213,17 @@ ParagraphText paragraphTextOf(DocxParagraph paragraph) {
 /// Its first position is the range's first character; its runs are those
 /// of the range, so a tag found in it is filled in place.
 ///
+/// [fields] is as for [paragraphTextOf].
+///
 /// Throws [RangeError] when the range is not inside [inlines].
-ParagraphText inlineRangeTextOf(List<DocxInline> inlines, int start, int end) {
+ParagraphText inlineRangeTextOf(
+  List<DocxInline> inlines,
+  int start,
+  int end, {
+  LooseFields? fields,
+}) {
   RangeError.checkValidRange(start, end, inlines.length, 'start', 'end');
-  final _Builder b = _Builder();
+  final _Builder b = _Builder(fields ?? LooseFields());
   b.walk(inlines.sublist(start, end), Region.fillable);
   return ParagraphText._(
     b.buffer.toString(),
@@ -200,6 +234,9 @@ ParagraphText inlineRangeTextOf(List<DocxInline> inlines, int start, int end) {
 }
 
 final class _Builder {
+  _Builder(this.fields);
+
+  final LooseFields fields;
   final StringBuffer buffer = StringBuffer();
   final List<TextPosition> positions = <TextPosition>[];
   final Map<int, String> standIns = <int, String>{};
@@ -261,7 +298,14 @@ final class _Builder {
       final DocxRunContent c = content[i];
       switch (c) {
         case DocxText():
-          _addText(c.text, region, run: run, index: i);
+          _addText(
+            c.text,
+            region == Region.fillable && fields.inResult
+                ? Region.fieldResult
+                : region,
+            run: run,
+            index: i,
+          );
         case DocxFieldInstruction():
           // Instruction text is never visible, but a tag may not span it:
           // replacing the span would remove the run that holds it.
@@ -276,6 +320,7 @@ final class _Builder {
         default:
           // A tab, break, picture, field mark or opaque content: one
           // position of its own, which ends the segment on both sides.
+          if (c is DocxFieldMark) fields._mark(c.type);
           _cut();
           switch (c) {
             case DocxTab() || DocxBreak() || DocxCarriageReturn():

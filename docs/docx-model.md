@@ -12,8 +12,8 @@ WordprocessingML.
 This page covers milestone D1, the foundation, milestone D2, formatting,
 styles and lists, milestone D3, tables, milestone D4, sections, headers,
 footers and fields, milestone D5, pictures, hyperlinks, bookmarks and
-document properties, milestone D6, the list export, and milestone T1, the
-fill of a template's values (decision
+document properties, milestone D6, the list export, and milestones T1 and
+T2, the fill of a template's values and sections (decision
 [`0024`](decisions/0024-docx-template-fill.md)). **The names are fixed
 as of D6** (decision 0010): the DOCX API is complete for phase 4, and a later
 rename is a breaking change. D6 renamed three symbols that D1 to D5 had
@@ -391,13 +391,161 @@ final DocxResult result = DocxTemplate(bytes).fill(
   of one template are two documents with their own values and the caller
   changing the bytes it gave afterwards changes nothing (the template copies
   them).
-- **Section tags stay.** `{{#x}}`, `{{^x}}` and `{{/x}}` stay as text in T1;
-  each warns `templateSectionMalformed` with the tag as detail, and the
-  message says sections are not filled yet. T2 fills them.
+- **Section tags stayed in T1.** `{{#x}}`, `{{^x}}` and `{{/x}}` stayed as
+  text in T1, each warned `templateSectionMalformed`. T2 fills them (see
+  "What T2 does"); the warning now means a section tag that does not pair or
+  stand where a section can.
 - **The tools.** `tool/fill_docx.dart` runs the fill on a directory and checks
   what it changed (CI runs it on the fixtures and the owner's Word files),
   `tool/write_t1_check.dart` writes the owner's Word check, and the fuzz
   (`tool/fuzz_docx.dart --template`) fills mutated templates.
+
+## What T2 does
+
+T2 fills the sections of a template (decision
+[`0024`](decisions/0024-docx-template-fill.md); the rules a review of 0024
+and of the design found loose are in the proposed decision
+[`0025`](decisions/0025-docx-template-sections-and-fill-rules.md)): a table
+row or a run of blocks repeated once per item of a list, content shown or
+removed by a condition, a map as the scope of the names inside, and sections
+inside sections. The rulings of the T2 plan are recorded here.
+
+```dart
+final DocxResult result = DocxTemplate(bytes).fill(
+  <String, Object?>{
+    'kalemler': <Object?>[
+      <String, Object?>{'aciklama': 'Danışmanlık', 'tutar': FormatDecimal('1000')},
+      <String, Object?>{'aciklama': 'Kurulum', 'tutar': FormatDecimal('0')},
+    ],
+    'odendi': true,
+  },
+  options: const DocxTemplateOptions(locale: FormatLocale.trTR),
+);
+```
+
+- **What a value does (Ruling 5).** `{{#name}}` with a non-empty list repeats
+  its content once per item, the item the innermost scope; with a map (an
+  empty one too) it shows once with the map as the scope; with `false`,
+  `null`, `''` or an empty list it removes the content; with `true`, any
+  number (`0` too), a `FormatDecimal`, a non-empty text, a `DateTime`, a
+  `Duration` or an `OfficeImage` it shows once, the value the scope, so
+  `{{.}}` shows it. `{{^name}}` shows once (no new scope) exactly when
+  `{{#name}}` would remove, and removes otherwise.
+- **Scopes (Ruling 6).** A name's first segment is looked up from the
+  innermost section's value outward, skipping values that are not maps; the
+  first map that has the key decides and the rest of the path is walked in it
+  with no further fallback, so `{{a.b}}` with an innermost `a: null` is
+  missing, never the outer `a.b`. A merge field's whole name is looked up the
+  same way, as one key. `{{.}}` is the innermost value: the data map at the
+  top, which is not text.
+- **Pairing (Ruling 7).** Section tags pair through a stack, by their path. A
+  closer whose opener is deeper in the stack makes every opener above it, its
+  own opener and itself malformed; a closer with no opener is malformed alone;
+  an opener left unclosed is malformed. `{{#a}}{{#b}}{{/a}}{{/b}}` gives four
+  malformed tags.
+- **Where the two tags stand (Rulings 8, 13, 14, 21).** *Inline*: both tags in
+  one paragraph and in one inline list (the paragraph's own runs, or one
+  hyperlink's); the content is the inlines between them. *Rows*: the two
+  paragraphs directly in cells of one table, in different rows or cells; the
+  content is the whole rows from the opener's to the closer's, so text before
+  the opener in its row and after the closer in its row is copied and filled
+  with the item, and a section in those rows outside the pair in reading order
+  belongs to it. *Blocks*: each tag alone in its paragraph (only spaces,
+  no-break spaces, bookmarks, comment marks and `w:proofErr` beside it), both
+  paragraphs in one container; the content is the blocks between them, and the
+  two tag paragraphs go. Anything else is malformed: two inline lists, two
+  containers, a tag paragraph of a blocks pair that is not alone or carries a
+  section break, rows whose first row holds a cell continuing a merge from
+  above or whose last row's merge continues below, and a rows pair inside a
+  rows pair of the same table that selects the same rows.
+- **Malformed tags (Rulings 7, 8, 13, 21).** A malformed section tag stays as
+  written and warns `templateSectionMalformed`; the content around it is
+  filled as if it were not there, in the scope outside it.
+- **The order of a region's work (Ruling 16).** A story, and each copy of a
+  section, is a region. Its section tags are paired; each well-formed section
+  is decided (its value, the limits, a section break in its content); every
+  tag and merge field outside the sections the fill expands is filled, those
+  of a paragraph that holds an inline section in one pass from the last to the
+  first with the section itself, so an outer value is never scanned again;
+  then the other sections are expanded from the last to the first: the copies
+  are made from the unfilled content, the tags removed, and each copy (the
+  original first) filled as a region with its item.
+- **Copies (Rulings 10, 17).** The first copy is the content in place; the
+  others go right after it. An inline section's runs are split at the tags'
+  edges (`splitRunAt`), so its content is whole inlines. A copy keeps run,
+  paragraph, row and cell properties, and leaves out every bookmark, comment
+  range and reference, note reference, permission range, move range and
+  tracked custom XML range mark: they stay in the first copy only, and the
+  fill warns `templateRepeatDroppedAnnotation` once per section that dropped
+  any, with the opening tag as detail; the warning does not name the kind
+  (owner, 2026-11-16).
+- **Fresh ids at save (Ruling 9).** What a copy holds gets new ids when the
+  document is saved: `wp:docPr` (and its `pic:cNvPr`), the `w:id` of a
+  revision (`w:ins`, `w:del`, the property changes and the cell revisions), a
+  content control's `w:sdtPr/w:id`; `w14:paraId`, `w14:textId` and `wp14`
+  ids are dropped for Word to write again. One counter serves bookmarks,
+  comments and revisions (Ruling 4), so a built bookmark and a copied
+  revision never share an id.
+- **Removal (Ruling 11).** Removed content and both tags go. A paired mark
+  (a bookmark by id; a comment range, a permission range or a move range by
+  `w:id`) whose one half was removed loses its other half, found anywhere in
+  the story's inline lists (paragraphs, hyperlinks and fields), and the fill warns `templateRemovalDroppedAnnotation`
+  with the opening tag. A table whose rows all went is removed, and a cell, a
+  header, a footer or the body left with no paragraph gets an empty one (a
+  cell also when its last block would not be a paragraph).
+- **A missing name (Ruling 12).** A section whose name the data lacks keeps
+  both tags as written, shows its content once in the same scope and warns
+  `templateValueMissing` once, with the opening tag; with `removeMissing` the
+  tags go, the content shows once, and the warning stays.
+- **A section break (Ruling 14).** Content holding a paragraph with a section
+  break is never copied or removed: when its value would repeat or remove it,
+  the tags stay, the content is filled once in the outer scope, and the fill
+  warns `templateSectionMalformed` once, with the opening tag. A value that
+  shows the content once (a map, `true`) still applies.
+- **Locations (Ruling 15).** A warning in a copy names the template's
+  paragraph it was copied from (`body/tbl[0]/tr[1]/tc[0]/p[0]` for every
+  copy of row 1); the same warning in every copy is counted, not repeated.
+- **Tags in a loose field's result (Ruling 22).** A field the model keeps as
+  runs (across paragraphs) is followed through the story in reading order;
+  text between its `separate` and its `end` is a field result, as a typed
+  field's is: a value tag there warns `templateTagMalformed` and a section tag
+  `templateSectionMalformed`, and both stay. A region a section expands starts
+  outside any such field.
+- **Limits (Rulings 1, 2).** `DocxTemplateOptions` has `maxCopies` (100000:
+  units the copies of all sections may add, at every level, copies of copies
+  included; a unit is a block, a table row or an inline, the top-level items
+  a copy inserts, and a list of n items adds (n - 1) times the section's
+  units; the owner set this meaning on 2026-11-17, as counting copies let a
+  nested section of one name grow a small template to millions of
+  paragraphs), `maxSectionDepth`
+  (32: how deep sections may nest) and `maxTags` (1000000: tags and merge
+  fields one fill may fill, copies counted). A limit below 1 throws an
+  `ArgumentError` before anything changes. A section a limit refuses (the
+  units its copies add, or its content's fillable tags times its items, past
+  what is left,
+  checked before it repeats; or nested past `maxSectionDepth`) keeps its tags
+  as written, shows its content once in the outer scope (its own sections
+  decided there, one level deeper, so each deeper section is refused too) and
+  warns `templateLimitExceeded` with the opening tag. Tags are counted ahead:
+  a region's tags outside its sections first, when they all fit, then each
+  section as it is decided, in reading order, a repeat counting its content's
+  tags times its items (its copies' own sections counting only their extra
+  copies), so a section never repeats part-way or takes what the tags after
+  it need. **A value tag or merge
+  field past `maxTags`** stays as written and warns the same code with the tag
+  as detail: the approved message speaks of a section, and for a tag "the
+  section" is the tag itself, left as written; no code or message was added
+  for it.
+- **The listing (Ruling 19).** `tags` and `tagsOf` pair each story as one
+  region without data: a section tag of a well-formed pair has no problem, a
+  malformed one `templateSectionMalformed` (the cases above that do not
+  depend on the data), and a tag's depth is the number of well-formed
+  sections around it (a section's own tags count those outside it).
+- **The tools.** `tool/fill_docx.dart` checks tags inside sections by the
+  fill's warnings and that no drawing, revision or content control id is
+  written twice; `tool/write_t2_check.dart` writes the owner's Word check; the
+  template fuzz fills the T2 templates and a document of the section hard
+  cases and checks the ids too.
 
 ## Known gaps
 
@@ -688,10 +836,7 @@ final DocxResult result = DocxTemplate(bytes).fill(
 
 ### Known gaps of T1
 
-- **Sections, repeats and conditions come in T2.** `{{#x}}`, `{{^x}}`, `{{/x}}`
-  are warned and left, and a table row is not repeated. There is no limit
-  option in T1 (the copy limit belongs to T2's repeats); a fill is linear in
-  the document.
+- **Sections came in T2** (see "What T2 does").
 - **Pictures come in T3.** An `OfficeImage` in a value tag is accepted by the
   validation, leaves the tag and warns `templateValueNotText`. An anchored
   (floating) picture is no placeholder either.
@@ -724,6 +869,35 @@ final DocxResult result = DocxTemplate(bytes).fill(
 - **The tag's formatting is the first character's.** A value takes the
   formatting of the first run of its tag, not of its last or of the text
   before it; a tag whose first run is bold gives a bold value.
+
+### Known gaps of T2
+
+- **The repeat warning does not name the kind** of annotation a copy left
+  out (owner, 2026-11-16): its detail is the opening tag, and it is raised
+  once per section that dropped any, not once per mark.
+- **Legacy VML shape ids** (`o:spid`, `v:shape/@id`) in copies are not
+  renewed, nor the `cNvPr` ids of shapes and other non-picture DrawingML
+  (they count in the drawing ids' floor, so new ids never meet them).
+- **A copied chart** keeps its `r:id`: two drawings share one chart part.
+- **A copied field** keeps its instruction and result as they were; fields are
+  not updated.
+- **A file's own `<?jet-office-copy?>` processing instructions** inside
+  copied content are removed from the copies (the writer marks copies with
+  them while it renews ids).
+- **A comment whose range and reference are both removed** stays in
+  `comments.xml` with no anchor (point P-5 of the plan); whether Word for
+  Mac accepts it is for the owner's T2 check.
+- **Content holding a section break** is neither copied nor removed, and a
+  blocks section whose tag paragraph carries one is malformed.
+- **A mark between blocks** (a `w:bookmarkStart` directly in the body or a
+  cell) whose other half a removal took is left: removing a block would move
+  the blocks the fill still reaches by index. Marks in paragraphs, the usual
+  case, are removed.
+- **A section inside a refused one** is refused again when the refusal is the
+  depth limit, so a template nested past `maxSectionDepth` warns once for
+  each section past it.
+- **The tool's id check reads the parts as text**: an id under a prefix other
+  than Word's `wp:` and `w:` is not seen (`tool/src/docx_ids.dart`).
 
 ## Rules the model enforces
 
@@ -1302,7 +1476,20 @@ A list written by `DocxListExport` follows these rules. Tests are in
 | The data tree | checked first: an unsupported type, a non-String key or a cycle throws naming the path; a shared sub-map is accepted and checked once | a fill that fails halfway is worse than one that fails first | `test/docx/template/values_test.dart` ("throws for an unsupported type, naming the path", "throws for a non-String key", "throws for a cycle, accepts a shared sub-map", "a shared structure is checked once, not once per path"); `fill_test.dart` ("a data error changes nothing and records nothing") |
 | A name the data lacks | the tag stays, `templateValueMissing`; `removeMissing` removes it and still warns | a placeholder is never lost silently | `test/docx/template/fill_test.dart` ("a missing value stays and warns", "removeMissing removes it and still warns", "a missing merge field stays, or goes with removeMissing") |
 | Where it fills | body, cells, nested cells, headers, footers | the owner's templates have tags in all of them | `test/docx/template/fill_test.dart` ("fills the body, a cell, a nested cell, a header and a footer"); `test/docx/template/template_test.dart` ("t1_values: the fixed data fills the split, formatted, coloured, header, footer and table tags, and leaves {{yok}}") |
-| Section tags | stay as text, each warned `templateSectionMalformed` with the tag; the value inside a section is filled | sections are T2 | `test/docx/template/fill_test.dart` ("section tags stay, each warned, the value inside filled") |
+| Pairing and forms | a stack pairs section tags by path; inline, rows and blocks forms in that order; crossing, unpaired, mixed-level, two containers, a tag not alone, a section break in a tag paragraph, rows across a merge, a rows pair over its outer pair's rows: malformed | spec 4.1; Rulings 7, 8, 13, 14, 21 | `test/docx/template/sections_test.dart` |
+| What a value does | a non-empty list repeats, a map is a scope, `false`, `null`, `''` and an empty list remove, any other value shows once as the scope; `{{^x}}` the other way | spec 4; Ruling 5 | `test/docx/template/values_test.dart`, group "sections"; `sections_fill_test.dart` ("paid and unpaid", "a map section is a scope", "a value shown once is the current item") |
+| Scopes | innermost value first, outward over maps; the first map with the key decides; `{{.}}` the innermost value | Ruling 6 | `test/docx/template/values_test.dart`; `sections_fill_test.dart` ("names inside a section fall back outward", "{{.}} is the current item") |
+| Inline, rows, blocks | an inline section's runs split at its tags, copies after the content; rows copied after the last row with their properties; blocks copied after the closing paragraph, tag paragraphs removed; copies of a section holding a repeating one are found again before they fill | spec 4.2; Rulings 16, 17 | `test/docx/template/expand_test.dart`; `sections_fill_test.dart` ("a repeated row fills each copy from its item", "copies of a block section holding a repeating one fill in place", "outer tags and an inline section in one paragraph") |
+| Annotations in copies and removals | the first copy keeps bookmarks, comment ranges and references, note references; the others leave them out with one `templateRepeatDroppedAnnotation`; a removal takes a mark's other half with one `templateRemovalDroppedAnnotation` | decision 0024; Rulings 10, 11 | `test/docx/template/expand_test.dart` ("copies leave the bookmark in the first copy only", "removing half a bookmark removes the other half", "removing a comment range start removes its end"); `sections_fill_test.dart` ("a repeated row keeps its bookmark once and warns", "removing half a bookmark removes the other half and warns") |
+| Fresh ids at save | copies' drawings, revisions and content controls get new ids; one counter for bookmarks, comments and revisions | Rulings 3, 4, 9 | `test/docx/template_copy_ids_test.dart`; `template_test.dart` ("t2_nested gives t2NestedText") |
+| Vertical merge, section break | a rows pair across a merge is malformed; content holding a section break is not copied or removed | Rulings 13, 14 | `test/docx/template/sections_fill_test.dart` ("a rows section across a vertical merge stays and fills once"); `expand_test.dart` ("content holding a section break is not copied or removed"); `sections_test.dart` |
+| Missing and malformed sections | a missing name keeps its tags and shows the content once, warned once (removeMissing removes the tags); a malformed tag stays and warns, its content filled | Ruling 12 | `test/docx/template/sections_fill_test.dart` ("a missing section keeps its tags ...", "malformed sections stay as text, their content filled", "a rows section inside one of the same rows is malformed in the copies"); `fill_test.dart` ("section tags pair and fill; a missing one stays and warns") |
+| Limits | `maxCopies` (copied units: blocks, rows or inlines), `maxSectionDepth`, `maxTags`; a refused section keeps its tags and shows its content once, `templateLimitExceeded`; a tag past `maxTags` stays with the same warning; a limit below 1 throws | Rulings 1, 2 | `test/docx/template/sections_fill_test.dart` ("a list past maxCopies is refused before copying", group "limit boundaries", "a section deeper than maxSectionDepth is not expanded", "maxTags stops filling and warns"); `template_test.dart` ("options carry three limits with high defaults", "a limit below 1 throws before anything changes") |
+| Locations in copies | a warning in a copy names the template's paragraph | Ruling 15 | `test/docx/template/sections_fill_test.dart` ("a warning in a copy names the template's paragraph") |
+| Tags in a loose field's result | not filled: a value tag `templateTagMalformed`, a section tag `templateSectionMalformed` | Ruling 22 | `test/docx/template/sections_fill_test.dart` ("a tag in the result of a field across paragraphs stays") |
+| One change set with sections | a fill with repeats and removals is undone whole | spec 9 | `test/docx/template/sections_fill_test.dart` ("a fill with sections is one change set, undone whole"); `expand_test.dart` ("a repeat is undone with its transaction") |
+| Merge fields in copies | filled from the item | Ruling 6 | `test/docx/template/sections_fill_test.dart` ("merge fields in a repeated row are filled from the item") |
+| The model's copies | `copyInlines`, `copyRows`, `copyBlocks` copy detached and marked, leaving annotations out; `splitRunAt` splits a run as one change | P1 of the T2 plan | `test/docx/model/template_copies_test.dart` |
 | A tag in a tracked insertion, a content control, across a tab, in a `PAGE` result, malformed | not filled, warned, left | filling would change a revision or a field the fill does not understand | `test/docx/template/fill_test.dart`, group "fillTemplate: tags that cannot be filled" ("inside w:ins", "inside an inline w:sdt", "across a tab", "in a PAGE result", "an unclosed tag") |
 | A merge field | complex field or `w:fldSimple`, filled by its whole name with the first result run's properties; text before and after kept; `\* MERGEFORMAT` silent; casing in the locale; an unsupported switch fills and warns | Word's own forms | `test/docx/template/fill_test.dart`, group "fillTemplate: merge fields" ("MERGEFORMAT is silent", "a date picture", "casing with the locale", "an unsupported switch fills and warns", "a w:fldSimple takes its inner run properties", "a merge field in a hyperlink is filled there"); `test/docx/template/merge_field_test.dart` (every group) |
 | A `\#` picture in the locale's separators | read with the fill locale's separators: with a decimal comma (`FormatLocale.trTR`), `.` and `,` swap outside quoted text before the picture becomes a format code, so Turkish Word's `#.##0,00` shows `1.234,56`; `#,##0.00` in `enUS` shows `1,234.56`. The listing reads pictures with `enUS` separators | Word writes the picture in its own language's separators | `test/docx/template/merge_field_test.dart` ("a number picture is read with the locale's separators"), `fill_test.dart` ("a number picture in the fill locale's separators"); the `t1_merge_fields` fixture's `Tutar` line |
@@ -1312,13 +1499,13 @@ A list written by `DocxListExport` follows these rules. Tests are in
 | `\#` and `%` | a `%` in a number picture is a literal, as Word does not multiply | Excel's `%` would | `test/docx/template/merge_field_test.dart` ("a percent sign is a literal, not Excel percent"); `values_test.dart` ("a percent literal shows as text") |
 | A `MERGEFIELD` in another field, or loose instruction runs | not typed, `templateFieldNotTyped` | a nested field's value is not ours to set | `test/docx/template/fill_test.dart` ("a MERGEFIELD inside an IF instruction is not typed", "loose instruction runs are not typed") |
 | Text boxes, content controls, footnotes, endnotes, comments | found (per paragraph, `MERGEFIELD` instructions too) and warned, never changed; a part that cannot be read is skipped without a warning, as the fill never writes it | an untrusted file's opaque content must not make the fill throw or lose a tag silently | `test/docx/template/opaque_scan_test.dart`; `fill_test.dart`, groups "fillTemplate: opaque content and parts" and "fillTemplate: untrusted opaque content" |
-| Listing | `tags` lists every tag in reading order with kind, name, format, depth, changing nothing, in a list that cannot be modified; a malformed tag has no name; opaque and part placeholders are listed as not typed | the caller sees what a template asks for | `test/docx/template/template_test.dart` ("tags list kinds, names, formats and depth in reading order", "a malformed tag has the kind malformed and no name", "tags cannot be modified"); `fill_test.dart`, group "listTemplateTags" |
+| Listing | `tags` lists every tag in reading order with kind, name, format, depth, changing nothing, in a list that cannot be modified; a malformed tag has no name; opaque and part placeholders are listed as not typed; section tags are paired as a fill pairs them (depth from the pairing, `templateSectionMalformed` for a tag of no well-formed section) | the caller sees what a template asks for | `test/docx/template/template_test.dart` ("tags list kinds, names, formats and depth in reading order", "a malformed tag has the kind malformed and no name", "tags cannot be modified"); `fill_test.dart`, group "listTemplateTags" |
 | One transaction | a fill is one change set, undone whole; a data error records nothing; a header or footer that cannot be read throws `DocxReadException` and changes nothing; the library keeps no change set (tests take it from `fillTemplateWithChanges`) | the library keeps no undo stack, only the set's id | `test/docx/template/fill_test.dart` ("one fill is one change set, undone whole"); `template_test.dart` ("a header that cannot be read throws and changes nothing"); `test/docx/model/template_primitives_test.dart` ("documentTransaction", "a body that throws leaves the document as it was") |
 | Reopen per fill, bytes copied | two fills of one template are two documents; mutating the caller's list changes nothing | no state leaks between fills | `test/docx/template/template_test.dart` ("fill twice gives two documents with their own values", "template bytes are copied") |
 | `fillDocument` | fills a document the caller holds, in place; it still edits afterwards | a caller may fill, then add what a template cannot | `test/docx/template/template_test.dart` ("fillDocument fills in place and the document still edits") |
 | Fill warnings | the fill's own collector, then the save's, in a `DocxResult`; not added to `DocxDocument.warnings` | the fill is a call of its own | `test/docx/template/template_test.dart` ("fill warnings are the fill's, then the save's") |
 | An unreadable file | `DocxReadException`, as `DocxDocument.open` | one error type | `test/docx/template/template_test.dart` ("an unreadable file throws DocxReadException") |
-| The model's primitives | `setRunContent`, `copyRunWithText`, `removeHeldInline`, `replaceHeldInline`, `spliceHeldInline`, `runOfSimpleField` change a held run and record in the change log; a replacement that is held throws before anything changes | the fill is built on the public model's own change log | `test/docx/model/template_primitives_test.dart` |
+| The model's primitives | `setRunContent`, `copyRunWithText`, `removeHeldInline`, `replaceHeldInline`, `spliceHeldInline`, `runOfSimpleField`, and for T2 `copyInlines`, `copyRows`, `copyBlocks` and `splitRunAt`, change a held run and record in the change log; a replacement that is held throws before anything changes | the fill is built on the public model's own change log | `test/docx/model/template_primitives_test.dart` |
 | Data that names nothing | gives the template back: `comparePackages` finds no difference | a fill preserves what it does not touch (decision 0010) | `test/docx/template/template_test.dart` ("data naming nothing gives every fixture back"); `test/docx/template/template_owner_test.dart` (VM; the owner's Word files) |
 
 ### T1 fixtures and tools
@@ -1331,6 +1518,16 @@ A list written by `DocxListExport` follows these rules. Tests are in
 | `tool/write_t1_check.dart <dir>` | writes the four fixtures and `owner/`, each `template_*.docx` of `test/fixtures/owner/docx/` filled with `fillDocxData()` (none yet: it says so and exits 0); exit 2 on bad arguments, 1 on an error | the owner's Word check | `test/tool/write_t1_check_test.dart` |
 | The fuzz | `tool/fuzz_docx.dart --template` and `test/docx/template/template_fuzz_test.dart` insert tags and switches into the story parts of the four templates and fill them; only `DocxReadException` may come out, and the fill of `{}` gives back the template opened, loaded and saved; the DOCX fuzz runs 1,400 cases a seed (900 before) so every part name is still mutated | the fill reads untrusted files | `test/docx/template/template_fuzz_test.dart`, `test/docx/fuzz_test.dart` ("every part name is mutated in some corpus entry") |
 | The AM/PM guard | `test/architecture/format_code_test.dart` allows `lib/src/docx/template/merge_field.dart` to hold the AM/PM marker: it translates Word's date pictures and writes the marker the number format engine reads, and scans no Excel format code. The allowlist is one path, narrow | the guard keeps Excel code scanning out of `lib/`; this file does not scan any | `test/architecture/format_code_test.dart` ("no file under lib/ holds the AM/PM markers", "the guard flags an AM/PM marker") |
+
+### T2 fixtures and tools
+
+| Case | Behaviour | Why | Test |
+|---|---|---|---|
+| The five T2 fixtures (`t2_template`, `t2_values`, `t2_empty`, `t2_nested_template`, `t2_nested`) | `t2_values` and `t2_empty` are the invoice template filled with `fillDocxData()` and `fillDocxEmptyData()` (`tool/src/fill_data.dart`) in `FormatLocale.trTR`; `t2_nested` the groups template filled with `fillDocxData()`; the two templates unfilled, so CI fills them | the validation starts from them | `test/docx/template/template_test.dart` ("t2_values: ...", "t2_empty: ...", "t2_nested gives t2NestedText", "t2 templates list their sections with no problem"); `test/docx/round_trip_test.dart` ("the T2 fixtures are the five the plan names, last") |
+| What they hold | `t2_template`: the firm split over runs, a map section `musteri`, the paid and unpaid inline conditions, a table under a header row whose line row repeats `kalemler` with the bookmark `kalem`, the block list `notlar` of `{{.}}`, the discount blocks `iskonto` and `^iskonto` sharing the bookmark `iskonto_aralik`, the missing section `yok`, a header with an inline condition and a footer; `t2_nested_template`: `gruplar` blocks holding a title with a tracked insertion (`w:id` 90) and a comment, a paragraph of an inline PNG (`wp:docPr` 7), an inline content control (`w:id` -1520) and a table whose row repeats `kalemler` with the inline condition `acil` | the Word check looks for these (`word-checks.md`, "T2") | `test/docx/template/template_test.dart` |
+| `tool/fill_docx.dart` with sections | a tag inside a section, or a section tag, is checked by the fill's warnings (warned missing: it stays; otherwise gone); the parts allowed to change include those holding a section; the saved story parts write no drawing, revision or content control id more often than the input (`duplicateIds`, `tool/src/docx_ids.dart`) | CI validates what the fill saves | `test/tool/fill_docx_test.dart` ("fills sections and checks tags inside them", "reports a section tag the data names that is left", "reports a tag inside a section that is left", "reports an id written twice") |
+| `tool/write_t2_check.dart <dir>` | writes the five fixtures, `t2_lines_1.docx` and `t2_lines_40.docx` (`fillDocxLines`), and `owner/` (each `template_invoice*.docx` filled with 1, 40 and no lines, each other `template_*.docx` with `fillDocxData()`; none yet: it says so and exits 0); exit 2 on bad arguments, 1 on an error | the owner's Word check | `test/tool/write_t2_check_test.dart` |
+| The fuzz | the template fuzz's corpus adds `t2_template`, `t2_nested_template` and `sections_by_hand` (crossing, unclosed, a stray closer, across a hyperlink's edge, a section break, a tag paragraph with other text, a vertical merge, 34 levels deep, a bookmark half inside an inline section); it inserts `{{/a}}` and `{{^a}}` too, fills with `a` besides `fillDocxData()`, and checks no id is written twice; the DOCX fuzz pins the five fixtures, and 1,400 cases a seed still mutate every part name | the fill reads untrusted files | `test/docx/template/template_fuzz_test.dart`; `test/docx/fuzz_test.dart` |
 
 ### Checks outside the unit tests
 

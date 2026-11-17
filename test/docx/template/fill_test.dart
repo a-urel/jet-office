@@ -270,7 +270,7 @@ void main() {
       expect(_texts(_reopen(doc)).single, isNot(contains('{{')));
     });
 
-    test('section tags stay, each warned, the value inside filled', () {
+    test('section tags pair and fill; a missing one stays and warns', () {
       final DocxDocument doc = _open(
         templateDocument(<String>[
           _run('{{#kalemler}}'),
@@ -280,17 +280,12 @@ void main() {
       );
       final List<DocxWarning> warnings = fillTemplate(doc, <String, Object?>{
         'ad': 'Ayşe',
-        'kalemler': <Object?>[],
       }, _en);
       expect(_codes(warnings), <DocxWarningCode>[
-        DocxWarningCode.templateSectionMalformed,
-        DocxWarningCode.templateSectionMalformed,
+        DocxWarningCode.templateValueMissing,
       ]);
-      expect(warnings.map((DocxWarning w) => w.detail), <String>[
-        '{{#kalemler}}',
-        '{{/kalemler}}',
-      ]);
-      expect(warnings.last.locations, <String>['body/p[2]']);
+      expect(warnings.single.detail, '{{#kalemler}}');
+      expect(warnings.single.locations, <String>['body/p[0]']);
       expect(_texts(_reopen(doc)), <String>[
         '{{#kalemler}}',
         'Ayşe',
@@ -965,9 +960,9 @@ void main() {
       ]);
       expect(tags.map((FoundTag t) => t.problem), <DocxWarningCode?>[
         null,
-        DocxWarningCode.templateSectionMalformed,
         null,
-        DocxWarningCode.templateSectionMalformed,
+        null,
+        null,
         DocxWarningCode.templateTagMalformed,
         null,
         null,

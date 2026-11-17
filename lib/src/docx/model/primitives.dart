@@ -329,6 +329,45 @@ void insertChild<T extends Object>(
   });
 }
 
+/// Inserts [added], rows or cells in order, at [index] of [items], the typed
+/// items of [children], the children of [parent], through [sink], as one edit:
+/// [insertChild] for many at once, which finds their position once and moves
+/// the items after them once, so a section of the template fill that repeats
+/// rows inserts its copies in linear time.
+///
+/// An [index] outside 0 to the number of items throws [RangeError], and an
+/// item already in a parent [StateError]; both before anything changes. The
+/// caller checks that each fits. The styles set on what they hold are
+/// resolved as [insertBlock] says, and a failure takes them out again.
+void insertChildren<T extends Object>(
+  DocxEditSink sink,
+  Object parent,
+  List<Object> children,
+  List<T> items,
+  int index,
+  List<T> added,
+) {
+  RangeError.checkValueInInterval(index, 0, items.length, 'index');
+  for (final T item in added) {
+    if (parentOf(item) != null) {
+      throw StateError(
+        'The row or cell is already in a table or a row; remove it there '
+        'first.',
+      );
+    }
+  }
+  if (added.isEmpty) return;
+  final int position = index == items.length
+      ? children.length
+      : children.indexOf(items[index]);
+  sink.atomically(() {
+    sink.apply(
+      _ListSplice<T>(sink, parent, items, index, added, children, position),
+    );
+    added.forEach(resolveStylesIn);
+  });
+}
+
 /// Removes the item at [index] of [items], the typed items of [children], the
 /// children of [parent], through [sink]. The item is then in no parent.
 ///
@@ -469,6 +508,44 @@ final class _ListEdit<T extends Object> implements Change {
     }
     if (out != null) _detach(out);
     if (into != null) _attach(_sink, _parent, into);
+  }
+}
+
+/// The one change of [insertChildren]: [_added] inserted at [_index] of
+/// [_items] and at [_position] of [_children].
+final class _ListSplice<T extends Object> implements Change {
+  _ListSplice(
+    this._sink,
+    this._parent,
+    this._items,
+    this._index,
+    List<T> added,
+    this._children,
+    this._position,
+  ) : _added = List<T>.of(added);
+
+  final DocxEditSink _sink;
+  final Object _parent;
+  final List<T> _items;
+  final int _index;
+  final List<T> _added;
+  final List<Object> _children;
+  final int _position;
+
+  @override
+  void revert() {
+    _items.removeRange(_index, _index + _added.length);
+    _children.removeRange(_position, _position + _added.length);
+    _added.forEach(_detach);
+  }
+
+  @override
+  void reapply() {
+    _items.insertAll(_index, _added);
+    _children.insertAll(_position, _added);
+    for (final T item in _added) {
+      _attach(_sink, _parent, item);
+    }
   }
 }
 

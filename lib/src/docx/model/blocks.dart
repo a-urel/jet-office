@@ -1535,6 +1535,36 @@ DocxTableCell readTableCell({
   required List<DocxBlock> blocks,
 }) => DocxTableCell._read(properties, attributes, blocks);
 
+/// Inserts [rows], in order, at [index] of [table], as one edit, as
+/// [DocxTable.insertRow] inserts each: for the template fill, which inserts
+/// the copies of repeated rows at once, in linear time. The checks are
+/// [DocxTable.insertRow]'s, each row checked against the one that will be
+/// above it (the last row before [index] for the first, the one before it in
+/// [rows] for the others); a failure throws before anything changes.
+void insertRowsAt(DocxTable table, int index, List<DocxTableRow> rows) {
+  RangeError.checkValueInInterval(index, 0, table._rows.length, 'index');
+  Map<int, int> above = _endsByStart(table._placedAt(index - 1));
+  for (final DocxTableRow row in rows) {
+    if (row._table != null) {
+      throw StateError('The row is already in a table; remove it there first.');
+    }
+    table._checkFits(row._gridTotal);
+    final List<_PlacedCell> placed = row._placed();
+    for (final _PlacedCell at in placed) {
+      if (at.cell._continues) _checkContinues(above, at.start, at.end);
+    }
+    above = _endsByStart(placed);
+  }
+  primitives.insertChildren(
+    table._sink,
+    table,
+    table._children,
+    table._rows,
+    index,
+    rows,
+  );
+}
+
 /// Copies of [rows], for a section of the template fill that repeats rows
 /// (plan T2, Ruling 10): new rows in no table, each marked as a copy
 /// (`isTemplateCopy`), so a save gives what they hold new ids; [rows] are

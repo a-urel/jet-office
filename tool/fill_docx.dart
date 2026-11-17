@@ -1,5 +1,5 @@
 /// Fills every document of a directory with `DocxTemplate`, so that CI can
-/// validate what the template fill saves (decision 0024, T1).
+/// validate what the template fill saves (decision 0024, T1 and T2).
 ///
 /// ```bash
 /// dart run tool/fill_docx.dart build/fixtures build/filled-docx-fixtures
@@ -9,24 +9,37 @@
 /// skipped) it opens the bytes with `DocxTemplate`, lists its tags
 /// (`DocxTemplate.tags`) and fills it with [fillDocxData], the fixed Turkish
 /// data (`firma.unvan`, `firma.adres`, `tarih`, `musteri.ad`, `tutar`,
-/// `miktar` and the merge field keys `Ad`, `Müşteri Adı` and `Tarih`), in the
+/// `miktar`, the merge field keys `Ad`, `Müşteri Adı` and `Tarih`, and for
+/// sections `kalemler`, `odendi`, `notlar`, `iskonto` and `gruplar`), in the
 /// locale `FormatLocale.trTR`. It writes the result to `<outDir>/<name>.docx`
 /// and reads it back with `DocxDocument`:
 ///
 /// * no fillable tag (a value tag the fill can fill, `problem` `null`, in the
-///   body, a header or a footer) whose name the data has is left: none is
-///   listed by `DocxTemplate.tagsOf` in the saved file, and its text is in
-///   no paragraph of its part, unless a tag the fill cannot fill there has
-///   the same text;
-/// * every fillable value tag and merge field whose name the data lacks is
-///   still there, its text in its part (a merge field listed again), and the
-///   fill warned `templateValueMissing` with the tag's text;
+///   body, a header or a footer, outside every section) whose name the data
+///   has is left: none is listed by `DocxTemplate.tagsOf` in the saved file,
+///   and its text is in no paragraph of its part, unless a tag the fill
+///   cannot fill there has the same text;
+/// * every fillable value tag and merge field outside every section whose
+///   name the data lacks is still there, its text in its part (a merge field
+///   listed again), and the fill warned `templateValueMissing` with the
+///   tag's text;
+/// * a section tag outside every section follows the same rule by its name:
+///   named, it is gone from its part; missing, it stays and its opening tag
+///   was warned;
+/// * a tag inside a section (`depth` above 0: a value tag, a section tag or a
+///   merge field the fill can fill) is checked by the fill's warnings, as its
+///   scope is the section's item: warned `templateValueMissing`, it stays in
+///   its part; warned anything else, it is not checked; otherwise it is gone,
+///   unless a tag the fill cannot fill there has the same text;
 /// * no `MERGEFIELD` is left whose name the data has;
 /// * `comparePackages` (`tool/src/part_compare.dart`) finds differences only
 ///   in the main part and in the header and footer parts that held a tag
-///   the fill fills (a fillable one whose name the data has; a tag it
-///   cannot fill, such as one in a tracked insertion, allows nothing): never
-///   in `[Content_Types].xml`, nor in any other part;
+///   the fill fills (a fillable one whose name the data has, or one inside a
+///   section; a tag it cannot fill, such as one in a tracked insertion,
+///   allows nothing): never in `[Content_Types].xml`, nor in any other part,
+///   the comments and media parts included (copies share them);
+/// * the saved story parts write no drawing, revision or content control id
+///   more often than the input did (`duplicateIds`, `tool/src/docx_ids.dart`);
 /// * and `fill({})`, data that names nothing, gives the input back:
 ///   `comparePackages` finds no difference at all.
 ///
@@ -48,6 +61,7 @@ import 'package:jet_office/jet_office.dart';
 import 'package:jet_office/src/docx/docx_document.dart'
     show docxPackageOf, storyPartNameOf;
 
+import 'src/docx_ids.dart';
 import 'src/fill_data.dart';
 import 'src/part_compare.dart';
 
@@ -150,28 +164,48 @@ List<String> _fill(
   }
   problems.addAll(_tagProblems(template.tags, left, texts, result, data));
   problems.addAll(_partProblems(input, saved, template.tags, mainPart, data));
+  problems.addAll(duplicateIds(saved, template: input));
   return problems;
 }
 
-/// Whether [data] has the value [tag] names: a value tag's path, or a merge
-/// field's whole name.
+/// Whether [data] has the value [tag] names: a value tag's or a section
+/// tag's path, or a merge field's whole name.
 bool _named(DocxTemplateTag tag, Map<String, Object?> data) {
   final String? name = tag.name;
   if (name == null) return false;
   return switch (tag.kind) {
     DocxTemplateTagKind.mergeField => data.containsKey(name),
-    DocxTemplateTagKind.value => dataHasPath(data, name),
+    DocxTemplateTagKind.value ||
+    DocxTemplateTagKind.section ||
+    DocxTemplateTagKind.invertedSection ||
+    DocxTemplateTagKind.sectionEnd => dataHasPath(data, name),
     _ => false,
   };
 }
 
+/// Whether [tag] is a section tag: `{{#a}}`, `{{^a}}` or `{{/a}}`.
+bool _section(DocxTemplateTag tag) =>
+    tag.kind == DocxTemplateTagKind.section ||
+    tag.kind == DocxTemplateTagKind.invertedSection ||
+    tag.kind == DocxTemplateTagKind.sectionEnd;
+
 /// Whether the fill can fill [tag]: a value tag or merge field of the body,
-/// a header or a footer whose form raises no warning.
+/// a header or a footer whose form raises no warning, outside every section.
 bool _fillable(DocxTemplateTag tag) =>
     tag.problem == null &&
     tag.location != null &&
+    tag.depth == 0 &&
     (tag.kind == DocxTemplateTagKind.value ||
         tag.kind == DocxTemplateTagKind.mergeField);
+
+/// Whether the fill fills [tag] in a scope the data alone does not decide: a
+/// well-formed tag of a story inside a section (a value tag, `{{.}}`, a
+/// section tag or a merge field), or a well-formed section tag.
+bool _scoped(DocxTemplateTag tag) =>
+    tag.problem == null &&
+    tag.location != null &&
+    tag.kind != DocxTemplateTagKind.malformed &&
+    (tag.depth > 0 || _section(tag));
 
 /// The problems of the tags: [before] the template's, [left] the filled
 /// file's, [texts] its paragraphs' text per part.
@@ -187,9 +221,15 @@ List<String> _tagProblems(
     (String text) => text.contains(tag.text),
   );
   // A tag the fill cannot fill keeps its text, which may be a filled one's.
+  // Outside every section, a tag the data does not name keeps it too.
   final Set<(String, String)> kept = <(String, String)>{
     for (final DocxTemplateTag t in before)
-      if (!_fillable(t) || !_named(t, data)) (t.part, t.text),
+      if (t.problem != null ||
+          t.location == null ||
+          t.kind == DocxTemplateTagKind.malformed ||
+          (t.depth == 0 &&
+              (t.kind == DocxTemplateTagKind.current || !_named(t, data))))
+        (t.part, t.text),
   };
   for (final DocxTemplateTag tag in before) {
     if (!_fillable(tag)) continue;
@@ -216,8 +256,46 @@ List<String> _tagProblems(
       }
     }
   }
+  // Sections and the tags inside them: by the fill's warnings and names.
+  final Set<String> missing = <String>{
+    for (final DocxWarning w in result.warnings)
+      if (w.code == DocxWarningCode.templateValueMissing) ?w.detail,
+  };
+  final Set<String> warned = <String>{
+    for (final DocxWarning w in result.warnings) ?w.detail,
+  };
+  for (final DocxTemplateTag tag in before) {
+    if (!_scoped(tag) || kept.contains((tag.part, tag.text))) continue;
+    final bool present = tag.kind == DocxTemplateTagKind.mergeField
+        ? left.any(
+            (DocxTemplateTag t) => t.part == tag.part && t.text == tag.text,
+          )
+        : inText(tag);
+    if (tag.depth == 0) {
+      // A section tag outside every section: by its name, as T1 checks.
+      if (_named(tag, data)) {
+        if (present && !warned.contains(tag.text)) {
+          problems.add('${tag.text} in ${tag.part} was not filled');
+        }
+      } else {
+        if (tag.kind != DocxTemplateTagKind.sectionEnd &&
+            !missing.contains(tag.text)) {
+          problems.add('${tag.text} is missing but was not warned');
+        }
+        if (!present) {
+          problems.add('${tag.text} is missing but is gone from ${tag.part}');
+        }
+      }
+    } else if (missing.contains(tag.text)) {
+      if (!present) {
+        problems.add('${tag.text} was warned missing but is gone');
+      }
+    } else if (!warned.contains(tag.text) && present) {
+      problems.add('${tag.text} in a section in ${tag.part} was not filled');
+    }
+  }
   for (final DocxTemplateTag tag in left) {
-    if (!_named(tag, data) || tag.problem != null) continue;
+    if (!_named(tag, data) || tag.problem != null || tag.depth > 0) continue;
     if (tag.kind == DocxTemplateTagKind.mergeField) {
       problems.add('a MERGEFIELD the data has is left: ${tag.text.trim()}');
     } else if (tag.kind == DocxTemplateTagKind.value &&
@@ -242,7 +320,8 @@ List<String> _partProblems(
   final Set<String> allowed = <String>{
     entry(mainPart),
     for (final DocxTemplateTag t in tags)
-      if (_fillable(t) && _named(t, data)) entry(t.part),
+      if ((_fillable(t) || _scoped(t)) && (_named(t, data) || t.depth > 0))
+        entry(t.part),
   };
   return <String>[
     for (final String d in comparePackages(input, saved))

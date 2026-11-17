@@ -64,18 +64,31 @@ void main() {
         'd2_lists',
       ],
     );
-    expect(all, hasLength(26));
-    expect(<String>{for (final DocxFixture f in all) f.name}, hasLength(26));
+    expect(all, hasLength(31));
+    expect(<String>{for (final DocxFixture f in all) f.name}, hasLength(31));
   });
 
-  test('the T1 fixtures are the four the plan names, last', () {
+  test('the T1 fixtures are the four the plan names, before the T2 ones', () {
     expect(
-      <String>[for (final DocxFixture f in all.skip(22)) f.name],
+      <String>[for (final DocxFixture f in all.skip(22).take(4)) f.name],
       <String>[
         't1_values',
         't1_merge_fields',
         't1_merge_fields_template',
         't1_template',
+      ],
+    );
+  });
+
+  test('the T2 fixtures are the five the plan names, last', () {
+    expect(
+      <String>[for (final DocxFixture f in all.skip(26)) f.name],
+      <String>[
+        't2_template',
+        't2_values',
+        't2_empty',
+        't2_nested_template',
+        't2_nested',
       ],
     );
   });
