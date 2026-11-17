@@ -190,19 +190,16 @@ List<FoundTag> listTemplateTags(DocxDocument document) {
       pairs.add(pair);
       work.addAll(pair.children);
     }
-    for (final RegionParagraph p in paragraphs) {
+    final _Cover cover = _Cover(paragraphs, pairs);
+    for (int i = 0; i < paragraphs.length; i++) {
+      final RegionParagraph p = paragraphs[i];
       for (final TemplateEntry e in p.entries) {
-        final SectionTagSite at = _probe(p, e);
-        int depth = 0;
-        for (final SectionPair pair in pairs) {
-          if (!_isTagOf(pair, e) && pair.contains(at)) depth++;
-        }
         out.add(
           _found(
             e,
             story.part,
             p.location,
-            depth,
+            cover.count(i, e),
             problem: malformed.contains(e)
                 ? DocxWarningCode.templateSectionMalformed
                 : e.problem,
@@ -245,21 +242,138 @@ BlockRegion storyRegion(TemplateStory story) {
   ]);
 }
 
+/// Which sections of a region hold which entries, found in time linear in
+/// the region's paragraphs, entries and sections (a review of P3: asking
+/// every section about every entry made listing a template quadratic).
+///
+/// A section's content is a run of the region's paragraphs in reading order:
+/// one paragraph for an inline section, the paragraphs between its two tag
+/// paragraphs for a blocks section, and every paragraph of its rows for a
+/// rows section ([rangeOf]). [count] adds up, per paragraph, the blocks and
+/// rows sections over it, and the inline sections of the paragraph around
+/// the entry's offset; a rows section's own tags, which stand in its rows,
+/// are not in it.
+final class _Cover {
+  _Cover(this.paragraphs, Iterable<SectionPair> pairs)
+    : _over = List<int>.filled(paragraphs.length + 1, 0) {
+    for (int i = 0; i < paragraphs.length; i++) {
+      for (final TemplateEntry e in paragraphs[i].entries) {
+        _paragraphOf[e] = i;
+      }
+    }
+    for (final SectionPair pair in pairs) {
+      switch (pair.form) {
+        case SectionForm.inline:
+          final int i = _paragraphOf[pair.open.payload]!;
+          (_opens[i] ??= <int>[]).add(pair.open.offset);
+          (_closes[i] ??= <int>[]).add(pair.close.offset);
+        case SectionForm.blocks || SectionForm.rows:
+          final (int lo, int hi) = rangeOf(pair);
+          if (lo > hi) continue;
+          _over[lo]++;
+          _over[hi + 1]--;
+          if (pair.form == SectionForm.rows) {
+            _ownTags
+              ..add(pair.open.payload)
+              ..add(pair.close.payload);
+          }
+      }
+    }
+    for (final List<int> offsets in <List<int>>[
+      ..._opens.values,
+      ..._closes.values,
+    ]) {
+      offsets.sort();
+    }
+    for (int i = 1; i < _over.length; i++) {
+      _over[i] += _over[i - 1];
+    }
+  }
+
+  final List<RegionParagraph> paragraphs;
+  final Map<Object?, int> _paragraphOf = Map<Object?, int>.identity();
+
+  /// Per paragraph, how many blocks and rows sections are over it (a
+  /// running sum once built).
+  final List<int> _over;
+  final Map<int, List<int>> _opens = <int, List<int>>{};
+  final Map<int, List<int>> _closes = <int, List<int>>{};
+  final Set<Object?> _ownTags = Set<Object?>.identity();
+
+  /// The paragraphs `[lo, hi]` whose entries [pair] may hold (none when `lo`
+  /// is above `hi`): its own for an inline section, those between its tag
+  /// paragraphs for a blocks section, and those of its rows for a rows
+  /// section, found from its tag paragraphs outward.
+  (int, int) rangeOf(SectionPair pair) {
+    final int open = _paragraphOf[pair.open.payload]!;
+    final int close = _paragraphOf[pair.close.payload]!;
+    switch (pair.form) {
+      case SectionForm.inline:
+        return (open, open);
+      case SectionForm.blocks:
+        return (open + 1, close - 1);
+      case SectionForm.rows:
+        bool holds(int i) =>
+            pair.contains(_probeAt(paragraphs[i], paragraphs[i].steps, 0));
+        int lo = open;
+        while (lo > 0 && holds(lo - 1)) {
+          lo--;
+        }
+        int hi = close;
+        while (hi + 1 < paragraphs.length && holds(hi + 1)) {
+          hi++;
+        }
+        return (lo, hi);
+    }
+  }
+
+  /// How many of the sections hold the entry [e] of paragraph [i].
+  int count(int i, TemplateEntry e) {
+    int n = _over[i] - (_ownTags.contains(e) ? 1 : 0);
+    final List<int>? opens = _opens[i];
+    if (opens != null) {
+      // Inline sections nest or follow each other: those opened before the
+      // offset, less those closed at or before it.
+      n += _below(opens, e.offset) - _below(_closes[i]!, e.offset + 1);
+    }
+    return n;
+  }
+
+  /// How many of the sorted [offsets] are below [x].
+  static int _below(List<int> offsets, int x) {
+    int lo = 0;
+    int hi = offsets.length;
+    while (lo < hi) {
+      final int mid = (lo + hi) >> 1;
+      if (offsets[mid] < x) {
+        lo = mid + 1;
+      } else {
+        hi = mid;
+      }
+    }
+    return lo;
+  }
+}
+
 /// Whether the entry [e] is one of [pair]'s own two tags.
 bool _isTagOf(SectionPair pair, TemplateEntry e) =>
     identical(pair.open.payload, e) || identical(pair.close.payload, e);
 
 /// A site standing where the entry [e] of [p] is, to ask a pair whether it
 /// holds the entry ([SectionPair.contains]).
-SectionTagSite _probe(RegionParagraph p, TemplateEntry e) => SectionTagSite(
-  kind: TagKind.value,
-  path: const <String>[],
-  text: '',
-  steps: p.steps,
-  level: p,
-  offset: e.offset,
-  alone: false,
-);
+SectionTagSite _probe(RegionParagraph p, TemplateEntry e) =>
+    _probeAt(p, p.steps, e.offset);
+
+SectionTagSite _probeAt(Object level, List<SiteStep> steps, int offset) =>
+    SectionTagSite(
+      kind: TagKind.value,
+      path: const <String>[],
+      text: '',
+      steps: steps,
+      level: level,
+      offset: offset,
+      alone: false,
+    );
 
 FoundTag _found(
   TemplateEntry e,
@@ -389,15 +503,12 @@ final class _Fill {
         (inline[d.pair.open.payload!] ??= <_Decided>[]).add(d);
       }
     }
-    bool inside(RegionParagraph p, TemplateEntry e) {
-      final SectionTagSite probe = _probe(p, e);
-      for (final _Decided d in expanded) {
-        if (d.pair.contains(probe)) return true;
-      }
-      return false;
-    }
-
-    for (final RegionParagraph p in paragraphs) {
+    final _Cover cover = _Cover(paragraphs, <SectionPair>[
+      for (final _Decided d in expanded) d.pair,
+    ]);
+    for (int i = 0; i < paragraphs.length; i++) {
+      final RegionParagraph p = paragraphs[i];
+      bool inside(TemplateEntry e) => cover.count(i, e) > 0;
       void warn(DocxWarningCode code, String detail) => warnings.add(
         code,
         part: story.part,
@@ -421,13 +532,13 @@ final class _Fill {
             }
             continue;
           }
-          if (kept.contains(site) || inside(p, e)) continue;
+          if (kept.contains(site) || inside(e)) continue;
           if (malformed.contains(site)) {
             warn(DocxWarningCode.templateSectionMalformed, e.text);
           }
           continue;
         }
-        if (inside(p, e)) continue;
+        if (inside(e)) continue;
         _entry(e, scopes, warn, edits, fields);
       }
       edits.sort((_Edit a, _Edit b) => b.offset.compareTo(a.offset));
@@ -462,6 +573,8 @@ final class _Fill {
     Set<SectionTagSite> kept,
   ) {
     final List<_Decided> out = <_Decided>[];
+    // The paragraphs each section may hold, to count its tags.
+    final _Cover ranges = _Cover(paragraphs, const <SectionPair>[]);
     // A stack of the sections to decide, each with its depth, so they are
     // decided in reading order; a section kept as written puts its own in
     // its place.
@@ -529,7 +642,7 @@ final class _Fill {
       }
       if (effect.effect == SectionEffect.repeat) {
         final int count = effect.items.length;
-        final int tags = _fillableIn(pair, paragraphs) * count;
+        final int tags = _fillableIn(pair, ranges) * count;
         if (_copies + count - 1 > settings.maxCopies ||
             _tags + tags > settings.maxTags) {
           warn(DocxWarningCode.templateLimitExceeded);
@@ -557,9 +670,11 @@ final class _Fill {
 
   /// The fillable entries (tags, section tags and merge fields with no
   /// problem of form) in the content of [pair], for the tag limit.
-  int _fillableIn(SectionPair pair, List<RegionParagraph> paragraphs) {
+  int _fillableIn(SectionPair pair, _Cover cover) {
     int n = 0;
-    for (final RegionParagraph p in paragraphs) {
+    final (int lo, int hi) = cover.rangeOf(pair);
+    for (int i = lo; i <= hi; i++) {
+      final RegionParagraph p = cover.paragraphs[i];
       for (final TemplateEntry e in p.entries) {
         if (e.problem == null &&
             !_isTagOf(pair, e) &&

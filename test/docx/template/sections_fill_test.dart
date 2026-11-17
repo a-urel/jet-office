@@ -335,6 +335,28 @@ void main() {
     }
   });
 
+  test('16,000 sections list and fill in linear time', () {
+    // Review of P3: the listing asked every section about every tag, so
+    // opening this small template took about 10 s.
+    final Uint8List bytes = _bytes(
+      '${List<String>.filled(16000, _p('{{#a}}x{{v}}{{/a}}')).join()}'
+      '${_p('son')}',
+    );
+    final Stopwatch watch = Stopwatch()..start();
+    final DocxTemplate template = DocxTemplate(bytes);
+    expect(template.tags, hasLength(48000));
+    expect(
+      template.tags.where((DocxTemplateTag t) => t.text == '{{v}}').first.depth,
+      1,
+    );
+    final DocxResult filled = template.fill(<String, Object?>{
+      'a': true,
+      'v': 'V',
+    });
+    expect(watch.elapsed, lessThan(const Duration(seconds: 5)));
+    expect(filled.warnings, isEmpty);
+  }, timeout: const Timeout(Duration(minutes: 2)));
+
   test('copies without a bookmark are filled where they are', () {
     // A copy leaves the bookmark out, so it is shorter than the original:
     // the next copy starts where it ends.
