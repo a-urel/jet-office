@@ -5,11 +5,14 @@
 /// lists written by `DocxListExport` (D6); and the template fill's of T1
 /// (decision 0024): a template filled by `DocxTemplate` (`t1_values`,
 /// `t1_merge_fields`) and those templates unfilled (`t1_template`,
-/// `t1_merge_fields_template`).
+/// `t1_merge_fields_template`); and the section fill's of T2: an invoice
+/// template filled with the fixed data and with the empty data (`t2_values`,
+/// `t2_empty`), a template of nested groups filled (`t2_nested`), and both
+/// templates unfilled (`t2_template`, `t2_nested_template`).
 ///
 /// New in jet_office. Every D fixture starts from `DocxDocument()`, the blank
 /// document, so what LibreOffice and the Open XML SDK see is what the model
-/// writes. A T1 template is written by hand
+/// writes. A T1 or T2 template is written by hand
 /// (`test/docx/support/template_documents.dart`), as Word for Mac writes one,
 /// with its tags split over runs, so the fill meets them as it would in a
 /// user's file; a filled one is what `DocxTemplate.fill` saves. `tool/write_fixtures.dart` writes each as `<name>.docx` with its
