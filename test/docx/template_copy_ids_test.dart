@@ -10,7 +10,8 @@ import 'dart:typed_data';
 
 import 'package:jet_office/jet_office.dart';
 import 'package:jet_office/src/docx/model/blocks.dart' show copyBlocks;
-import 'package:jet_office/src/docx/model/inlines.dart' show copyInlines;
+import 'package:jet_office/src/docx/model/inlines.dart'
+    show copyInlines, splitRunAt;
 import 'package:jet_office/src/opc/ooxml.dart';
 import 'package:jet_office/src/xml/xml_pull_reader.dart';
 import 'package:test/test.dart';
@@ -139,12 +140,16 @@ DocxParagraph _p(DocxStory story, int index) =>
 void _copyInto(DocxStory story, int from, int to, {int times = 1}) {
   for (int t = 0; t < times; t++) {
     for (final DocxInline inline in copyInlines(
+      maxDepth: _depth,
       _p(story, from).inlines,
     ).items) {
       _p(story, to).insertInline(_p(story, to).inlines.length, inline);
     }
   }
 }
+
+/// The nesting a copy reads kept elements to, as the default read limits.
+const int _depth = 256;
 
 void main() {
   test('an unmarked document saves its parts byte-equal', () {
@@ -189,8 +194,8 @@ void main() {
     final DocxBlock sdt = doc.body.blocks.first;
     expect(sdt, isA<DocxOpaqueBlock>());
     final List<DocxBlock> copies = <DocxBlock>[
-      ...copyBlocks(<DocxBlock>[sdt]).items,
-      ...copyBlocks(<DocxBlock>[sdt]).items,
+      ...copyBlocks(maxDepth: _depth, <DocxBlock>[sdt]).items,
+      ...copyBlocks(maxDepth: _depth, <DocxBlock>[sdt]).items,
     ];
     for (int i = 0; i < copies.length; i++) {
       doc.body.insertBlock(1 + i, copies[i]);
@@ -218,7 +223,10 @@ void main() {
       '</mc:AlternateContent></w:r></w:p><w:p/>',
       header: '<w:p>${_picture('30')}</w:p>',
     );
-    doc.body.insertBlock(1, copyBlocks(<DocxBlock>[_p(doc.body, 0)]).items[0]);
+    doc.body.insertBlock(
+      1,
+      copyBlocks(maxDepth: _depth, <DocxBlock>[_p(doc.body, 0)]).items[0],
+    );
 
     final List<String> ids = _docPrIds(doc.save().bytes);
 
@@ -250,7 +258,10 @@ void main() {
       '<w:del w:id="6" w:author="A"><w:r><w:delText>y</w:delText></w:r>'
       '</w:del></w:p>',
     );
-    doc.body.insertBlock(1, copyBlocks(<DocxBlock>[_p(doc.body, 0)]).items[0]);
+    doc.body.insertBlock(
+      1,
+      copyBlocks(maxDepth: _depth, <DocxBlock>[_p(doc.body, 0)]).items[0],
+    );
 
     final Uint8List saved = doc.save().bytes;
 
@@ -281,6 +292,7 @@ void main() {
       '<w:p/>',
     );
     final List<DocxBlock> copies = copyBlocks(
+      maxDepth: _depth,
       doc.body.blocks.sublist(0, 2),
     ).items;
     for (int i = 0; i < copies.length; i++) {
@@ -296,12 +308,114 @@ void main() {
     }
   });
 
+  test('a split copied run gives its second half new revision and drawing '
+      'ids', () {
+    final DocxDocument doc = _open(
+      '<w:p><w:r><w:rPr><w:b/><w:rPrChange w:id="7" w:author="A"><w:rPr/>'
+      '</w:rPrChange></w:rPr><w:t>ab</w:t><w:drawing><wp:inline>'
+      '<wp:extent cx="50800" cy="25400"/><wp:docPr id="3" name="P"/>'
+      '<a:graphic><a:graphicData uri="$_pic"><pic:pic><pic:nvPicPr>'
+      '<pic:cNvPr id="3" name="P"/><pic:cNvPicPr/></pic:nvPicPr>'
+      '<pic:blipFill><a:blip r:embed="rId9"/></pic:blipFill><pic:spPr/>'
+      '</pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r>'
+      '</w:p><w:p/>',
+    );
+    final DocxRun copy =
+        copyInlines(maxDepth: _depth, _p(doc.body, 0).inlines).items.single
+            as DocxRun;
+    _p(doc.body, 1).insertInline(0, copy);
+    splitRunAt(copy, 0, 1);
+
+    final Uint8List saved = doc.save().bytes;
+
+    final List<String> changes = _wIds(saved, 'rPrChange');
+    expect(changes, hasLength(3));
+    expect(changes.first, '7');
+    expect(changes.toSet(), hasLength(3));
+    final List<String> drawings = _docPrIds(saved);
+    expect(drawings, hasLength(2));
+    expect(drawings.first, '3');
+    expect(drawings[1], isNot('3'));
+    expect(_cNvPrIds(saved), drawings);
+  });
+
+  test('splitting a run whose properties hold a revision gives each half '
+      'its own id', () {
+    final DocxDocument doc = _open(
+      '<w:p><w:r><w:rPr><w:b/><w:rPrChange w:id="7" w:author="A"><w:rPr/>'
+      '</w:rPrChange></w:rPr><w:t>ab</w:t></w:r></w:p>',
+    );
+    splitRunAt(_p(doc.body, 0).inlines.single as DocxRun, 0, 1);
+
+    expect(_wIds(doc.save().bytes, 'rPrChange'), <String>['7', '8']);
+  });
+
+  test('an id past the largest 32-bit integer takes the lowest free one', () {
+    final DocxDocument doc = _open(
+      '<w:sdt><w:sdtPr><w:id w:val="2147483647"/></w:sdtPr><w:sdtContent>'
+      '<w:p><w:ins w:id="2147483647" w:author="A"><w:r><w:t>a</w:t></w:r>'
+      '</w:ins><w:ins w:id="0" w:author="A"><w:r><w:t>b</w:t></w:r>'
+      '</w:ins></w:p></w:sdtContent></w:sdt><w:p/>',
+    );
+    doc.body.insertBlock(
+      1,
+      copyBlocks(maxDepth: _depth, <DocxBlock>[doc.body.blocks.first]).items[0],
+    );
+
+    final Uint8List saved = doc.save().bytes;
+
+    expect(_sdtIds(saved), <String>['2147483647', '1']);
+    expect(_wIds(saved, 'ins'), <String>['2147483647', '0', '1', '2']);
+  });
+
+  test('two drawings of one old id in a copy get two new ids', () {
+    final DocxDocument doc = _open(
+      '<w:p>${_picture('1')}${_picture('1')}</w:p><w:p/>',
+    );
+    _copyInto(doc.body, 0, 1);
+
+    final List<String> ids = _docPrIds(doc.save().bytes);
+
+    expect(ids, hasLength(4));
+    expect(ids.take(2), <String>['1', '1']);
+    expect(ids.skip(2).toSet(), hasLength(2));
+    expect(ids.skip(2), isNot(contains('1')));
+  });
+
+  test('each picture of a copied group gets its own new id', () {
+    const String wpg =
+        'http://schemas.microsoft.com/office/word/2010/wordprocessingGroup';
+    String pic(String id) =>
+        '<pic:pic><pic:nvPicPr><pic:cNvPr id="$id" name="P$id"/>'
+        '<pic:cNvPicPr/></pic:nvPicPr><pic:blipFill/><pic:spPr/></pic:pic>';
+    final DocxDocument doc = _open(
+      '<w:p><w:r><w:drawing><wp:inline><wp:extent cx="1" cy="1"/>'
+      '<wp:docPr id="5" name="Group 5"/><a:graphic>'
+      '<a:graphicData uri="$wpg"><wpg:wgp xmlns:wpg="$wpg"><wpg:cNvGrpSpPr/>'
+      '<wpg:grpSpPr/>${pic('6')}${pic('7')}</wpg:wgp></a:graphicData>'
+      '</a:graphic></wp:inline></w:drawing></w:r></w:p><w:p/>',
+    );
+    _copyInto(doc.body, 0, 1);
+
+    final Uint8List saved = doc.save().bytes;
+
+    final List<String> docPr = _docPrIds(saved);
+    final List<String> cNvPr = _cNvPrIds(saved);
+    expect(docPr.first, '5');
+    expect(cNvPr.take(2), <String>['6', '7']);
+    final Set<String> all = <String>{...docPr, ...cNvPr};
+    expect(all, hasLength(6));
+  });
+
   test('copies lose w14:paraId and w14:textId', () {
     final DocxDocument doc = _open(
       '<w:p w14:paraId="1A2B3C4D" w14:textId="77777777" w:rsidR="00AB12CD">'
       '<w:r><w:t>x</w:t></w:r></w:p>',
     );
-    doc.body.insertBlock(1, copyBlocks(<DocxBlock>[_p(doc.body, 0)]).items[0]);
+    doc.body.insertBlock(
+      1,
+      copyBlocks(maxDepth: _depth, <DocxBlock>[_p(doc.body, 0)]).items[0],
+    );
 
     final List<Map<String, String>> paragraphs = <Map<String, String>>[
       for (final _Element e in _elements(doc.save().bytes, 'word/document.xml'))
@@ -340,9 +454,14 @@ void main() {
       '<w:p><w:ins w:id="5" w:author="A"><w:r><w:t>x</w:t></w:r></w:ins>'
       '</w:p>',
     );
-    final DocxBlock copy = copyBlocks(<DocxBlock>[_p(doc.body, 0)]).items[0];
+    final DocxBlock copy = copyBlocks(maxDepth: _depth, <DocxBlock>[
+      _p(doc.body, 0),
+    ]).items[0];
     doc.body.insertBlock(1, copy);
-    doc.body.insertBlock(2, copyBlocks(<DocxBlock>[copy]).items[0]);
+    doc.body.insertBlock(
+      2,
+      copyBlocks(maxDepth: _depth, <DocxBlock>[copy]).items[0],
+    );
 
     final List<String> ids = _wIds(doc.save().bytes, 'ins');
 
@@ -357,9 +476,11 @@ void main() {
       '</w:p>',
     );
     final DocxParagraph copy =
-        copyBlocks(<DocxBlock>[_p(doc.body, 0)]).items[0] as DocxParagraph;
+        copyBlocks(maxDepth: _depth, <DocxBlock>[_p(doc.body, 0)]).items[0]
+            as DocxParagraph;
     doc.body.insertBlock(1, copy);
     for (final DocxInline inline in copyInlines(
+      maxDepth: _depth,
       _p(doc.body, 0).inlines,
     ).items) {
       copy.insertInline(copy.inlines.length, inline);
@@ -371,15 +492,20 @@ void main() {
     expect(ids.toSet(), hasLength(3));
   });
 
-  test("a file's own processing instruction of the copy's name changes "
-      'nothing', () {
+  test("a file's own processing instruction of the copy's name stays in the "
+      'source and disturbs no renewal', () {
     final DocxDocument doc = _open(
       '<w:p><w:ins w:id="5" w:author="A"><?jet-office-copy-end?>'
       '<w:r><w:t>x</w:t></w:r><?jet-office-copy?></w:ins></w:p><w:p/>',
     );
     _copyInto(doc.body, 0, 1);
 
-    expect(_wIds(doc.save().bytes, 'ins'), <String>['5', '6']);
+    final Uint8List saved = doc.save().bytes;
+
+    expect(_wIds(saved, 'ins'), <String>['5', '6']);
+    final String main = utf8.decode(readXlsxBytes(saved)['word/document.xml']!);
+    expect('<?jet-office-copy?>'.allMatches(main), hasLength(1));
+    expect('<?jet-office-copy-end?>'.allMatches(main), hasLength(1));
   });
 
   test('built bookmark ids and fresh revision ids never collide', () {
@@ -424,6 +550,7 @@ void main() {
     );
     _copyInto(doc.body, 0, 2, times: 2);
     for (final DocxBlock block in copyBlocks(
+      maxDepth: _depth,
       doc.body.blocks.sublist(0, 2),
     ).items.reversed) {
       doc.body.insertBlock(3, block);

@@ -1547,7 +1547,7 @@ DocxTableCell readTableCell({
 /// what was left out.
 CopyResult<DocxTableRow> copyRows(
   List<DocxTableRow> rows, {
-  int maxDepth = 256,
+  required int maxDepth,
 }) {
   final Set<String> dropped = <String>{};
   final List<DocxTableRow> items = <DocxTableRow>[
@@ -1571,11 +1571,15 @@ CopyResult<DocxTableRow> copyRows(
 /// table or a row, that is one, and those inside a kept element
 /// (`withoutAnnotations`), besides what `copyInlines` leaves out of the
 /// inlines. The result's `dropped` names what was left out. Kept elements are
-/// read again, nested at most [maxDepth] deep.
+/// read again, nested at most [maxDepth] deep: give the document's
+/// `DocxReadLimits.maxDepth`; a deeper one throws a `DocxReadException`.
 ///
 /// A paragraph with a section break is never copied (plan T2, Ruling 14):
 /// [ArgumentError], before anything is copied.
-CopyResult<DocxBlock> copyBlocks(List<DocxBlock> blocks, {int maxDepth = 256}) {
+CopyResult<DocxBlock> copyBlocks(
+  List<DocxBlock> blocks, {
+  required int maxDepth,
+}) {
   final Set<String> dropped = <String>{};
   final List<DocxBlock> items = _copyBlockList(blocks, dropped, maxDepth);
   items.forEach(markTemplateCopy);

@@ -568,11 +568,12 @@ void spliceHeldInline(DocxInline inline, List<DocxInline> replacements) {
 /// and its inlines, and a picture is a new one: one read keeps its element
 /// and its image, one the API built its image, size, name and description.
 /// An opaque inline keeps its visible text. Kept elements are read again,
-/// nested at most [maxDepth] deep; they were read under the part's limit
-/// already.
+/// nested at most [maxDepth] deep: give the document's
+/// `DocxReadLimits.maxDepth`, under which they were read already; a deeper
+/// one throws a `DocxReadException` (`withoutAnnotations`).
 CopyResult<DocxInline> copyInlines(
   List<DocxInline> source, {
-  int maxDepth = 256,
+  required int maxDepth,
 }) {
   final Set<String> dropped = <String>{};
   final List<DocxInline> items = _copyInlineList(source, dropped, maxDepth);
@@ -690,8 +691,11 @@ DocxRun _copyRun(DocxRun source, Set<String> dropped, int maxDepth) {
 /// content before, and a new run with [run]'s properties as they are now
 /// (as [copyRunWithText] copies them), its `w:r` attributes and the content
 /// from there on goes right after [run], in its paragraph or its hyperlink.
-/// The new run counts as read where [run] was, and is no copy
-/// (`isTemplateCopy`); [run] keeps its removed count.
+/// The new run counts as read where [run] was; [run] keeps its removed
+/// count. It is marked as a copy (`isTemplateCopy`), so a save renews its
+/// ids, when [run] is one, or when [run]'s `w:rPr` as read holds a revision
+/// (`w:ins`, `w:del`, `w:moveFrom`, `w:moveTo`, `w:rPrChange`): two runs
+/// must not share its `w:id`.
 ///
 /// An [offset] of 0 leaves [run] the content before the text, and one at
 /// the text's end leaves the new run the content after it; either may be
@@ -703,7 +707,8 @@ DocxRun _copyRun(DocxRun source, Set<String> dropped, int maxDepth) {
 /// Throws [StateError] for a run in no paragraph or held by a [DocxField],
 /// [RangeError] for a [contentIndex] that is not one of [run]'s content or an
 /// [offset] outside 0 to the text's length, and [ArgumentError] for content
-/// that is not a [DocxText]; all before anything changes.
+/// that is not a [DocxText] or an [offset] between the two halves of a
+/// surrogate pair; all before anything changes.
 DocxRun splitRunAt(DocxRun run, int contentIndex, int offset) {
   final (DocxParagraph paragraph, DocxHyperlink? link, int index) = _holderOf(
     run,
@@ -720,6 +725,16 @@ DocxRun splitRunAt(DocxRun run, int contentIndex, int offset) {
   }
   final String text = piece.text;
   RangeError.checkValueInInterval(offset, 0, text.length, 'offset');
+  if (offset > 0 &&
+      offset < text.length &&
+      _isHighSurrogate(text.codeUnitAt(offset - 1)) &&
+      _isLowSurrogate(text.codeUnitAt(offset))) {
+    throw ArgumentError.value(
+      offset,
+      'offset',
+      'must not fall between the two halves of a surrogate pair',
+    );
+  }
   final List<DocxRunContent> before = <DocxRunContent>[
     ...content.sublist(0, contentIndex),
     if (offset == text.length)
@@ -739,6 +754,11 @@ DocxRun splitRunAt(DocxRun run, int contentIndex, int offset) {
     added._properties,
   ).takeValuesSetOn(propertySetOfRunProperties(run._properties));
   added._readIn = run._readIn;
+  // Both halves hold the run's properties, and a copy's content: the new
+  // half is renewed as a copy at save when either holds an id.
+  if (isTemplateCopy(run) || _holdsRevision(run._source)) {
+    markTemplateCopy(added);
+  }
   editSinkOf(paragraph).atomically(() {
     final DocxRunText previous = runTextOf(run);
     run._apply(before, run._removed);
@@ -751,6 +771,24 @@ DocxRun splitRunAt(DocxRun run, int contentIndex, int offset) {
   });
   return added;
 }
+
+bool _isHighSurrogate(int unit) => unit >= 0xD800 && unit <= 0xDBFF;
+
+bool _isLowSurrogate(int unit) => unit >= 0xDC00 && unit <= 0xDFFF;
+
+/// The revision elements a run's `w:rPr` may hold, each with a `w:id`.
+const List<String> _runRevisionNames = <String>[
+  'ins',
+  'del',
+  'moveFrom',
+  'moveTo',
+  'rPrChange',
+];
+
+/// Whether the `w:rPr` [properties] holds a revision, whose `w:id` two
+/// runs must not share.
+bool _holdsRevision(PropertyContainer properties) =>
+    _runRevisionNames.any(properties.holds);
 
 /// The local names, in WordprocessingML, of the marks a filled field keeps
 /// ([fieldMarkCopies]): elements that hold no content and may be one half of

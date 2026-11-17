@@ -22,6 +22,7 @@ import '../../opc/ooxml.dart' show Ns;
 import '../../opc/opaque_xml.dart';
 import '../../xml/xml_escape.dart' show escapeXmlAttribute, scrubXmlText;
 import '../../xml/xml_pull_reader.dart';
+import '../read_exception.dart';
 import '../story_reader.dart' show readerOfCaptured;
 
 /// What a copy function returns: the copies, in order, and the local names
@@ -30,7 +31,8 @@ typedef CopyResult<T> = ({List<T> items, Set<String> dropped});
 
 /// The local names, in WordprocessingML, of the elements a copy leaves out
 /// (plan T2, Ruling 10): bookmarks (typed or kept), comment ranges and
-/// references, note references, permission ranges and move ranges.
+/// references, note references, permission ranges, move ranges and the
+/// range marks of tracked custom XML.
 const Set<String> copyDroppedNames = <String>{
   'bookmarkStart',
   'bookmarkEnd',
@@ -45,6 +47,14 @@ const Set<String> copyDroppedNames = <String>{
   'moveFromRangeEnd',
   'moveToRangeStart',
   'moveToRangeEnd',
+  'customXmlInsRangeStart',
+  'customXmlInsRangeEnd',
+  'customXmlDelRangeStart',
+  'customXmlDelRangeEnd',
+  'customXmlMoveFromRangeStart',
+  'customXmlMoveFromRangeEnd',
+  'customXmlMoveToRangeStart',
+  'customXmlMoveToRangeEnd',
 };
 
 /// Whether a kept element of [namespaceUri] and [localName] is one a copy
@@ -54,6 +64,11 @@ bool isDroppedByCopy(String namespaceUri, String localName) =>
 
 final Expando<bool> _copies = Expando<bool>('template copy');
 
+/// Whether a copy function ever marked a unit, so a writer of a part can skip
+/// looking for copies until one exists.
+bool get templateCopiesMade => _copiesMade;
+bool _copiesMade = false;
+
 /// Whether [unit] (a `DocxInline`, `DocxTableRow` or `DocxBlock`) was made by
 /// a copy function, as one of the items of its result: a save renews the
 /// ids of what it holds.
@@ -62,6 +77,7 @@ bool isTemplateCopy(Object unit) => _copies[unit] ?? false;
 /// Marks [unit] as made by a copy function; only those call it.
 void markTemplateCopy(Object unit) {
   _copies[unit] = true;
+  _copiesMade = true;
 }
 
 /// [xml] without the elements of [copyDroppedNames] inside it, re-captured
@@ -70,8 +86,12 @@ void markTemplateCopy(Object unit) {
 /// element is never removed: the caller leaves out an element that is one
 /// of them.
 ///
-/// The slice is read again, nested at most [maxDepth] deep; it was read under
-/// the part's limit already.
+/// The slice is read again, nested at most [maxDepth] deep: give the
+/// document's `DocxReadLimits.maxDepth`, under which the slice was read
+/// already. A slice deeper than [maxDepth] throws a [DocxReadException] of
+/// `DocxReadFailure.limitExceeded`, and one that does not parse (which a
+/// slice the reader captured never does) one of
+/// `DocxReadFailure.malformedXml`; nothing else comes out.
 ({OpaqueXml xml, Set<String> dropped}) withoutAnnotations(
   OpaqueXml xml,
   int maxDepth,
@@ -80,6 +100,22 @@ void markTemplateCopy(Object unit) {
   if (!copyDroppedNames.any(xml.xml.contains)) {
     return (xml: xml, dropped: const <String>{});
   }
+  try {
+    return _withoutAnnotations(xml, maxDepth);
+  } on XmlParseException catch (e) {
+    throw DocxReadException(
+      e.kind == XmlParseKind.tooDeep
+          ? DocxReadFailure.limitExceeded
+          : DocxReadFailure.malformedXml,
+      'A kept element could not be read again for a copy: ${e.message}',
+    );
+  }
+}
+
+({OpaqueXml xml, Set<String> dropped}) _withoutAnnotations(
+  OpaqueXml xml,
+  int maxDepth,
+) {
   final XmlPullReader r = readerOfCaptured(xml, maxDepth);
   final int depth = r.depth;
   int copied = r.eventStart;

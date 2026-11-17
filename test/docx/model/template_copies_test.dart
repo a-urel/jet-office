@@ -79,6 +79,9 @@ const String _mixed =
     '</w:p>'
     '<w:p/>';
 
+/// The nesting a copy reads kept elements to, as the default read limits.
+const int _depth = 256;
+
 void main() {
   group('copyInlines', () {
     test('copies runs, hyperlinks, fields and opaque inlines, detached, '
@@ -94,7 +97,10 @@ void main() {
         DocxOpaqueInline,
       ]);
 
-      final CopyResult<DocxInline> copy = copyInlines(source.inlines);
+      final CopyResult<DocxInline> copy = copyInlines(
+        maxDepth: _depth,
+        source.inlines,
+      );
 
       expect(copy.items, hasLength(4));
       expect(copy.dropped, isEmpty);
@@ -124,7 +130,8 @@ void main() {
       source.properties.italic = true;
 
       final DocxRun copy =
-          copyInlines(<DocxInline>[source]).items.single as DocxRun;
+          copyInlines(maxDepth: _depth, <DocxInline>[source]).items.single
+              as DocxRun;
 
       expect(copy.properties.bold, isTrue);
       expect(copy.properties.italic, isTrue);
@@ -149,7 +156,10 @@ void main() {
       );
       final DocxParagraph source = _p(doc, 0);
 
-      final CopyResult<DocxInline> copy = copyInlines(source.inlines);
+      final CopyResult<DocxInline> copy = copyInlines(
+        maxDepth: _depth,
+        source.inlines,
+      );
 
       expect(copy.dropped, <String>{
         'bookmarkStart',
@@ -175,7 +185,10 @@ void main() {
       );
       final DocxParagraph source = _p(doc, 0);
 
-      final CopyResult<DocxInline> copy = copyInlines(source.inlines);
+      final CopyResult<DocxInline> copy = copyInlines(
+        maxDepth: _depth,
+        source.inlines,
+      );
 
       expect(copy.dropped, <String>{'commentReference', 'footnoteReference'});
       expect(copy.items, hasLength(2));
@@ -188,6 +201,66 @@ void main() {
       expect((source.inlines[1] as DocxRun).content, hasLength(1));
     });
 
+    test('copies drop custom XML range marks, naming them', () {
+      final DocxDocument doc = _open(
+        '<w:p><w:customXmlInsRangeStart w:id="1" w:author="A"/>'
+        '<w:customXmlInsRangeEnd w:id="1"/>'
+        '<w:customXmlDelRangeStart w:id="2" w:author="A"/>'
+        '<w:customXmlDelRangeEnd w:id="2"/>'
+        '<w:customXmlMoveFromRangeStart w:id="3" w:author="A"/>'
+        '<w:customXmlMoveFromRangeEnd w:id="3"/>'
+        '<w:customXmlMoveToRangeStart w:id="4" w:author="A"/>'
+        '<w:customXmlMoveToRangeEnd w:id="4"/>'
+        '<w:r><w:t>x</w:t></w:r></w:p>',
+      );
+
+      final CopyResult<DocxInline> copy = copyInlines(
+        maxDepth: _depth,
+        _p(doc, 0).inlines,
+      );
+
+      expect(copy.items, hasLength(1));
+      expect(copy.dropped, <String>{
+        'customXmlInsRangeStart',
+        'customXmlInsRangeEnd',
+        'customXmlDelRangeStart',
+        'customXmlDelRangeEnd',
+        'customXmlMoveFromRangeStart',
+        'customXmlMoveFromRangeEnd',
+        'customXmlMoveToRangeStart',
+        'customXmlMoveToRangeEnd',
+      });
+    });
+
+    test('copies read kept elements as deep as the document allows, and a '
+        'deeper one throws DocxReadException', () {
+      final String open = '<w:customXml w:element="x">' * 300;
+      final String close = '</w:customXml>' * 300;
+      final DocxDocument doc = DocxDocument.open(
+        _docx(
+          '<w:p>$open<w:bookmarkStart w:id="1" w:name="b"/>'
+          '<w:r><w:t>x</w:t></w:r>$close</w:p>',
+        ),
+        limits: const DocxReadLimits(maxDepth: 1000),
+      );
+      final List<DocxInline> source = _p(doc, 0).inlines;
+
+      final CopyResult<DocxInline> copy = copyInlines(maxDepth: 1000, source);
+
+      expect(copy.dropped, <String>{'bookmarkStart'});
+      expect(copy.items.single.text, 'x');
+      expect(
+        () => copyInlines(maxDepth: 100, source),
+        throwsA(
+          isA<DocxReadException>().having(
+            (DocxReadException e) => e.reason,
+            'reason',
+            DocxReadFailure.limitExceeded,
+          ),
+        ),
+      );
+    });
+
     test('copies drop annotations inside an opaque w:ins slice', () {
       final DocxDocument doc = _open(
         '<w:p><w:ins w:id="5" w:author="A">'
@@ -197,7 +270,10 @@ void main() {
       final DocxOpaqueInline source =
           _p(doc, 0).inlines.single as DocxOpaqueInline;
 
-      final CopyResult<DocxInline> copy = copyInlines(<DocxInline>[source]);
+      final CopyResult<DocxInline> copy = copyInlines(
+        maxDepth: _depth,
+        <DocxInline>[source],
+      );
 
       final DocxOpaqueInline ins = copy.items.single as DocxOpaqueInline;
       expect(copy.dropped, <String>{'bookmarkStart', 'bookmarkEnd'});
@@ -213,7 +289,10 @@ void main() {
       source.addPicture(OfficeImage(png4x2));
       source.addHyperlink('site', url: 'https://example.com/a');
 
-      _insertAll(_p(doc, 1), copyInlines(source.inlines).items);
+      _insertAll(
+        _p(doc, 1),
+        copyInlines(maxDepth: _depth, source.inlines).items,
+      );
       final Uint8List first = doc.save().bytes;
       final Uint8List second = doc.save().bytes;
       expect(second, first);
@@ -243,7 +322,10 @@ void main() {
       final DocxParagraph target = _p(doc, 1);
       final ChangeSet set = documentTransaction(
         doc,
-        () => _insertAll(target, copyInlines(_p(doc, 0).inlines).items),
+        () => _insertAll(
+          target,
+          copyInlines(maxDepth: _depth, _p(doc, 0).inlines).items,
+        ),
       );
       expect(target.inlines, hasLength(4));
 
@@ -272,7 +354,10 @@ void main() {
       );
       final DocxTable table = doc.body.blocks.first as DocxTable;
 
-      final CopyResult<DocxTableRow> copy = copyRows(table.rows);
+      final CopyResult<DocxTableRow> copy = copyRows(
+        maxDepth: _depth,
+        table.rows,
+      );
 
       expect(copy.items, hasLength(1));
       expect(copy.dropped, isEmpty);
@@ -304,7 +389,7 @@ void main() {
       final List<DocxBlock> source = doc.body.blocks.sublist(0, 3);
       final String before = _bodyXml(doc.save().bytes);
 
-      final CopyResult<DocxBlock> copy = copyBlocks(source);
+      final CopyResult<DocxBlock> copy = copyBlocks(maxDepth: _depth, source);
 
       expect(copy.items, hasLength(3));
       expect(copy.dropped, isEmpty);
@@ -352,6 +437,7 @@ void main() {
         '<w:p/>',
       );
       final CopyResult<DocxBlock> copy = copyBlocks(
+        maxDepth: _depth,
         doc.body.blocks.sublist(0, 3),
       );
       expect(copy.items, hasLength(1));
@@ -363,7 +449,7 @@ void main() {
         '<w:p><w:pPr><w:sectPr/></w:pPr></w:p><w:p/>',
       );
       expect(
-        () => copyBlocks(<DocxBlock>[doc.body.blocks.first]),
+        () => copyBlocks(maxDepth: _depth, <DocxBlock>[doc.body.blocks.first]),
         throwsArgumentError,
       );
     });
@@ -410,6 +496,41 @@ void main() {
       expect(link.inlines, <DocxInline>[run, added]);
       expect(run.text, 'a');
       expect(added.text, 'bcd');
+    });
+
+    test('the second half of a copied run is a copy too', () {
+      final DocxDocument doc = _open(
+        '<w:p><w:r><w:t>abcd</w:t></w:r></w:p><w:p/>',
+      );
+      final DocxRun copy =
+          copyInlines(maxDepth: _depth, _p(doc, 0).inlines).items.single
+              as DocxRun;
+      _p(doc, 1).insertInline(0, copy);
+
+      expect(isTemplateCopy(splitRunAt(copy, 0, 2)), isTrue);
+    });
+
+    test('the second half of a run whose properties hold a revision is '
+        'renewed as a copy', () {
+      final DocxDocument doc = _open(
+        '<w:p><w:r><w:rPr><w:b/><w:rPrChange w:id="7" w:author="A">'
+        '<w:rPr/></w:rPrChange></w:rPr><w:t>abcd</w:t></w:r></w:p>',
+      );
+      final DocxRun run = _p(doc, 0).inlines.single as DocxRun;
+
+      expect(isTemplateCopy(splitRunAt(run, 0, 2)), isTrue);
+      expect(isTemplateCopy(run), isFalse);
+    });
+
+    test('throws for an offset between the halves of a surrogate pair', () {
+      final DocxDocument doc = _open(
+        '<w:p><w:r><w:t>a\u{1F600}b</w:t></w:r></w:p>',
+      );
+      final DocxRun run = _p(doc, 0).inlines.single as DocxRun;
+
+      expect(() => splitRunAt(run, 0, 2), throwsArgumentError);
+      expect(run.text, 'a\u{1F600}b');
+      expect(splitRunAt(run, 0, 3).text, 'b');
     });
 
     test(

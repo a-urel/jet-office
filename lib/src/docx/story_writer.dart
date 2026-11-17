@@ -34,7 +34,7 @@ import 'model/inlines.dart';
 import 'model/property_set.dart';
 import 'model/run_content.dart';
 import 'model/styles.dart' show DocxStyleType;
-import 'model/template_copies.dart' show isTemplateCopy;
+import 'model/template_copies.dart' show isTemplateCopy, templateCopiesMade;
 import 'properties.dart' show PropertyContainer;
 import 'save_ids.dart' show parseOfficeId, revisionNames;
 import 'warnings.dart';
@@ -168,6 +168,9 @@ final class StoryWriter {
   /// highest id of that kind it has met in a copy.
   final CopyIds? _copyIds;
 
+  /// Whether any copy exists yet: without one, no unit is looked up.
+  final bool _copies = templateCopiesMade;
+
   /// The highest drawing, annotation and content control ids the writer met
   /// in a copy or gave one, when it numbers them itself.
   int _ownDrawing = 0;
@@ -192,15 +195,27 @@ final class StoryWriter {
       switch (block) {
         case DocxParagraph():
           final String at = '$path/p[${paragraphs++}]';
-          _unit(block, () => _paragraph(block, at));
+          if (_copies) {
+            _unit(block, () => _paragraph(block, at));
+          } else {
+            _paragraph(block, at);
+          }
         case DocxTable():
           final String at = '$path/tbl[${tables++}]';
-          _unit(block, () => _table(block, at));
+          if (_copies) {
+            _unit(block, () => _table(block, at));
+          } else {
+            _table(block, at);
+          }
         case DocxOpaqueBlock():
-          _unit(
-            block,
-            () => opaqueBlockXml(block).writeTo(_w, declaredAbove: scope),
-          );
+          if (_copies) {
+            _unit(
+              block,
+              () => opaqueBlockXml(block).writeTo(_w, declaredAbove: scope),
+            );
+          } else {
+            opaqueBlockXml(block).writeTo(_w, declaredAbove: scope);
+          }
       }
     }
   }
@@ -232,7 +247,11 @@ final class StoryWriter {
           gridPending = false;
         }
         final String at = '$path/tr[${rows++}]';
-        _unit(child, () => _row(child, at));
+        if (_copies) {
+          _unit(child, () => _row(child, at));
+        } else {
+          _row(child, at);
+        }
       } else if (child is PropertyContainer) {
         writePropertySet(tblPr, 'tblPr');
       } else if (child is TableGrid) {
@@ -405,7 +424,9 @@ final class StoryWriter {
       }
     }
 
-    write = (DocxInline inline) => _unit(inline, () => writeInline(inline));
+    write = _copies
+        ? (DocxInline inline) => _unit(inline, () => writeInline(inline))
+        : writeInline;
     p.inlines.forEach(write);
     scope = outer;
     w.end();
@@ -655,6 +676,13 @@ final class StoryWriter {
     // The namespace and local name of each open element, innermost last.
     final List<(String, String)> open = <(String, String)>[];
     int? drawing;
+    // The old drawing ids of each open mc:AlternateContent, innermost last:
+    // its Choice and its Fallback show one drawing, so they share its new id.
+    // Elsewhere every drawing gets an id of its own.
+    final List<Map<String, int>> alternates = <Map<String, int>>[];
+    int newDrawing(String kind, String old) => alternates.isEmpty
+        ? ids.drawing()
+        : alternates.last.putIfAbsent('$kind $old', ids.drawing);
     while (r.next()) {
       switch (r.eventType) {
         case XmlEventType.processingInstruction:
@@ -676,24 +704,29 @@ final class StoryWriter {
           if (!r.isEmptyElement) open.add((ns, name));
           final _CopyMaps m = maps.last;
           String? Function(int i)? renew;
+          if (ns == Ns.mc && name == 'AlternateContent' && !r.isEmptyElement) {
+            alternates.add(<String, int>{});
+          }
           if (ns == Ns.wp && name == 'docPr') {
             renew = (int i) {
               if (r.attributeNamespace(i) != '' ||
                   r.attributeLocalName(i) != 'id') {
                 return null;
               }
-              final int id = m.drawing.putIfAbsent(
-                r.attributeValue(i),
-                ids.drawing,
-              );
+              final int id = newDrawing('docPr', r.attributeValue(i));
               drawing = id;
               return '$id';
             };
-          } else if (ns == _pic && name == 'cNvPr' && drawing != null) {
-            final int id = drawing!;
+          } else if (ns == _pic && name == 'cNvPr') {
+            // A picture of a group is a shape of its own; the one picture of
+            // a drawing repeats the drawing's id.
+            final bool inGroup = open.any(
+              ((String, String) e) => e.$2 == 'wgp' || e.$2 == 'grpSp',
+            );
+            final int? own = inGroup ? null : drawing;
             renew = (int i) =>
                 r.attributeNamespace(i) == '' && r.attributeLocalName(i) == 'id'
-                ? '$id'
+                ? '${own ?? newDrawing('cNvPr', r.attributeValue(i))}'
                 : null;
           } else if (ns == Ns.w && revisionNames.contains(name)) {
             renew = (int i) =>
@@ -724,6 +757,8 @@ final class StoryWriter {
           final (String ns, String name) = open.removeLast();
           if (ns == Ns.wp && (name == 'inline' || name == 'anchor')) {
             drawing = null;
+          } else if (ns == Ns.mc && name == 'AlternateContent') {
+            alternates.removeLast();
           }
         default:
           break;
@@ -752,7 +787,7 @@ final class StoryWriter {
       final (String, String)? parent = open.lastOrNull;
       if (!r.isEmptyElement) open.add((ns, name));
       int? id;
-      if (ns == Ns.wp && name == 'docPr') {
+      if ((ns == Ns.wp && name == 'docPr') || name == 'cNvPr') {
         id = parseOfficeId(r.getAttribute('id', namespaceUri: ''));
         if (id != null && id > _ownDrawing) _ownDrawing = id;
       } else if (ns == Ns.w && revisionNames.contains(name)) {
@@ -837,9 +872,9 @@ const String _pic = 'http://schemas.openxmlformats.org/drawingml/2006/picture';
 const String _wp14 =
     'http://schemas.microsoft.com/office/word/2010/wordprocessingDrawing';
 
-/// The old ids of one copy and the new ids they became, by kind.
+/// The old revision and content control ids of one copy and the new ids they
+/// became: within one copy one old id gives one new id.
 final class _CopyMaps {
-  final Map<String, int> drawing = <String, int>{};
   final Map<String, int> annotation = <String, int>{};
   final Map<String, int> contentControl = <String, int>{};
 }
