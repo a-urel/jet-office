@@ -88,8 +88,8 @@ final class DocxTemplate {
   /// Fills [document] in place with [data] as one edit and returns the fill's
   /// warnings.
   ///
-  /// Throws an [ArgumentError] for a value that is not a supported kind, and
-  /// a [DocxReadException] when the body, a header or a footer part of
+  /// Throws an [ArgumentError] for a value that is not a supported kind or a
+  /// limit of [options] below 1, and a [DocxReadException] when the body, a header or a footer part of
   /// [document] cannot be read; either way [document] is left unchanged.
   static List<DocxWarning> fillDocument(
     DocxDocument document,
@@ -98,7 +98,13 @@ final class DocxTemplate {
   }) => fillTemplate(
     document,
     data,
-    FillSettings(locale: options.locale, removeMissing: options.removeMissing),
+    FillSettings(
+      locale: options.locale,
+      removeMissing: options.removeMissing,
+      maxCopies: options.maxCopies,
+      maxSectionDepth: options.maxSectionDepth,
+      maxTags: options.maxTags,
+    ),
   );
 
   /// The tags of [document] in reading order, without changing it. The list
@@ -145,12 +151,19 @@ final class DocxTemplate {
 
 /// How a template is filled.
 final class DocxTemplateOptions {
-  /// Creates options: [locale] for numbers, dates and casing, and whether a
-  /// tag or merge field the data lacks is removed ([removeMissing]) rather
-  /// than left as written.
+  /// Creates options: [locale] for numbers, dates and casing, whether a tag
+  /// or merge field the data lacks is removed ([removeMissing]) rather than
+  /// left as written, and the limits of one fill ([maxCopies],
+  /// [maxSectionDepth], [maxTags]).
+  ///
+  /// A limit below 1 is a programmer error: the fill throws an
+  /// [ArgumentError] before anything changes.
   const DocxTemplateOptions({
     this.locale = FormatLocale.enUS,
     this.removeMissing = false,
+    this.maxCopies = 100000,
+    this.maxSectionDepth = 32,
+    this.maxTags = 1000000,
   });
 
   /// The locale values are shown in, as Excel for Mac shows them.
@@ -159,6 +172,22 @@ final class DocxTemplateOptions {
   /// Whether a tag or merge field whose value is missing is removed. It is
   /// warned about either way.
   final bool removeMissing;
+
+  /// How many copies one fill may make, all sections and levels together: a
+  /// list of n items makes n - 1 copies. A section that would pass it is not
+  /// repeated: its tags stay as written, its content shows once, and the
+  /// fill warns [DocxWarningCode.templateLimitExceeded].
+  final int maxCopies;
+
+  /// How deep sections may nest; a section deeper than this is not expanded,
+  /// as [maxCopies] says.
+  final int maxSectionDepth;
+
+  /// How many tags and merge fields one fill may fill, copies counted. A
+  /// section whose copies would pass it is not repeated, as [maxCopies]
+  /// says, and a tag or merge field past it stays as written, with the same
+  /// warning.
+  final int maxTags;
 }
 
 /// What a tag of a template is.

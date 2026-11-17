@@ -258,6 +258,9 @@ void main() {
   test('the template fill is exported', () {
     const DocxTemplateOptions options = DocxTemplateOptions();
     expect(options.removeMissing, isFalse);
+    expect(options.maxCopies, 100000);
+    expect(options.maxSectionDepth, 32);
+    expect(options.maxTags, 1000000);
     expect(DocxTemplateTagKind.values, hasLength(7));
     expect(DocxTemplate, isNotNull);
     expect(DocxTemplateTag, isNotNull);

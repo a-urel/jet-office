@@ -7,6 +7,7 @@
 import 'dart:typed_data';
 
 import 'package:jet_office/jet_office.dart';
+import 'package:jet_office/src/docx/docx_document.dart' show changeLogOf;
 import 'package:test/test.dart';
 
 import '../../../tool/src/part_compare.dart';
@@ -254,5 +255,43 @@ void main() {
     final String text = _text(document.save().bytes);
     expect(text, contains('Dear Acme'));
     expect(text, contains('x'));
+  });
+
+  test('options carry three limits with high defaults', () {
+    const DocxTemplateOptions options = DocxTemplateOptions();
+    expect(options.maxCopies, 100000);
+    expect(options.maxSectionDepth, 32);
+    expect(options.maxTags, 1000000);
+    const DocxTemplateOptions set = DocxTemplateOptions(
+      maxCopies: 1,
+      maxSectionDepth: 2,
+      maxTags: 3,
+    );
+    expect(set.maxCopies, 1);
+    expect(set.maxSectionDepth, 2);
+    expect(set.maxTags, 3);
+  });
+
+  test('a limit below 1 throws before anything changes', () {
+    for (final DocxTemplateOptions options in <DocxTemplateOptions>[
+      const DocxTemplateOptions(maxCopies: 0),
+      const DocxTemplateOptions(maxSectionDepth: 0),
+      const DocxTemplateOptions(maxTags: -1),
+    ]) {
+      final DocxDocument document = DocxDocument.open(_template());
+      expect(
+        () => DocxTemplate.fillDocument(document, <String, Object?>{
+          'tutar': 1,
+        }, options: options),
+        throwsArgumentError,
+      );
+      expect(changeLogOf(document).hasChanges, isFalse);
+      expect(
+        () => DocxTemplate(
+          _template(),
+        ).fill(<String, Object?>{}, options: options),
+        throwsArgumentError,
+      );
+    }
   });
 }

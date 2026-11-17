@@ -35,12 +35,15 @@ import 'values.dart';
 
 /// How a template is filled.
 final class FillSettings {
-  /// Creates settings: [locale] for numbers, dates and casing, and whether a
+  /// Creates settings: [locale] for numbers, dates and casing, whether a
   /// tag or merge field the data lacks is removed ([removeMissing]) rather
-  /// than left as written.
+  /// than left as written, and the limits of one fill (Ruling 1 of T2).
   const FillSettings({
     this.locale = FormatLocale.enUS,
     this.removeMissing = false,
+    this.maxCopies = 100000,
+    this.maxSectionDepth = 32,
+    this.maxTags = 1000000,
   });
 
   /// The locale values are shown in, as Excel for Mac shows them.
@@ -49,6 +52,28 @@ final class FillSettings {
   /// Whether a tag or merge field whose value is missing is removed. It is
   /// warned about either way.
   final bool removeMissing;
+
+  /// The copies one fill may make, all sections and levels together.
+  final int maxCopies;
+
+  /// How deep sections may nest.
+  final int maxSectionDepth;
+
+  /// The tags and merge fields one fill may fill, copies counted.
+  final int maxTags;
+
+  /// Throws [ArgumentError] when a limit is below 1.
+  void check() {
+    for (final (String name, int value) in <(String, int)>[
+      ('maxCopies', maxCopies),
+      ('maxSectionDepth', maxSectionDepth),
+      ('maxTags', maxTags),
+    ]) {
+      if (value < 1) {
+        throw ArgumentError.value(value, name, 'must be at least 1');
+      }
+    }
+  }
 }
 
 /// A tag or `MERGEFIELD` of a template, as [listTemplateTags] finds it.
@@ -111,8 +136,8 @@ List<DocxWarning> fillTemplate(
 /// the caller may hand to the change log's undo; the library keeps no
 /// change set (decision 0009).
 ///
-/// [data] is checked first (`checkTemplateData`): an [ArgumentError] then
-/// leaves the document unchanged and records nothing. Names are looked up in
+/// [settings]' limits and [data] are checked first (`checkTemplateData`): an
+/// [ArgumentError] then leaves the document unchanged and records nothing. Names are looked up in
 /// [data] itself. A part that cannot be read (a header or footer) throws a
 /// [DocxReadException] from the walk, before anything changes.
 ({List<DocxWarning> warnings, ChangeSet changes}) fillTemplateWithChanges(
@@ -120,6 +145,7 @@ List<DocxWarning> fillTemplate(
   Map<String, Object?> data,
   FillSettings settings,
 ) {
+  settings.check();
   checkTemplateData(data);
   final _Fill fill = _Fill(document, data, settings);
   final ChangeSet changes = documentTransaction(document, fill.run);
