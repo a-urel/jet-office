@@ -512,11 +512,17 @@ final DocxResult result = DocxTemplate(bytes).fill(
   `templateSectionMalformed`, and both stay. A region a section expands starts
   outside any such field.
 - **Limits (Rulings 1, 2).** `DocxTemplateOptions` has `maxCopies` (100000:
-  copies one fill may make, a list of n items making n - 1), `maxSectionDepth`
+  units the copies of all sections may add, at every level, copies of copies
+  included; a unit is a block, a table row or an inline, the top-level items
+  a copy inserts, and a list of n items adds (n - 1) times the section's
+  units; the owner set this meaning on 2026-11-17, as counting copies let a
+  nested section of one name grow a small template to millions of
+  paragraphs), `maxSectionDepth`
   (32: how deep sections may nest) and `maxTags` (1000000: tags and merge
   fields one fill may fill, copies counted). A limit below 1 throws an
-  `ArgumentError` before anything changes. A section a limit refuses (its
-  copies or its content's fillable tags times its items past what is left,
+  `ArgumentError` before anything changes. A section a limit refuses (the
+  units its copies add, or its content's fillable tags times its items, past
+  what is left,
   checked before it repeats; or nested past `maxSectionDepth`) keeps its tags
   as written, shows its content once in the outer scope (its own sections
   decided there, one level deeper, so each deeper section is refused too) and
@@ -1478,7 +1484,7 @@ A list written by `DocxListExport` follows these rules. Tests are in
 | Fresh ids at save | copies' drawings, revisions and content controls get new ids; one counter for bookmarks, comments and revisions | Rulings 3, 4, 9 | `test/docx/template_copy_ids_test.dart`; `template_test.dart` ("t2_nested gives t2NestedText") |
 | Vertical merge, section break | a rows pair across a merge is malformed; content holding a section break is not copied or removed | Rulings 13, 14 | `test/docx/template/sections_fill_test.dart` ("a rows section across a vertical merge stays and fills once"); `expand_test.dart` ("content holding a section break is not copied or removed"); `sections_test.dart` |
 | Missing and malformed sections | a missing name keeps its tags and shows the content once, warned once (removeMissing removes the tags); a malformed tag stays and warns, its content filled | Ruling 12 | `test/docx/template/sections_fill_test.dart` ("a missing section keeps its tags ...", "malformed sections stay as text, their content filled", "a rows section inside one of the same rows is malformed in the copies"); `fill_test.dart` ("section tags pair and fill; a missing one stays and warns") |
-| Limits | `maxCopies`, `maxSectionDepth`, `maxTags`; a refused section keeps its tags and shows its content once, `templateLimitExceeded`; a tag past `maxTags` stays with the same warning; a limit below 1 throws | Rulings 1, 2 | `test/docx/template/sections_fill_test.dart` ("a list past maxCopies is refused before copying", "a section deeper than maxSectionDepth is not expanded", "maxTags stops filling and warns"); `template_test.dart` ("options carry three limits with high defaults", "a limit below 1 throws before anything changes") |
+| Limits | `maxCopies` (copied units: blocks, rows or inlines), `maxSectionDepth`, `maxTags`; a refused section keeps its tags and shows its content once, `templateLimitExceeded`; a tag past `maxTags` stays with the same warning; a limit below 1 throws | Rulings 1, 2 | `test/docx/template/sections_fill_test.dart` ("a list past maxCopies is refused before copying", group "limit boundaries", "a section deeper than maxSectionDepth is not expanded", "maxTags stops filling and warns"); `template_test.dart` ("options carry three limits with high defaults", "a limit below 1 throws before anything changes") |
 | Locations in copies | a warning in a copy names the template's paragraph | Ruling 15 | `test/docx/template/sections_fill_test.dart` ("a warning in a copy names the template's paragraph") |
 | Tags in a loose field's result | not filled: a value tag `templateTagMalformed`, a section tag `templateSectionMalformed` | Ruling 22 | `test/docx/template/sections_fill_test.dart` ("a tag in the result of a field across paragraphs stays") |
 | One change set with sections | a fill with repeats and removals is undone whole | spec 9 | `test/docx/template/sections_fill_test.dart` ("a fill with sections is one change set, undone whole"); `expand_test.dart` ("a repeat is undone with its transaction") |

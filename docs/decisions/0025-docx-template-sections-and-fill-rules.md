@@ -88,9 +88,15 @@ anything changes. Every fill is bounded by three limits.**
    or, warned missing, left. It proves nothing about the paragraphs inside a
    changed part; the unit tests own that.
 6. **Limits** (Rulings 1 and 2 of the T2 plan, approved by the owner on
-   2026-11-16). `DocxTemplateOptions` has `maxCopies` (default 100000: copies
-   one fill may make, all sections and levels together, a list of n items
-   making n - 1), `maxSectionDepth` (32: how deep sections may nest) and
+   2026-11-16). `DocxTemplateOptions` has `maxCopies` (default 100000: the
+   units, blocks, rows or inlines, the copies of all sections add, at every
+   level, copies of copies included; a unit is a top-level item a copy
+   inserts, a block for a section over blocks, a table row for one over rows,
+   an inline for one inside a paragraph, and a list of n items adds (n - 1) ×
+   the section's units; checked before a section is copied and reserved when
+   it is accepted; the owner set this meaning on 2026-11-17, when counting
+   copies let a nested section of one name grow a 4.6 KB template past
+   400,000 paragraphs), `maxSectionDepth` (32: how deep sections may nest) and
    `maxTags` (1000000: tags and merge fields one fill may fill, copies
    counted). A section a limit refuses keeps its tags as written, shows its
    content once in the outer scope, and the fill warns the new code

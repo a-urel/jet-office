@@ -58,6 +58,46 @@ bool sectionHoldsBreak(SectionPair pair) {
   }
 }
 
+/// The units a copy of [pair]'s content inserts, as `maxCopies` counts them
+/// (the owner's ruling, 2026-11-17): the blocks between its tag paragraphs,
+/// its rows, or the inlines between its tags once their runs are split at
+/// the tags' edges. What a unit holds (cells, a hyperlink's runs, nested
+/// tables) is not counted; a nested section is counted when it repeats. A
+/// copy that leaves a bookmark out is shorter, so this is at most what it
+/// inserts. Reads the model and changes nothing.
+int contentUnits(SectionPair pair) {
+  switch (pair.form) {
+    case SectionForm.rows:
+      final (DocxTable _, int a, int b) = _rowsOf(pair);
+      return b - a + 1;
+    case SectionForm.blocks:
+      final (Object _, int a, int b) = _blocksOf(pair);
+      return b - a - 1;
+    case SectionForm.inline:
+      final Object level = pair.open.level;
+      final List<DocxInline> list = level is DocxHyperlink
+          ? level.inlines
+          : (level as DocxParagraph).inlines;
+      final TemplateEntry open = pair.open.payload! as TemplateEntry;
+      final TemplateEntry close = pair.close.payload! as TemplateEntry;
+      final TextPosition last = open.map!.positions[open.match!.end - 1];
+      final TextPosition first = close.map!.positions[close.match!.start];
+      final DocxRun openRun = last.run!;
+      final DocxRun closeRun = first.run!;
+      // The piece of a tag's run on the content's side, when there is one.
+      final bool afterOpen =
+          last.offset + 1 < _textLength(openRun, last.contentIndex) ||
+          last.contentIndex < openRun.content.length - 1;
+      final bool beforeClose = first.offset > 0 || first.contentIndex > 0;
+      if (identical(openRun, closeRun)) {
+        return close.match!.start > open.match!.end ? 1 : 0;
+      }
+      final int from = _indexIn(list, openRun);
+      final int to = _indexIn(list, closeRun);
+      return to - from - 1 + (afterOpen ? 1 : 0) + (beforeClose ? 1 : 0);
+  }
+}
+
 /// What [repeatSection] made: the regions of the original content and of
 /// each copy, in order; the annotations the copies left out
 /// (`copyDroppedNames`); and whether removing the tags took the other half

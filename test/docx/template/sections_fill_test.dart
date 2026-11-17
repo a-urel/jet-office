@@ -300,16 +300,16 @@ void main() {
 
   group('100,000 items repeat in linear time', () {
     // Review of P3: each copy was inserted, and looked for, from the start of
-    // its list, so the default copy limit took about 25 s.
+    // its list, so the default copy limit took about 25 s. Each copy adds
+    // one unit (a row, a block, an inline), so 100,000 items fit the limit.
     final List<Object?> items = List<Object?>.filled(100000, 1);
     for (final (String form, String body) in <(String, String)>[
       (
         'rows',
         '${_tbl(<String>[
-          _tr(<String>[_tc(_p('{{#a}}'))]),
-          _tr(<String>[_tc(_p('x{{/a}}'))]),
-          _tr(<String>[_tc(_p('total'))]),
-        ])}${_p('son')}',
+          _tr(<String>[_tc(_p('{{#a}}')), _tc(_p('x{{/a}}'))]),
+          _tr(<String>[_tc(_p('total')), _tc(_p(''))]),
+        ], columns: 2)}${_p('son')}',
       ),
       ('blocks', '${_p('{{#a}}')}${_p('x')}${_p('{{/a}}')}${_p('son')}'),
       ('inline', '${_p('{{#a}}x{{/a}}')}${_p('son')}'),
@@ -325,7 +325,7 @@ void main() {
         final List<DocxBlock> blocks = doc.body.blocks;
         switch (form) {
           case 'rows':
-            expect((blocks.first as DocxTable).rows, hasLength(200001));
+            expect((blocks.first as DocxTable).rows, hasLength(100001));
           case 'blocks':
             expect(blocks, hasLength(100001));
           default:
@@ -553,6 +553,76 @@ void main() {
       expect(r.warnings, isEmpty);
       expect(r.lines, <String>['123']);
     });
+
+    test('maxCopies counts copied units: blocks, rows or inlines', () {
+      // The owner's ruling, 2026-11-17: a list of n items adds (n - 1) times
+      // the section's units, two here, so three items need 4.
+      final List<(String, String, List<String>)>
+      forms = <(String, String, List<String>)>[
+        (
+          'blocks',
+          '${_p('{{#a}}')}${_p('x')}${_p('y')}${_p('{{/a}}')}${_p('son')}',
+          <String>['x', 'y', 'x', 'y', 'x', 'y', 'son'],
+        ),
+        (
+          'rows',
+          '${_tbl(<String>[
+            _tr(<String>[_tc(_p('{{#a}}x'))]),
+            _tr(<String>[_tc(_p('y{{/a}}'))]),
+          ])}${_p('son')}',
+          <String>['x', 'y', 'x', 'y', 'x', 'y', 'son'],
+        ),
+        (
+          'inline',
+          templateParagraph(
+            '${templateRun('{{#a}}x')}${templateRun('y{{/a}}', rPr: '<w:b/>')}',
+          ),
+          <String>['xyxyxy'],
+        ),
+      ];
+      for (final (String form, String body, List<String> filled) in forms) {
+        final Map<String, Object?> data = <String, Object?>{
+          'a': <Object?>[1, 2, 3],
+        };
+        final r4 = _fill(
+          body,
+          data,
+          settings: const FillSettings(maxCopies: 4),
+        );
+        expect(r4.warnings, isEmpty, reason: form);
+        expect(r4.lines, filled, reason: form);
+        final r3 = _fill(
+          body,
+          data,
+          settings: const FillSettings(maxCopies: 3),
+        );
+        expect(_codes(r3.warnings), <DocxWarningCode>[
+          DocxWarningCode.templateLimitExceeded,
+        ], reason: form);
+        expect(r3.warnings.single.detail, '{{#a}}', reason: form);
+        expect(r3.lines.join(), contains('{{#a}}'), reason: form);
+      }
+    });
+
+    test('nested sections of one name stop at the copy limit, fast', () {
+      // The reviewer's probe: each copy's `{{#a}}` falls back to the outer
+      // list, so copies of copies grew tenfold per level.
+      final String body =
+          '${List<String>.filled(5, _p('{{#a}}')).join()}'
+          '${List<String>.generate(40, (int i) => _p('p$i')).join()}'
+          '${List<String>.filled(5, _p('{{/a}}')).join()}${_p('son')}';
+      final Stopwatch watch = Stopwatch()..start();
+      final DocxDocument doc = DocxDocument.open(_bytes(body));
+      final List<DocxWarning> warnings = fillTemplate(doc, <String, Object?>{
+        'a': List<Object?>.generate(10, (int i) => i),
+      }, const FillSettings());
+      expect(watch.elapsed, lessThan(const Duration(seconds: 5)));
+      expect(
+        warnings.map((DocxWarning w) => w.code),
+        contains(DocxWarningCode.templateLimitExceeded),
+      );
+      expect(doc.body.blocks.length, lessThanOrEqualTo(100000 + 51));
+    }, timeout: const Timeout(Duration(minutes: 2)));
 
     test('a section does not take the tags outside it need', () {
       // Review of P3: the section repeated part-way, `12{{.}}X`.

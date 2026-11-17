@@ -174,10 +174,13 @@ final class DocxTemplateOptions {
   /// warned about either way.
   final bool removeMissing;
 
-  /// How many copies one fill may make, all sections and levels together: a
-  /// list of n items makes n - 1 copies. A section that would pass it is not
-  /// repeated: its tags stay as written, its content shows once, and the
-  /// fill warns [DocxWarningCode.templateLimitExceeded].
+  /// How many units the copies of one fill may add, all sections and levels
+  /// together, copies of copies included: a unit is a block for a section
+  /// over blocks, a table row for one over rows, an inline for one inside a
+  /// paragraph, so a list of n items adds (n - 1) times the section's units.
+  /// It is checked before a section is copied: a section that would pass it
+  /// is not repeated: its tags stay as written, its content shows once, and
+  /// the fill warns [DocxWarningCode.templateLimitExceeded].
   final int maxCopies;
 
   /// How deep sections may nest; a section deeper than this is not expanded,

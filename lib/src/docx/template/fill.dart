@@ -63,7 +63,8 @@ final class FillSettings {
   /// warned about either way.
   final bool removeMissing;
 
-  /// The copies one fill may make, all sections and levels together.
+  /// The units (blocks, rows or inlines) the copies of one fill may add, all
+  /// sections and levels together.
   final int maxCopies;
 
   /// How deep sections may nest.
@@ -442,7 +443,9 @@ final class _Fill {
   final int maxDepth;
   final DocxWarningCollector warnings = DocxWarningCollector();
 
-  /// The copies made so far, all sections together (Ruling 1).
+  /// The units (blocks, rows or inlines) the copies made so far added, all
+  /// sections and levels together (Ruling 1, as the owner set it on
+  /// 2026-11-17).
   int _copies = 0;
 
   /// The tags and merge fields filled so far (Ruling 1).
@@ -711,14 +714,16 @@ final class _Fill {
           // A prepaid region counted one copy of the content already.
           final int extra =
               _fillableIn(pair, ranges) * (prepaid ? count - 1 : count);
-          if (_copies + count - 1 > settings.maxCopies ||
+          // The units its copies add (the owner's ruling, 2026-11-17).
+          final int units = contentUnits(pair) * (count - 1);
+          if (_copies + units > settings.maxCopies ||
               _tags + extra > settings.maxTags) {
             warn(DocxWarningCode.templateLimitExceeded);
             keep();
             continue;
           }
           // Counted now, so the sections decided after it count them.
-          _copies += count - 1;
+          _copies += units;
           _tags += extra;
           out.add(
             _Decided(pair, level, effect.effect, effect.items, prepaid: true),
