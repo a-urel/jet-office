@@ -130,8 +130,9 @@ typedef RegionParagraph = ({
 });
 
 /// The paragraphs of [region] in reading order, every one, with the opaque
-/// blocks that hold a tag or a merge field (as T1's walk reports them), their entries and their section tag sites,
-/// whose steps start at the region: at its container for a [BlockRegion], at
+/// blocks that hold a tag or a merge field (as T1's walk reports them),
+/// their entries and their section tag sites, whose steps start at the
+/// region: at its container for a [BlockRegion], at
 /// its table's [CellStep] for a [RowRegion], and empty for an
 /// [InlineRegion]. A merge field's `\#` picture is read with [locale]'s
 /// separators.

@@ -260,23 +260,6 @@ void main() {
     expect(_texts(doc).first, 'lead|x|x');
   });
 
-  test('a repeat across a vertical merge is refused', () {
-    const String restart = '<w:vMerge w:val="restart"/>';
-    const String continues = '<w:vMerge/>';
-    final DocxDocument doc = _doc(
-      '${_tbl(<String>[
-        _tr(<String>[_tc(_p('a'), tcPr: restart)]),
-        _tr(<String>[_tc(_p('b'), tcPr: continues)]),
-        _tr(<String>[_tc(_p('c'))]),
-      ])}${_p('after')}',
-    );
-    final DocxTable table = doc.body.blocks.first as DocxTable;
-    expect(crossesVerticalMerge(table, 0, 0), isTrue);
-    expect(crossesVerticalMerge(table, 1, 1), isTrue);
-    expect(crossesVerticalMerge(table, 0, 1), isFalse);
-    expect(crossesVerticalMerge(table, 2, 2), isFalse);
-  });
-
   test('content holding a section break is not copied or removed', () {
     const String breakP =
         '<w:p><w:pPr><w:sectPr><w:pgSz w:w="11906" w:h="16838"/></w:sectPr>'

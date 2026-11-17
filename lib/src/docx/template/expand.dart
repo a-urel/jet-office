@@ -18,7 +18,6 @@ import '../docx_document.dart';
 import '../model/blocks.dart';
 import '../model/inlines.dart';
 import '../model/run_content.dart' show DocxText;
-import '../model/table_formatting.dart' show DocxVerticalMerge;
 import '../model/template_copies.dart' show isDroppedByCopy;
 import '../story_reader.dart' show readerOfCaptured;
 import 'paragraph_text.dart';
@@ -26,24 +25,6 @@ import 'region.dart';
 import 'replace.dart';
 import 'sections.dart';
 import 'template_walk.dart';
-
-/// Whether repeating or removing rows [firstRow] to [lastRow] (inclusive) of
-/// [table] would cut a vertical merge (Ruling 13): row [firstRow] holds a
-/// cell that continues a merge from above, or the row after [lastRow] holds
-/// one, so a merge continues out of the rows.
-bool crossesVerticalMerge(DocxTable table, int firstRow, int lastRow) {
-  bool continues(int row) {
-    if (row < 0 || row >= table.rows.length) return false;
-    for (final DocxTableCell cell in table.rows[row].cells) {
-      if (cell.properties.verticalMerge == DocxVerticalMerge.continuation) {
-        return true;
-      }
-    }
-    return false;
-  }
-
-  return continues(firstRow) || continues(lastRow + 1);
-}
 
 /// Whether [blocks], or a table in them at any depth, hold a paragraph that
 /// carries a section break (Ruling 14): such content is never copied or
@@ -780,7 +761,11 @@ final class _Marks {
     void walkInlines(List<DocxInline> list) {
       for (final DocxInline inline in list) {
         if (orphan(_inlineMark(inline))) inlines.add(inline);
-        if (inline is DocxHyperlink) walkInlines(inline.inlines);
+        // A field and a hyperlink hold marks too, as [addInlines] reads them.
+        final List<DocxInline>? held = inline is DocxHyperlink
+            ? inline.inlines
+            : heldInlinesOf(inline);
+        if (held != null) walkInlines(held);
       }
     }
 
@@ -803,7 +788,11 @@ final class _Marks {
 
     walkBlocks(story);
     for (final DocxInline inline in inlines.reversed) {
-      removeHeldInline(inline);
+      if (isInField(inline)) {
+        removeFieldMark(inline);
+      } else {
+        removeHeldInline(inline);
+      }
     }
     return inlines.isNotEmpty;
   }

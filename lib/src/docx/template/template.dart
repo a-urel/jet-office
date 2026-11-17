@@ -89,8 +89,9 @@ final class DocxTemplate {
   /// warnings.
   ///
   /// Throws an [ArgumentError] for a value that is not a supported kind or a
-  /// limit of [options] below 1, and a [DocxReadException] when the body, a header or a footer part of
-  /// [document] cannot be read; either way [document] is left unchanged.
+  /// limit of [options] below 1, and a [DocxReadException] when the body, a
+  /// header or a footer part of [document] cannot be read; either way
+  /// [document] is left unchanged.
   static List<DocxWarning> fillDocument(
     DocxDocument document,
     Map<String, Object?> data, {

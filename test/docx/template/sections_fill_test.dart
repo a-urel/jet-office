@@ -446,6 +446,29 @@ void main() {
     expect(_documentXml(r.doc), isNot(contains('bookmarkEnd')));
   });
 
+  test('removing half a bookmark removes the other half inside a field', () {
+    // Review of P3: the other half was looked for in paragraphs and
+    // hyperlinks only, not in fields, which hold marks too.
+    final String body =
+        '${_p('{{#iskonto}}')}'
+        '${templateParagraph('<w:bookmarkStart w:id="6" w:name="alan"/>'
+        '${templateRun('İskonto uygulandı.')}')}'
+        '${_p('{{/iskonto}}')}'
+        '${templateParagraph('<w:r><w:fldChar w:fldCharType="begin"/></w:r>'
+        '<w:r><w:instrText xml:space="preserve"> PAGE </w:instrText></w:r>'
+        '<w:r><w:fldChar w:fldCharType="separate"/></w:r>'
+        '${templateRun('1')}<w:bookmarkEnd w:id="6"/>'
+        '<w:r><w:fldChar w:fldCharType="end"/></w:r>')}';
+    final r = _fill(body, <String, Object?>{'iskonto': false});
+    expect(r.lines, <String>['1']);
+    expect(_codes(r.warnings), <DocxWarningCode>[
+      DocxWarningCode.templateRemovalDroppedAnnotation,
+    ]);
+    final String xml = _documentXml(r.doc);
+    expect(xml, isNot(contains('bookmarkEnd')));
+    expect(xml, contains('PAGE'));
+  });
+
   test('a warning in a copy names the template\'s paragraph', () {
     final String table = _tbl(<String>[
       _tr(<String>[_tc(_p('head')), _tc(_p(''))]),
@@ -672,6 +695,27 @@ void main() {
       });
     },
   );
+
+  test('a rows section across a vertical merge stays and fills once', () {
+    const String restart = '<w:vMerge w:val="restart"/>';
+    const String continues = '<w:vMerge/>';
+    final r = _fill(
+      '${_tbl(<String>[
+        _tr(<String>[_tc(_p('top'), tcPr: restart)]),
+        _tr(<String>[_tc(_p('{{#a}}{{v}}'), tcPr: continues)]),
+        _tr(<String>[_tc(_p('{{/a}}'))]),
+      ])}${_p('son')}',
+      <String, Object?>{
+        'a': <Object?>[1, 2],
+        'v': 'V',
+      },
+    );
+    expect(r.lines, <String>['top', '{{#a}}V', '{{/a}}', 'son']);
+    expect(_codes(r.warnings), <DocxWarningCode>[
+      DocxWarningCode.templateSectionMalformed,
+      DocxWarningCode.templateSectionMalformed,
+    ]);
+  });
 
   test('listing pairs sections', () {
     const String restart = '<w:vMerge w:val="restart"/>';

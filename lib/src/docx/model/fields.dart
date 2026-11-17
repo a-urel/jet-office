@@ -367,6 +367,32 @@ final class DocxField extends DocxInline {
   String toString() => 'DocxField($name)';
 }
 
+/// Removes [mark], a bookmark mark or another inline without text that a
+/// field holds, from that field, as one change: for the template fill, which
+/// takes the other half of a bookmark or a comment range whose one half it
+/// removed (plan T2, Ruling 11). The field keeps everything else.
+///
+/// Throws [StateError] for an inline held by no field, and [ArgumentError]
+/// for a run, which is part of the field's instruction or result; both
+/// before anything changes.
+void removeFieldMark(DocxInline mark) {
+  final DocxField? field = mark._field;
+  if (field == null) throw StateError('The inline is in no field.');
+  if (mark is DocxRun) {
+    throw ArgumentError.value(mark, 'mark', 'must not be a run');
+  }
+  final int index = field._inlines.indexWhere(
+    (DocxInline i) => identical(i, mark),
+  );
+  if (index < 0) throw StateError('The inline is in no field.');
+  field._apply(
+    <DocxRun, DocxRunText>{},
+    <DocxInline>[...field._inlines]..removeAt(index),
+    index < field._resultStart ? field._resultStart - 1 : field._resultStart,
+    <DocxRun, DocxRunText>{},
+  );
+}
+
 /// An edit of a field's inlines and the content of some of its runs, from one
 /// state to another.
 final class _FieldEdit implements Change {
