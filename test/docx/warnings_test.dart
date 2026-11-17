@@ -248,6 +248,29 @@ void main() {
     }
   });
 
+  test('templateLimitExceeded names a tag or a section in every locale', () {
+    // Decision 0025: the code is raised for a section past a limit and for a
+    // value tag past maxTags, so its message fits both.
+    final DocxWarningCollector collector = DocxWarningCollector()
+      ..add(
+        DocxWarningCode.templateLimitExceeded,
+        part: '/word/document.xml',
+        location: 'body/p[0]',
+        detail: '{{ad}}',
+      );
+    final DocxWarning w = collector.warnings.single;
+    const Map<OfficeLocale, String> named = <OfficeLocale, String>{
+      OfficeLocale.en: 'the tag or section was left as written',
+      OfficeLocale.de: 'das Tag oder der Abschnitt blieb unverändert',
+      OfficeLocale.tr: 'etiket ya da bölüm olduğu gibi bırakıldı',
+    };
+    for (final OfficeLocale locale in OfficeLocale.values) {
+      expect(w.message(locale), contains('{{ad}}'));
+      expect(w.message(locale), contains('/word/document.xml (body/p[0])'));
+      expect(w.message(locale), contains(named[locale]), reason: '$locale');
+    }
+  });
+
   test('styleNotFound has en, de and tr text naming count, part and id', () {
     final DocxWarningCollector many = DocxWarningCollector();
     for (int i = 0; i < 2; i++) {

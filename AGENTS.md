@@ -33,11 +33,12 @@ covered in the end; template fill first; macros stay out; supersedes part of
 the end; level, model and order undecided; files and PDF keep the whole
 chart) and `0024` (DOCX template fill: `{{}}` tags and `MERGEFIELD`, filled in
 place on the model, one document per record, milestones T1 to T3; settles what
-`0010` left to its own record) and `0025` (proposed: T2's sections, scopes and
-limits, and the rules of `0024` a review found wrong, which it supersedes: a
-missing section name, which problems throw, how tags and merge fields look
-names up, what a fill consumes and what `comparePackages` proves, and the
-fill rules a spec review found loose) before any design change.
+`0010` left to its own record) and `0025` (T2: DOCX template sections, scopes
+and the three fill limits, and the rules of `0024` a review found wrong;
+supersedes six sentences of `0024`: a missing section name, which problems
+throw, how tags and merge fields look names up, what a fill consumes, what
+`comparePackages` proves and the limits; it also fixes the fill rules a spec
+review found loose) before any design change.
 
 Phase 3, the workbook model, is complete at W6 (proof and release readiness):
 its names are fixed, so a rename of a public name of `XlsxWorkbook` is breaking

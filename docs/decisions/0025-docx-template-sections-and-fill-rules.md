@@ -1,6 +1,6 @@
 # 0025 — DOCX template sections, scopes and limits, and the fill rules of 0024 a review found wrong
 
-**Status:** Proposed — 2026-11-17
+**Status:** Accepted — 2026-11-17
 
 Supersedes these parts of [`0024`](0024-docx-template-fill.md), which is not
 edited:
@@ -166,7 +166,9 @@ anything changes. Every fill is bounded by three limits.**
 
 - **A fourteenth template warning,** `templateLimitExceeded`, has messages in
   `en`, `de` and `tr`, and `templateSectionMalformed`'s message no longer says
-  sections are not filled; the native-speaker check covers both.
+  sections are not filled; the native-speaker check covers both. Its message
+  names a tag or a section, as the code is raised for both (a section past a
+  limit, a value tag past `maxTags`).
 - **Three new public members,** `DocxTemplateOptions.maxCopies`,
   `maxSectionDepth` and `maxTags`; nothing else of the public API changes.
 - **A save renews the ids of what a section copied,** in the save code, not

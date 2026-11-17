@@ -404,7 +404,7 @@ final DocxResult result = DocxTemplate(bytes).fill(
 
 T2 fills the sections of a template (decision
 [`0024`](decisions/0024-docx-template-fill.md); the rules a review of 0024
-and of the design found loose are in the proposed decision
+and of the design found loose are in the accepted decision
 [`0025`](decisions/0025-docx-template-sections-and-fill-rules.md)): a table
 row or a run of blocks repeated once per item of a list, content shown or
 removed by a condition, a map as the scope of the names inside, and sections
