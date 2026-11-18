@@ -66,9 +66,11 @@ Milestone T1 (DOCX template fill, values: `DocxTemplate`, `{{}}` tags and
 the owner's Word check (`tool/write_t1_check.dart`, `docs/word-checks.md`,
 "T1") is open, and waits for the owner's `template_invoice.docx` and
 `template_letter.docx`. Milestone T2 (sections: repeated rows and blocks,
-conditions, scopes, nesting; `docs/docx-model.md`, "What T2 does") is built:
-the owner's Word check (`tool/write_t2_check.dart`, `docs/word-checks.md`,
-"T2") is open and waits for the same templates. Pictures come in T3.
+conditions, scopes, nesting, decision 0025; `docs/docx-model.md`, "What T2
+does") is built: the owner's Word check of its fixtures
+(`tool/write_t2_check.dart`) is recorded in `docs/word-checks.md`, "T2"
+(2026-11-18), and its owner-template rows wait for `template_invoice.docx`, as
+T1's do. Pictures come in T3.
 `packages/jet_charts_flutter` is its Flutter backend (decision 0016), with its
 own `AGENTS.md`; milestones J3 and J4 are done. This
 package never depends on it. `packages/jet_charts_flutter/docs/app-themes.md`
