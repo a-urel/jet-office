@@ -64,13 +64,15 @@ recorded in `docs/excel-checks.md`, "C2" (2026-11-14), with E3.
 Milestone T1 (DOCX template fill, values: `DocxTemplate`, `{{}}` tags and
 `MERGEFIELD`, decision 0024; `docs/docx-model.md`, "What T1 does") is built:
 the owner's Word check (`tool/write_t1_check.dart`, `docs/word-checks.md`,
-"T1") is open, and waits for the owner's `template_invoice.docx` and
-`template_letter.docx`. Milestone T2 (sections: repeated rows and blocks,
+"T1") is open: `template_invoice.docx` filled is recorded (2026-11-18), and the
+check waits for the owner's `template_letter.docx` and for the rows of the T1
+fixtures and of the save in Word of `t1_values` and `t1_merge_fields`, which
+are `not checked`. Milestone T2 (sections: repeated rows and blocks,
 conditions, scopes, nesting, decision 0025; `docs/docx-model.md`, "What T2
 does") is built: the owner's Word check of its fixtures
-(`tool/write_t2_check.dart`) is recorded in `docs/word-checks.md`, "T2"
-(2026-11-18), and its owner-template rows wait for `template_invoice.docx`, as
-T1's do. Pictures come in T3.
+(`tool/write_t2_check.dart`) and of the owner's `template_invoice.docx` filled
+is recorded completely in `docs/word-checks.md`, "T2" (2026-11-18).
+Pictures come in T3.
 `packages/jet_charts_flutter` is its Flutter backend (decision 0016), with its
 own `AGENTS.md`; milestones J3 and J4 are done. This
 package never depends on it. `packages/jet_charts_flutter/docs/app-themes.md`
@@ -404,7 +406,8 @@ dotnet run --project tool/ooxml_validate -- build/excel_gallery
   Word check (`build/t1`): `t1_values.docx` and `t1_merge_fields.docx` (the
   templates filled), `t1_template.docx` and `t1_merge_fields_template.docx`
   (unfilled), and `owner/`, each `test/fixtures/owner/docx/template_*.docx`
-  filled with `fillDocxData()` (none exist yet: it says so and exits 0). It is
+  filled with `fillDocxData()` (`template_invoice.docx` now; with none it says
+  so and exits 0). It is
   not part of the CI chain; `dotnet run --project tool/ooxml_validate --
   build/t1` validates its output, and the owner's steps are in
   `docs/word-checks.md`, "T1". Exit 2 on unusable arguments, 1 on any error.
@@ -417,8 +420,8 @@ dotnet run --project tool/ooxml_validate -- build/excel_gallery
   false)`), and `owner/`: each `test/fixtures/owner/docx/template_invoice*.docx`
   filled with 1 line paid, 40 lines unpaid and `fillDocxEmptyData()` as
   `<name>_1.docx`, `<name>_40.docx` and `<name>_0.docx`, and each other
-  `template_*.docx` filled with `fillDocxData()` (none exist yet: it says so
-  and exits 0). It is not part of the CI chain; `dotnet run --project
+  `template_*.docx` filled with `fillDocxData()` (with none it says so and
+  exits 0). It is not part of the CI chain; `dotnet run --project
   tool/ooxml_validate -- build/t2` validates its output, and the owner's steps
   are in `docs/word-checks.md`, "T2". Exit 2 on unusable arguments, 1 on any
   error. `test/tool/write_t2_check_test.dart` (VM) tests it.
@@ -601,7 +604,7 @@ dotnet run --project tool/ooxml_validate -- build/excel_gallery
   paragraphs (`test/fixtures/owner/README.md`, section "Word files", says
   how). They are `blank.docx`, `features.docx`, `long.docx` and, for D2's
   built-in styles and lists, `builtins.docx` (the README says how it was
-  made). `tool/draft_expected_docx.dart` drafts each text from the model's
+  made), and, for the T1 and T2 template checks, `template_invoice.docx`. `tool/draft_expected_docx.dart` drafts each text from the model's
   reading;
   the owner confirms every line against Word and sets `confirmedBy`. Never
   edit a committed Word file, its expected text or its manifest entry
