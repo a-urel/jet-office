@@ -914,7 +914,12 @@ dotnet run --project tool/ooxml_validate -- build/t2
 ```
 
 No repair prompt in any of them, and each saves in Word without a prompt. Read
-every statement here as what to expect until the owner has looked.
+every statement here as what to expect until the owner has looked. The owner
+looked on 2026-11-18, and every statement about the fixtures held; the rows of
+the owner's templates are still open. No fixture removes a section that holds
+a comment, so whether Word for Mac accepts a comment left with neither range
+nor reference (decision [`0025`](decisions/0025-docx-template-sections-and-fill-rules.md))
+was not checked and stays open.
 
 ### Fixtures: `build/t2/*.docx`
 - `t2_values.docx`: three lines, `Durum: Ödendi`, two notes, `İskonto yok.`,
@@ -943,17 +948,17 @@ word, save, close, reopen: no repair prompt, the edit there.
 
 | Date | Word | File | Result | Notes |
 |---|---|---|---|---|
-|  |  | `build/t2/t2_values.docx` | not checked |  |
-|  |  | `build/t2/t2_empty.docx` | not checked |  |
-|  |  | `build/t2/t2_lines_1.docx` | not checked |  |
-|  |  | `build/t2/t2_lines_40.docx` | not checked |  |
-|  |  | `build/t2/t2_nested.docx` | not checked |  |
-|  |  | `build/t2/t2_template.docx` | not checked |  |
-|  |  | `build/t2/t2_nested_template.docx` | not checked |  |
+| 2026-11-18 | Word for Mac | `build/t2/t2_values.docx` | ok |  |
+| 2026-11-18 | Word for Mac | `build/t2/t2_empty.docx` | ok |  |
+| 2026-11-18 | Word for Mac | `build/t2/t2_lines_1.docx` | ok |  |
+| 2026-11-18 | Word for Mac | `build/t2/t2_lines_40.docx` | ok |  |
+| 2026-11-18 | Word for Mac | `build/t2/t2_nested.docx` | ok | Two groups, two Kontrol controls, two insertions accepted and rejected one by one; the comment once beside the first group, as 0025 point 7 says; both pictures keep the template's name Picture 7 with new ids 7 and 8, valid. |
+| 2026-11-18 | Word for Mac | `build/t2/t2_template.docx` | ok |  |
+| 2026-11-18 | Word for Mac | `build/t2/t2_nested_template.docx` | ok |  |
 |  |  | `build/t2/owner/template_invoice_1.docx` | not checked | Needs the owner's template. |
 |  |  | `build/t2/owner/template_invoice_40.docx` | not checked | Needs the owner's template. |
 |  |  | `build/t2/owner/template_invoice_0.docx` | not checked | Needs the owner's template. |
-|  |  | Save in Word | not checked |  |
+| 2026-11-18 | Word for Mac | Save in Word | ok | t2_values, t2_nested and t2_lines_40: edited, saved, reopened, no repair prompt. Owner files not yet written. |
 
 ## Results
 
