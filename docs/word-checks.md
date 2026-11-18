@@ -850,8 +850,10 @@ entries and confirmed expected texts: `template_invoice.docx` (a company, a
 customer, a date, amounts, a table, a header and a footer with page numbers, a
 comment on a tag, a tracked change next to a field) and `template_letter.docx`
 (merge fields, `{{}}` tags mixed with them, a header and a footer). Only the
-owner edits those files and their expected texts; until they are there,
-`build/t1/owner/` is not written and the rows for it stay `not checked`.
+owner edits those files and their expected texts. `template_invoice.docx` is
+there (made in Word for Mac 16.114.4, fictional data), and the owner checked it
+filled on 2026-11-18; `template_letter.docx` is still awaited, and its rows stay
+`not checked` until it is there.
 
 No repair prompt in any of them, and each saves in Word without a prompt; then,
 per document, as below. As under D3 to D6, this section says what to look for:
@@ -898,9 +900,10 @@ checked`; `Notes` says what was seen.
 |  |  | `build/t1/t1_merge_fields.docx` | not checked |  |
 |  |  | `build/t1/t1_template.docx` | not checked |  |
 |  |  | `build/t1/t1_merge_fields_template.docx` | not checked |  |
-|  |  | `build/t1/owner/template_invoice.docx` | not checked | Needs the owner's template. |
+| 2026-11-18 | Word for Mac 16.114.4 | `build/t1/owner/template_invoice.docx` | ok | Values in place (Ayşe Yılmaz, 14.11.2026, 1.234,56 ₺); the comment on {{musteri.ad}} still anchored; the tracked change next to the page number in the Review list; page numbers update. |
 |  |  | `build/t1/owner/template_letter.docx` | not checked | Needs the owner's template. |
-|  |  | Save in Word | not checked |  |
+|  |  | Save in Word | not checked | `t1_values`, `t1_merge_fields` and `template_letter` not checked; `template_invoice` in the row below. |
+| 2026-11-18 | Word for Mac 16.114.4 | Save in Word: `build/t1/owner/template_invoice.docx` | ok | Edited, saved, reopened, no repair prompt. |
 
 ## T2
 
@@ -915,8 +918,8 @@ dotnet run --project tool/ooxml_validate -- build/t2
 
 No repair prompt in any of them, and each saves in Word without a prompt. Read
 every statement here as what to expect until the owner has looked. The owner
-looked on 2026-11-18, and every statement about the fixtures held; the rows of
-the owner's templates are still open. No fixture removes a section that holds
+looked on 2026-11-18, and every statement about the fixtures and the owner's
+`template_invoice.docx` filled held. No fixture removes a section that holds
 a comment, so whether Word for Mac accepts a comment left with neither range
 nor reference (decision [`0025`](decisions/0025-docx-template-sections-and-fill-rules.md))
 was not checked and stays open.
@@ -955,10 +958,10 @@ word, save, close, reopen: no repair prompt, the edit there.
 | 2026-11-18 | Word for Mac | `build/t2/t2_nested.docx` | ok | Two groups, two Kontrol controls, two insertions accepted and rejected one by one; the comment once beside the first group, as 0025 point 7 says; both pictures keep the template's name Picture 7 with new ids 7 and 8, valid. |
 | 2026-11-18 | Word for Mac | `build/t2/t2_template.docx` | ok |  |
 | 2026-11-18 | Word for Mac | `build/t2/t2_nested_template.docx` | ok |  |
-|  |  | `build/t2/owner/template_invoice_1.docx` | not checked | Needs the owner's template. |
-|  |  | `build/t2/owner/template_invoice_40.docx` | not checked | Needs the owner's template. |
-|  |  | `build/t2/owner/template_invoice_0.docx` | not checked | Needs the owner's template. |
-| 2026-11-18 | Word for Mac | Save in Word | ok | t2_values, t2_nested and t2_lines_40: edited, saved, reopened, no repair prompt. Owner files not yet written. |
+| 2026-11-18 | Word for Mac 16.114.4 | `build/t2/owner/template_invoice_1.docx` | ok |  |
+| 2026-11-18 | Word for Mac 16.114.4 | `build/t2/owner/template_invoice_40.docx` | ok | 40 lines over several pages in landscape; the header row repeats. |
+| 2026-11-18 | Word for Mac 16.114.4 | `build/t2/owner/template_invoice_0.docx` | ok |  |
+| 2026-11-18 | Word for Mac | Save in Word | ok | t2_values, t2_nested and t2_lines_40: edited, saved, reopened, no repair prompt. The owner files (`template_invoice_1`, `_40`, `_0`) saved too, Word for Mac 16.114.4, no repair prompt. |
 
 ## Results
 

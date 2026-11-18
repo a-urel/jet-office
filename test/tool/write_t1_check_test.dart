@@ -17,7 +17,11 @@ void main() {
   tearDown(() => temp.deleteSync(recursive: true));
 
   test('writes the four fixtures, each opening with DocxDocument', () {
-    final List<String> written = writeT1Check('${temp.path}/t1');
+    final Directory owner = Directory('${temp.path}/none')..createSync();
+    final List<String> written = writeT1Check(
+      '${temp.path}/t1',
+      ownerDir: owner.path,
+    );
     expect(
       <String>[
         for (final String p in written) p.substring(temp.path.length + 4),
@@ -36,7 +40,8 @@ void main() {
   });
 
   test('the filled fixtures hold no tag and the templates do', () {
-    writeT1Check('${temp.path}/t1');
+    final Directory owner = Directory('${temp.path}/none')..createSync();
+    writeT1Check('${temp.path}/t1', ownerDir: owner.path);
     List<DocxTemplateTag> tags(String name) =>
         DocxTemplate(File('${temp.path}/t1/$name.docx').readAsBytesSync()).tags;
     expect(
