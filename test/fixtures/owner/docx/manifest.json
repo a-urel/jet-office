@@ -18,5 +18,10 @@
     "file": "builtins.docx",
     "producer": "Microsoft Word for Mac 16.114",
     "confirmedBy": "owner"
+  },
+  {
+    "file": "template_invoice.docx",
+    "producer": "Microsoft Word for Mac 16.114.4",
+    "confirmedBy": "owner"
   }
 ]

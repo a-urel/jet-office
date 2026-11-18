@@ -1,0 +1,11 @@
+Adres: {{firma.adres}}
+Müşteri: {{musteri.ad}}
+Tarih: {{tarih:dd.mm.yyyy}}
+
+{{#odendi}}Durum: Ödendi{{/odendi}}
+{{^odendi}}Durum: Ödenmedi{{/odendi}}
+{{#notlar}}
+{{.}}
+{{/notlar}}
+{{^iskonto}}İskonto yok.{{/iskonto}}
+{{#iskonto}}İskonto uygulandı. {{/iskonto}}
